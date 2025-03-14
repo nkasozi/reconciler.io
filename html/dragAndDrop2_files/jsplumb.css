@@ -1,0 +1,52 @@
+#list-one {
+	left: 25%;
+	top: 80%;
+}
+
+#list-two {
+	right: 25%;
+	top: 80%;
+}
+
+/** JSPLUMB ARTEFACTS **/
+.jtk-connector {
+	z-index: 1;
+}
+
+.demo {
+	text-align: center;
+}
+
+.list {
+	border: 1px solid #ccc;
+	width: 20%;
+	position: absolute;
+	padding: 10px;
+	background-color: #fff;
+}
+
+.list ul {
+	max-height: 280px;
+	overflow: auto;
+	margin: 0;
+	padding: 0;
+}
+
+.list li {
+	background-color: #efefef;
+	margin-bottom: 5px;
+	padding: 10px;
+}
+
+.jtk-drag-active {
+	background-color: #cbeae1 !important;
+}
+
+.jtk-drag-hover {
+	background-color: #5c96bc !important;
+	color: white;
+}
+
+[jtk-scrollable-list] {
+	position: relative;
+}

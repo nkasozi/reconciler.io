@@ -1,0 +1,315 @@
+<!doctype html>
+<!-- saved from url=(0064)https://appcellon.gitlab.io/external/reconciler.io/dragdrop.html -->
+<html lang="en">
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+		<title>Reconciler SAAS</title>
+
+		<meta name="description" content="" />
+		<meta
+			name="keywords"
+			content="Reconciliation, Tool, productivity, management, Banking, Transactions"
+		/>
+
+		<meta itemprop="name" content="Reconciler" />
+		<meta itemprop="description" content="" />
+
+		<meta property="og:title" content="Reconciler SAAS" />
+		<meta property="og:description" content="" />
+		<meta property="og:type" content="SAAS" />
+		<meta property="og:locale" content="en_EN" />
+		<meta property="og:site_name" content="Reconciler" />
+
+		<!-- <link href="https://unpkg.com/tailwindcss@^1.0/dist/tailwind.min.css" rel="stylesheet"> -->
+
+		<link defer="" href="./dragAndDrop_files/css" rel="stylesheet" />
+
+		<link href="./dragAndDrop_files/tailwind.min.css" rel="stylesheet" />
+		<link href="./dragAndDrop_files/custom.css" rel="stylesheet" />
+		<link href="./dragAndDrop_files/dragdrop.css" rel="stylesheet" />
+	</head>
+
+	<body class="h-screen bg-white text-gray-700">
+		<!-- nav starts here -->
+		<nav
+			x-data="{mobileNav: false}"
+			class="mx-auto w-full max-w-xl pt-8 md:max-w-2xl lg:max-w-4xl xl:max-w-5xl"
+		>
+			<div class="container px-8 py-2 lg:px-0">
+				<nav class="relative flex items-center justify-between sm:h-10 md:justify-center">
+					<div class="flex flex-1 items-center md:absolute md:inset-y-0 md:left-0">
+						<div class="flex w-full items-center justify-between md:w-auto">
+							<a
+								href="https://appcellon.gitlab.io/external/reconciler.io/index.html"
+								title="Finance Reconciliation tool"
+							>
+								<span class="text-2xl font-extrabold tracking-tight text-blue-500">Reconciler</span>
+								<span class="text-2xl tracking-tight text-green-500">.io</span></a
+							>
+
+							<div class="-mr-2 flex items-center md:hidden">
+								<button
+									@click="mobileNav = true"
+									type="button"
+									class="px-2 text-gray-700 hover:text-red-500 focus:text-red-500 focus:outline-none"
+								>
+									<svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M4 6h16M4 12h16M4 18h16"
+										></path>
+									</svg>
+								</button>
+							</div>
+						</div>
+					</div>
+					<div class="hidden md:block">
+						<a
+							href="https://appcellon.gitlab.io/external/reconciler.io/dragdrop2.html"
+							class="ml-8 font-medium text-gray-700 transition duration-150 ease-in-out hover:text-red-400 focus:text-red-400 focus:outline-none"
+							>Features</a
+						>
+						<a
+							href="https://appcellon.gitlab.io/external/reconciler.io/dragdrop.html"
+							class="ml-8 font-medium text-gray-700 transition duration-150 ease-in-out hover:text-red-400 focus:text-red-400 focus:outline-none"
+							>Pricing</a
+						>
+						<a
+							href="https://appcellon.gitlab.io/external/reconciler.io/dragdrop.html"
+							class="ml-8 font-medium text-gray-700 transition duration-150 ease-in-out hover:text-red-400 focus:text-red-400 focus:outline-none"
+							>Why Reconcile?</a
+						>
+						<a
+							href="https://appcellon.gitlab.io/external/reconciler.io/dragdrop.html"
+							class="ml-8 font-medium text-gray-700 transition duration-150 ease-in-out hover:text-red-400 focus:text-red-400 focus:outline-none"
+							>Blog</a
+						>
+					</div>
+					<div
+						class="hidden md:absolute md:inset-y-0 md:right-0 md:flex md:items-center md:justify-end"
+					>
+						<ul class="flex">
+							<li class="mb-3 block py-2 lg:mb-0 lg:px-4">
+								<a
+									href="https://appcellon.gitlab.io/external/reconciler.io/dragdrop.html#"
+									title="Login"
+									class="text-gray-700 hover:text-red-400"
+									>Login</a
+								>
+							</li>
+							<li class="block py-2">
+								<a
+									href="https://appcellon.gitlab.io/external/reconciler.io/dragdrop.html"
+									title=""
+									class="mt-12 rounded border border-red-400 bg-red-400 px-4 py-3 font-semibold text-white hover:bg-red-600 hover:text-pink-100 lg:px-2 lg:py-2 lg:text-sm xl:px-4 xl:py-3 xl:text-base"
+								>
+									Sign Up</a
+								>
+							</li>
+						</ul>
+					</div>
+				</nav>
+			</div>
+
+			<div x-show="mobileNav" style="display: none" class="absolute inset-x-0 top-0 p-2 md:hidden">
+				<div
+					class="origin-top-right transform rounded-lg shadow-md transition"
+					x-show="open"
+					x-transition:enter="duration-150 ease-out"
+					x-transition:enter-start="opacity-0 scale-95"
+					x-transition:enter-end="opacity-100 scale-100"
+					x-transition:leave="duration-100 ease-in"
+					x-transition:leave-start="opacity-100 scale-100"
+					x-transition:leave-end="opacity-0 scale-95"
+				>
+					<div class="overflow-hidden rounded-lg bg-white shadow-xs">
+						<div class="flex items-center justify-between px-5 pt-4">
+							<div>
+								<a
+									href="https://appcellon.gitlab.io/external/reconciler.io/index.html"
+									title="Transactions Reconciliation tool"
+								>
+									<span class="text-2xl font-extrabold tracking-tight">Reconciler</span
+									><span class="text-2xl tracking-tight">.io</span></a
+								>
+							</div>
+
+							<div class="-mr-2">
+								<button
+									@click="mobileNav = false"
+									type="button"
+									class="inline-flex items-center justify-center rounded-md p-2 text-gray-400 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-gray-700 focus:bg-gray-50 focus:text-gray-700 focus:outline-none"
+								>
+									<svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M6 18L18 6M6 6l12 12"
+										></path>
+									</svg>
+								</button>
+							</div>
+						</div>
+						<div class="px-2 pt-2 pb-3">
+							<a
+								href="https://appcellon.gitlab.io/external/reconciler.io/dragdrop.html"
+								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-gray-700 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-red-400 focus:bg-gray-50 focus:text-red-400 focus:outline-none"
+							>
+								Features
+							</a>
+							<a
+								href="https://appcellon.gitlab.io/external/reconciler.io/dragdrop.html"
+								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-gray-700 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-red-400 focus:bg-gray-50 focus:text-red-400 focus:outline-none"
+							>
+								Pricing
+							</a>
+							<a
+								href="https://appcellon.gitlab.io/external/reconciler.io/dragdrop.html"
+								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-gray-700 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-red-400 focus:bg-gray-50 focus:text-red-400 focus:outline-none"
+							>
+								Why Reconcile?
+							</a>
+							<a
+								href="https://appcellon.gitlab.io/external/reconciler.io/dragdrop.html"
+								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-gray-700 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-red-400 focus:bg-gray-50 focus:text-red-400 focus:outline-none"
+							>
+								Blog
+							</a>
+						</div>
+						<div>
+							<a
+								href="https://appcellon.gitlab.io/external/reconciler.io/dragdrop.html"
+								class="block w-full bg-gray-50 px-5 py-3 text-center font-medium text-gray-700 transition duration-150 ease-in-out hover:bg-red-600 hover:text-pink-100 focus:bg-gray-50 focus:text-indigo-700 focus:outline-none"
+							>
+								Login
+							</a>
+							<a
+								href="https://appcellon.gitlab.io/external/reconciler.io/dragdrop.html"
+								class="block w-full bg-red-400 px-5 py-3 text-center font-medium text-white transition duration-150 ease-in-out hover:bg-red-600 hover:text-pink-100 focus:bg-gray-50 focus:text-indigo-700 focus:outline-none"
+							>
+								Sign Up
+							</a>
+						</div>
+					</div>
+				</div>
+			</div>
+		</nav>
+		<!-- End of nav -->
+		<div class="">
+			<div class="container mx-auto pt-16 pb-2 text-center">
+				<div class="mb-8 flex justify-center"></div>
+				<h1
+					class="mb-8 px-8 text-2xl leading-tight font-semibold text-gray-700 sm:text-3xl md:text-5xl lg:px-0 lg:text-5xl xl:text-5xl"
+				>
+					<span class="font-extrabold text-red-500">Reconciliation</span> has <br />
+					never been so
+					<span
+						class="txt-rotate font-extrabold text-blue-600"
+						data-period="2500"
+						data-rotate='[ "Easy", "Simple", "Quick"]'
+						><span class="wrap">Quick</span></span
+					>
+				</h1>
+
+				<!-- Starts Dragdrop -->
+				<div class="mx-auto flex max-w-4xl flex-wrap justify-center p-4">
+					<div class="mb-4 w-1/2 p-4 sm:w-1/2 md:w-1/2 md:p-8 lg:w-1/2 xl:w-1/2">
+						<div class="upload">
+							<input type="file" title="" class="drop-here" />
+							<div
+								class="text text-drop px-4 text-center text-sm sm:text-sm md:text-lg lg:text-lg xl:text-lg"
+							>
+								Drag &amp; Drop <br />
+								an Excel or CSV file here
+							</div>
+							<div class="text text-upload">uploading</div>
+							<svg class="progress-wrapper" width="300" height="300">
+								<circle class="progress" r="115" cx="150" cy="150"></circle>
+							</svg>
+							<svg class="check-wrapper" width="130" height="130">
+								<polyline class="check" points="100.2,40.2 51.5,88.8 29.8,67.5 "></polyline>
+							</svg>
+							<div class="shadow"></div>
+						</div>
+					</div>
+					<div class="mb-4 w-1/2 p-4 sm:w-1/2 md:w-1/2 md:p-8 lg:w-1/2 xl:w-1/2">
+						<div class="compare">
+							<input type="file" title="" class="drop-here" />
+							<div
+								class="text text-drop text-center text-sm sm:text-sm md:px-4 md:text-lg lg:text-lg xl:text-lg"
+							>
+								Drag &amp; Drop <br />
+								another Excel or CSV file here
+							</div>
+							<div class="text text-upload">uploading</div>
+							<svg class="progress-wrapper" width="50" height="50">
+								<circle class="progress" r="115" cx="150" cy="150"></circle>
+							</svg>
+							<svg class="check-wrapper" width="130" height="130">
+								<polyline class="check" points="100.2,40.2 51.5,88.8 29.8,67.5 "></polyline>
+							</svg>
+							<div class="shadow"></div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Ends Dragdrop -->
+
+				<div class="mb-16 flex justify-center">
+					<a
+						href="https://appcellon.gitlab.io/external/reconciler.io/dragdrop2.html"
+						title=""
+						class="btn-bottom-animation mt-2 rounded border border-green-500 bg-green-500 px-4 py-4 font-semibold text-white hover:bg-green-600 hover:text-pink-100 lg:px-4 lg:py-2 lg:text-sm xl:px-4 xl:py-3 xl:text-base"
+					>
+						Reconcile
+					</a>
+				</div>
+
+				<div class="mt-24 hidden md:block">
+					<img
+						src="./dragAndDrop_files/details.svg"
+						class="absolute top-0 right-0 mt-24 max-w-sm px-16 py-24"
+					/>
+				</div>
+
+				<div class="mt-24 hidden md:block">
+					<img
+						src="./dragAndDrop_files/reconcile.svg"
+						class="animated hinge absolute top-0 left-0 mt-24 max-w-xs px-16 py-24"
+					/>
+				</div>
+
+				<!-- For mobile -->
+				<div class="-mt-12 text-center md:hidden">
+					<img src="./dragAndDrop_files/details.svg" class="mt-2 max-w-sm justify-center px-4" />
+				</div>
+				<!-- <div class="mt-24 md:hidden">
+        <img src="./assets/img/reconcile.svg" class="absolute right-0 top-0 max-w-xs mt-16 py-4 px-24" />
+      </div> -->
+			</div>
+
+			<div class="home-page-circle-1"></div>
+			<div class="home-page-circle-2"></div>
+			<div class="home-page-circle-3"></div>
+			<!-- <div class="home-page-circle-4"></div> -->
+			<div class="right_bottom_circle"></div>
+		</div>
+
+		<!-- circle -->
+		<script src="./dragAndDrop_files/dragdrop.js" defer=""></script>
+		<script src="./dragAndDrop_files/switcher.js" defer=""></script>
+		<script src="./dragAndDrop_files/alpine.js" defer=""></script>
+
+		<style type="text/css">
+			.txt-rotate > .wrap {
+				border-right: 0.04em solid #666;
+			}
+		</style>
+	</body>
+</html>

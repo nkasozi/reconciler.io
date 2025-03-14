@@ -1,0 +1,494 @@
+/* Drag and Drop. */
+
+.upload {
+	--background: #ffffff00;
+	--text-drop: rgb(14, 161, 230);
+	--text-upload: rgb(20, 245, 12);
+	--progress-color: #79f53f;
+	--check-color: var(--text-upload);
+	--border-radius: 50px;
+	min-width: 20%;
+	height: 250px;
+	position: relative;
+	display: -webkit-box;
+	display: flex;
+	-webkit-box-pack: center;
+	justify-content: center;
+	-webkit-box-align: center;
+	align-items: center;
+}
+.upload::before {
+	content: '';
+	display: block;
+	width: 100%;
+	height: 100%;
+	background: #efefef9d;
+	/* background-image: linear-gradient(to right, rgba(68, 94, 206, 0.658), rgba(91, 161, 241, 0.692)); */
+	border-radius: var(--border-radius);
+	-webkit-transition: all 0.3s ease-out;
+	transition: all 0.3s ease-out;
+	box-shadow: var(--shadow-x, 2px) var(--shadow-y, 2px) var(--shadow-blur, 2px)
+		rgba(8, 11, 189, 0.74);
+	-webkit-transform: scale(var(--scale, 1));
+	transform: scale(var(--scale, 1));
+}
+.upload .drop-here {
+	position: absolute;
+	width: 100%;
+	height: 100%;
+	outline: none;
+	border-radius: var(--border-radius);
+	opacity: var(--opacity, 0);
+	overflow: hidden;
+	cursor: pointer;
+	text-indent: -9999px;
+	z-index: 1;
+}
+.upload .text {
+	position: absolute;
+	text-transform: capitalize;
+	font-weight: bold;
+}
+.upload .text.text-drop {
+	color: var(--text-drop);
+	opacity: var(--opacity, 1);
+	-webkit-transition: opacity 0.15s ease-out 0.15s;
+	transition: opacity 0.15s ease-out 0.15s;
+}
+.upload .text.text-upload {
+	color: #fff;
+	opacity: var(--opacity, 0);
+	-webkit-transition: opacity 0.15s ease-out;
+	transition: opacity 0.15s ease-out;
+}
+.upload .progress-wrapper {
+	position: absolute;
+}
+.upload .progress-wrapper .progress {
+	fill: none;
+	stroke: var(--progress-color);
+	stroke-width: 3;
+	stroke-dasharray: 722;
+	stroke-dashoffset: 722;
+}
+.upload .check-wrapper {
+	position: absolute;
+	opacity: var(--opacity, 0);
+	-webkit-transform: scale(var(--scale, 0.9)) rotate(var(--rotate, 3deg));
+	transform: scale(var(--scale, 0.9)) rotate(var(--rotate, 3deg));
+	-webkit-transition:
+		opacity 0.15s ease-in,
+		-webkit-transform 0.15s ease-in-out;
+	transition:
+		opacity 0.15s ease-in,
+		-webkit-transform 0.15s ease-in-out;
+	transition:
+		transform 0.15s ease-in-out,
+		opacity 0.15s ease-in;
+	transition:
+		transform 0.15s ease-in-out,
+		opacity 0.15s ease-in,
+		-webkit-transform 0.15s ease-in-out;
+}
+.upload .check-wrapper .check {
+	width: 100px;
+	width: 100px;
+	fill: none;
+	stroke: var(--check-color);
+	stroke-width: 7;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	stroke-dasharray: 100 0;
+	stroke-dashoffset: 100;
+}
+.upload .shadow {
+	opacity: var(--opacity, 0);
+	overflow: hidden;
+	position: absolute;
+	height: 100%;
+	width: 100%;
+	border-radius: var(--border-radius);
+	-webkit-filter: blur(25px);
+	filter: blur(25px);
+	z-index: -1;
+	-webkit-transition: all 0.5s ease;
+	transition: all 0.5s ease;
+}
+.upload .shadow::before {
+	content: '';
+	position: absolute;
+	top: -25%;
+	left: -25%;
+	height: 150%;
+	width: 150%;
+	background: conic-gradient(#4b82d4, #2ba71b, #f37e30, #ff5640, #4b82d4);
+	-webkit-animation: shadow-animate 5s linear infinite;
+	animation: shadow-animate 5s linear infinite;
+}
+.upload.drag {
+	--scale: 1.03;
+	--shadow-y: 5px;
+	--shadow-blur: 20px;
+}
+.upload.drop .text.text-drop {
+	--opacity: 0;
+	-webkit-transition: opacity 0.15s ease-out;
+	transition: opacity 0.15s ease-out;
+}
+.upload.drop .text.text-upload {
+	--opacity: 1;
+	-webkit-transition: opacity 0.15s ease-out 0.15s;
+	transition: opacity 0.15s ease-out 0.15s;
+}
+.upload.drop .shadow {
+	--opacity: 1;
+}
+.upload.drop .progress-wrapper {
+	opacity: var(--opacity, 1);
+	-webkit-transform: scale(var(--scale, 1)) rotate(var(--rotate, -90deg));
+	transform: scale(var(--scale, 1)) rotate(var(--rotate, -90deg));
+}
+.upload.drop .progress-wrapper .progress {
+	-webkit-animation: progress-animate 3s ease 0.3s forwards;
+	animation: progress-animate 3s ease 0.3s forwards;
+}
+.upload.done {
+	--opacity: 0;
+}
+.upload.done .text.text-upload {
+	--opacity: 0;
+}
+.upload.done .shadow {
+	--opacity: 0;
+}
+.upload.done .progress-wrapper {
+	--scale: 0.95;
+	-webkit-transition:
+		opacity 0.3s,
+		-webkit-transform 0.3s;
+	transition:
+		opacity 0.3s,
+		-webkit-transform 0.3s;
+	transition:
+		transform 0.3s,
+		opacity 0.3s;
+	transition:
+		transform 0.3s,
+		opacity 0.3s,
+		-webkit-transform 0.3s;
+}
+.upload.done .check-wrapper {
+	--opacity: 1;
+	--scale: 1;
+	--rotate: 0deg;
+	-webkit-transition:
+		opacity 0.5s ease-in 0.3s,
+		-webkit-transform 0.5s ease-in-out 0.3s;
+	transition:
+		opacity 0.5s ease-in 0.3s,
+		-webkit-transform 0.5s ease-in-out 0.3s;
+	transition:
+		transform 0.5s ease-in-out 0.3s,
+		opacity 0.5s ease-in 0.3s;
+	transition:
+		transform 0.5s ease-in-out 0.3s,
+		opacity 0.5s ease-in 0.3s,
+		-webkit-transform 0.5s ease-in-out 0.3s;
+}
+.upload.done .check-wrapper .check {
+	-webkit-animation: check-animate 0.5s ease-in-out 0.3s forwards;
+	animation: check-animate 0.5s ease-in-out 0.3s forwards;
+}
+
+/* compare drag drop CSS */
+.compare {
+	--background: #ffffff00;
+	--text-drop: rgb(14, 161, 230);
+	--text-upload: rgb(20, 245, 12);
+	--progress-color: #79f53f;
+	--check-color: var(--text-upload);
+	--border-radius: 50px;
+	min-width: 20%;
+	height: 250px;
+	position: relative;
+	display: -webkit-box;
+	display: flex;
+	-webkit-box-pack: center;
+	justify-content: center;
+	-webkit-box-align: center;
+	align-items: center;
+}
+.compare::before {
+	content: '';
+	display: block;
+	width: 100%;
+	height: 100%;
+	background: #efefef9d;
+	/* background-image: linear-gradient(to right, rgba(51, 139, 63, 0.692), rgba(102, 212, 28, 0.658)); */
+	/* animation: 
+		change 24s ease infinite alternate; */
+	border-radius: var(--border-radius);
+	-webkit-transition: all 0.3s ease-out;
+	transition: all 0.3s ease-out;
+	box-shadow: var(--shadow-x, 2px) var(--shadow-y, 2px) var(--shadow-blur, 2px)
+		rgba(22, 126, 8, 0.836);
+	-webkit-transform: scale(var(--scale, 1));
+	transform: scale(var(--scale, 1));
+}
+.compare .drop-here {
+	position: absolute;
+	width: 100%;
+	height: 100%;
+	outline: none;
+	border-radius: var(--border-radius);
+	opacity: var(--opacity, 0);
+	overflow: hidden;
+	cursor: pointer;
+	text-indent: -9999px;
+	z-index: 1;
+}
+.compare .text {
+	position: absolute;
+	text-transform: capitalize;
+	font-weight: bold;
+}
+.compare .text.text-drop {
+	color: var(--text-drop);
+	opacity: var(--opacity, 1);
+	-webkit-transition: opacity 0.15s ease-out 0.15s;
+	transition: opacity 0.15s ease-out 0.15s;
+}
+.compare .text.text-upload {
+	color: #fff;
+	opacity: var(--opacity, 0);
+	-webkit-transition: opacity 0.15s ease-out;
+	transition: opacity 0.15s ease-out;
+}
+.compare .progress-wrapper {
+	position: absolute;
+}
+.compare .progress-wrapper .progress {
+	fill: none;
+	stroke: var(--progress-color);
+	stroke-width: 3;
+	stroke-dasharray: 722;
+	stroke-dashoffset: 722;
+}
+.compare .check-wrapper {
+	position: absolute;
+	opacity: var(--opacity, 0);
+	-webkit-transform: scale(var(--scale, 0.9)) rotate(var(--rotate, 3deg));
+	transform: scale(var(--scale, 0.9)) rotate(var(--rotate, 3deg));
+	-webkit-transition:
+		opacity 0.15s ease-in,
+		-webkit-transform 0.15s ease-in-out;
+	transition:
+		opacity 0.15s ease-in,
+		-webkit-transform 0.15s ease-in-out;
+	transition:
+		transform 0.15s ease-in-out,
+		opacity 0.15s ease-in;
+	transition:
+		transform 0.15s ease-in-out,
+		opacity 0.15s ease-in,
+		-webkit-transform 0.15s ease-in-out;
+}
+.compare .check-wrapper .check {
+	width: 100px;
+	fill: none;
+	stroke: var(--check-color);
+	stroke-width: 7;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	stroke-dasharray: 100 0;
+	stroke-dashoffset: 100;
+}
+.compare .shadow {
+	opacity: var(--opacity, 0);
+	overflow: hidden;
+	position: absolute;
+	height: 100%;
+	width: 100%;
+	border-radius: var(--border-radius);
+	-webkit-filter: blur(25px);
+	filter: blur(25px);
+	z-index: -1;
+	-webkit-transition: all 0.5s ease;
+	transition: all 0.5s ease;
+}
+.compare .shadow::before {
+	content: '';
+	position: absolute;
+	top: -25%;
+	left: -25%;
+	height: 150%;
+	width: 150%;
+	background: conic-gradient(#4b82d4, #2ba71b, #f37e30, #ff5640, #4b82d4);
+	-webkit-animation: shadow-animate 5s linear infinite;
+	animation: shadow-animate 5s linear infinite;
+}
+.compare.drag {
+	--scale: 3.03;
+	--shadow-y: 5px;
+	--shadow-blur: 20px;
+}
+.compare.drop .text.text-drop {
+	--opacity: 0;
+	-webkit-transition: opacity 0.15s ease-out;
+	transition: opacity 0.15s ease-out;
+}
+.compare.drop .text.text-upload {
+	--opacity: 1;
+	-webkit-transition: opacity 0.15s ease-out 0.15s;
+	transition: opacity 0.15s ease-out 0.15s;
+}
+.compare.drop .shadow {
+	--opacity: 1;
+}
+.compare.drop .progress-wrapper {
+	opacity: var(--opacity, 1);
+	-webkit-transform: scale(var(--scale, 1)) rotate(var(--rotate, -90deg));
+	transform: scale(var(--scale, 1)) rotate(var(--rotate, -90deg));
+}
+.compare.drop .progress-wrapper .progress {
+	-webkit-animation: progress-animate 3s ease 0.3s forwards;
+	animation: progress-animate 3s ease 0.3s forwards;
+}
+.compare.done {
+	--opacity: 0;
+}
+.compare.done .text.text-upload {
+	--opacity: 0;
+}
+.compare.done .shadow {
+	--opacity: 0;
+}
+.compare.done .progress-wrapper {
+	--scale: 0.95;
+	-webkit-transition:
+		opacity 0.3s,
+		-webkit-transform 0.3s;
+	transition:
+		opacity 0.3s,
+		-webkit-transform 0.3s;
+	transition:
+		transform 0.3s,
+		opacity 0.3s;
+	transition:
+		transform 0.3s,
+		opacity 0.3s,
+		-webkit-transform 0.3s;
+}
+.compare.done .check-wrapper {
+	--opacity: 1;
+	--scale: 1;
+	--rotate: 0deg;
+	-webkit-transition:
+		opacity 0.5s ease-in 0.3s,
+		-webkit-transform 0.5s ease-in-out 0.3s;
+	transition:
+		opacity 0.5s ease-in 0.3s,
+		-webkit-transform 0.5s ease-in-out 0.3s;
+	transition:
+		transform 0.5s ease-in-out 0.3s,
+		opacity 0.5s ease-in 0.3s;
+	transition:
+		transform 0.5s ease-in-out 0.3s,
+		opacity 0.5s ease-in 0.3s,
+		-webkit-transform 0.5s ease-in-out 0.3s;
+}
+.compare.done .check-wrapper .check {
+	-webkit-animation: check-animate 0.5s ease-in-out 0.3s forwards;
+	animation: check-animate 0.5s ease-in-out 0.3s forwards;
+}
+
+@-webkit-keyframes shadow-animate {
+	0% {
+		-webkit-transform: rotate(0deg);
+		transform: rotate(0deg);
+	}
+	100% {
+		-webkit-transform: rotate(360deg);
+		transform: rotate(360deg);
+	}
+}
+
+@keyframes shadow-animate {
+	0% {
+		-webkit-transform: rotate(0deg);
+		transform: rotate(0deg);
+	}
+	100% {
+		-webkit-transform: rotate(360deg);
+		transform: rotate(360deg);
+	}
+}
+@-webkit-keyframes progress-animate {
+	0% {
+		stroke-dashoffset: 722;
+	}
+	20% {
+		stroke-dashoffset: 500;
+	}
+	50% {
+		stroke-dashoffset: 322;
+	}
+	55% {
+		stroke-dashoffset: 300;
+	}
+	100% {
+		stroke-dashoffset: 0;
+	}
+}
+@keyframes progress-animate {
+	0% {
+		stroke-dashoffset: 722;
+	}
+	20% {
+		stroke-dashoffset: 500;
+	}
+	50% {
+		stroke-dashoffset: 322;
+	}
+	55% {
+		stroke-dashoffset: 300;
+	}
+	100% {
+		stroke-dashoffset: 0;
+	}
+}
+@-webkit-keyframes check-animate {
+	0% {
+		stroke-dasharray: 0 100;
+		stroke-dashoffset: 0;
+	}
+	100% {
+		stroke-dasharray: 100 0;
+		stroke-dashoffset: 100;
+	}
+}
+@keyframes check-animate {
+	0% {
+		stroke-dasharray: 0 100;
+		stroke-dashoffset: 0;
+	}
+	100% {
+		stroke-dasharray: 100 0;
+		stroke-dashoffset: 100;
+	}
+}
+
+@keyframes change {
+	0% {
+		transform: scale(0.1);
+		background-color: #1a66c9a9;
+		border-radius: 100%;
+	}
+	50% {
+		background-color: #0f971a9f;
+	}
+	100% {
+		transform: scale(1.5);
+		background-color: #b4552fb4;
+	}
+}

@@ -1,0 +1,256 @@
+body {
+	font-family: Nunito, sans-serif;
+	padding: 0;
+	margin: 0;
+	min-height: 100vh;
+}
+
+.hero_border {
+	border-radius: 0 300px 100px 0;
+}
+
+.hero_border_right {
+	border-radius: 100px 0 0 100px;
+}
+
+.wrapper {
+	text-align: center;
+}
+.error span {
+	background: linear-gradient(to left, #03ca0dfb 10%, rgb(2, 88, 248) 50%, rgb(228, 94, 77) 80%);
+	background-size: auto auto;
+	background-clip: border-box;
+	background-size: 200% auto;
+	color: rgb(243, 240, 240);
+	background-clip: text;
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+	animation: textclip 8s linear infinite;
+	display: inline-block;
+}
+
+@keyframes textclip {
+	to {
+		background-position: 200% center;
+	}
+}
+
+/* Backgrounds */
+.right_bottom_circle {
+	position: absolute;
+	overflow: hidden;
+	width: 55vw;
+	height: 55vw;
+	top: 0;
+	right: 0;
+	z-index: -1;
+}
+
+.right_bottom_circle::before {
+	content: '';
+	transform: translate(70%, 20%);
+	position: absolute;
+	height: 90%;
+	width: 90%;
+	border-radius: 50%;
+	background-color: #e2e8f031;
+}
+
+.home-page-circle-1 {
+	position: absolute;
+	overflow: hidden;
+	width: 55vw;
+	height: 55vw;
+	top: 0;
+	left: 0;
+	z-index: -1;
+}
+
+.home-page-circle-1::before {
+	content: '';
+	transform: translate-y(70%, 20%);
+	position: absolute;
+	height: 70%;
+	width: 32%;
+	border-radius: 0 0 50px 0;
+	background-color: #e2e8f031;
+}
+
+.home-page-circle-2 {
+	position: absolute;
+	width: 25vw;
+	height: 25vw;
+	border-radius: 50%;
+	background-color: #e2e8f041;
+	top: 1vh;
+	right: 4%;
+	z-index: -1;
+	animation: pulse 10s ease infinite alternate;
+}
+
+.home-page-circle-3 {
+	position: absolute;
+	width: 25vw;
+	height: 25vw;
+	border-radius: 50%;
+	background-color: #e2e8f041;
+	bottom: 1vh;
+	left: 4%;
+	z-index: -1;
+	animation: pulse 8s ease infinite alternate;
+}
+
+.home-page-circle-4 {
+	position: absolute;
+	width: 20vw;
+	height: 20vw;
+	top: 40%;
+	left: 42%;
+	z-index: -1;
+}
+
+.left_hero_image {
+	position: absolute;
+	width: 5vw;
+	height: 5vw;
+	z-index: -1;
+}
+
+@keyframes pulse {
+	0% {
+		transform: scale(0.1);
+		background-color: #e2e8f0a9;
+		border-radius: 100%;
+	}
+	50% {
+		background-color: #e2e8f04b;
+	}
+	100% {
+		transform: scale(1.5);
+		background-color: #e2e8f025;
+	}
+}
+
+.btn-bottom-animation {
+	animation: comeFromBottom 1s ease-out 0.8s;
+}
+
+.btn-bottom-animation:hover {
+	box-shadow: 0px 10px 10px rgba(21, 87, 5, 0.685);
+	transform: translateY(-2px);
+}
+
+@keyframes comeFromBottom {
+	0% {
+		opacity: 0;
+		transform: translateY(40px);
+	}
+	100% {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* success page */
+
+.animation-ctn {
+	opacity: 70%;
+}
+
+@-webkit-keyframes checkmark {
+	0% {
+		stroke-dashoffset: 100px;
+	}
+
+	100% {
+		stroke-dashoffset: 200px;
+	}
+}
+
+@-ms-keyframes checkmark {
+	0% {
+		stroke-dashoffset: 100px;
+	}
+
+	100% {
+		stroke-dashoffset: 200px;
+	}
+}
+
+@keyframes checkmark {
+	0% {
+		stroke-dashoffset: 100px;
+	}
+
+	100% {
+		stroke-dashoffset: 0px;
+	}
+}
+
+@-webkit-keyframes checkmark-circle {
+	0% {
+		stroke-dashoffset: 480px;
+	}
+
+	100% {
+		stroke-dashoffset: 960px;
+	}
+}
+
+@-ms-keyframes checkmark-circle {
+	0% {
+		stroke-dashoffset: 240px;
+	}
+
+	100% {
+		stroke-dashoffset: 480px;
+	}
+}
+
+@keyframes checkmark-circle {
+	0% {
+		stroke-dashoffset: 480px;
+	}
+
+	100% {
+		stroke-dashoffset: 960px;
+	}
+}
+
+@keyframes colored-circle {
+	0% {
+		opacity: 0;
+	}
+
+	100% {
+		opacity: 100;
+	}
+}
+
+/* other styles */
+/* .svg svg {
+	  display: none
+  }
+   */
+.inlinesvg .svg svg {
+	display: block;
+	justify-content: center;
+}
+
+/* .svg img {
+	  display: none
+  } */
+
+.icon--order-success svg polyline {
+	-webkit-animation: checkmark 0.25s ease-in-out 0.7s backwards;
+	animation: checkmark 0.25s ease-in-out 0.7s backwards;
+}
+
+.icon--order-success svg circle {
+	-webkit-animation: checkmark-circle 0.6s ease-in-out backwards;
+	animation: checkmark-circle 0.6s ease-in-out backwards;
+}
+.icon--order-success svg circle#colored {
+	-webkit-animation: colored-circle 0.6s ease-in-out 0.7s backwards;
+	animation: colored-circle 0.6s ease-in-out 0.7s backwards;
+}
