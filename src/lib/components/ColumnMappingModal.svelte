@@ -58,12 +58,23 @@
     });
     
     function validateForm() {
-        // Check if primary ID pair is valid
+        // Check for primary ID validity (required)
+        const isPrimaryIdValid = !!primaryIdPair.primaryColumn && !!primaryIdPair.comparisonColumn;
+        
+        // Count valid and incomplete comparison pairs
         const validComparisonPairs = comparisonPairs.filter(
             pair => pair.primaryColumn && pair.comparisonColumn
-        ).length > 0;
+        );
         
-        formValid = primaryIdPairValid && validComparisonPairs;
+        const incompleteComparisonPairs = comparisonPairs.filter(
+            pair => (pair.primaryColumn && !pair.comparisonColumn) || (!pair.primaryColumn && pair.comparisonColumn)
+        );
+        
+        // Form is valid if:
+        // 1. Primary ID is mapped
+        // 2. There are no incomplete comparison pairs (either both columns set or both null)
+        // Note: It's valid to have no comparison pairs at all (just primary ID reconciliation)
+        formValid = isPrimaryIdValid && incompleteComparisonPairs.length === 0;
     }
     
     // Add another comparison pair
@@ -73,6 +84,7 @@
         
         // Automatically switch to editing the new pair
         setMappingContext('comparison', newPairIndex);
+        return newPairIndex;
     }
     
     // Remove a comparison pair
@@ -114,7 +126,7 @@
         }
     }
     
-    // Create a connection between selected columns
+    // Create a connection between selected columns and automatically advance to next mapping
     function createConnection() {
         if (!selectedPrimaryColumn || !selectedComparisonColumn) return;
         
@@ -125,6 +137,11 @@
                 primaryColumn: selectedPrimaryColumn,
                 comparisonColumn: selectedComparisonColumn
             };
+            
+            // Automatically move to first comparison pair
+            if (comparisonPairs.length > 0) {
+                setMappingContext('comparison', 0);
+            }
         } else {
             // Update the specific comparison pair
             comparisonPairs = comparisonPairs.map((pair, index) => {
@@ -136,6 +153,16 @@
                 }
                 return pair;
             });
+            
+            // Check if there's a next pair to map, otherwise create a new one
+            const nextPairIndex = currentPairIndex + 1;
+            if (nextPairIndex < comparisonPairs.length) {
+                // Move to next existing pair
+                setMappingContext('comparison', nextPairIndex);
+            } else {
+                // Add a new pair and move to it
+                addComparisonPair();
+            }
         }
         
         // Reset selected columns
@@ -165,15 +192,15 @@
     function applyMapping() {
         if (!formValid) return;
         
-        // Filter out any incomplete comparison pairs
-        const validComparisonPairs = comparisonPairs.filter(
+        // Filter out any empty comparison pairs (where both columns are null)
+        const completeComparisonPairs = comparisonPairs.filter(
             pair => pair.primaryColumn && pair.comparisonColumn
         );
         
         // Dispatch the mapping data
         dispatch('mapping', {
             primaryIdPair,
-            comparisonPairs: validComparisonPairs
+            comparisonPairs: completeComparisonPairs
         });
         
         // Close the modal
@@ -277,13 +304,18 @@
                                 <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
                             </svg>
                         </div>
-                        <p class="text-sm text-blue-800 dark:text-blue-200">
-                            {#if selectedPrimaryColumn || selectedComparisonColumn}
-                                Currently selecting: {selectedPrimaryColumn || selectedComparisonColumn}
-                            {:else}
-                                Currently mapping: {getSelectedColumnText()}
-                            {/if}
-                        </p>
+                        <div>
+                            <p class="text-sm font-medium text-blue-800 dark:text-blue-200">
+                                {#if selectedPrimaryColumn || selectedComparisonColumn}
+                                    Currently selecting: {selectedPrimaryColumn || selectedComparisonColumn}
+                                {:else}
+                                    Currently mapping: {getSelectedColumnText()}
+                                {/if}
+                            </p>
+                            <p class="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                                Select a column from each side to create a mapping. Mapping will automatically advance to the next pair.
+                            </p>
+                        </div>
                     </div>
                 </div>
                 
@@ -379,7 +411,7 @@
                                 class="px-3 py-1 text-sm font-medium rounded-md bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-800 dark:text-indigo-200 dark:hover:bg-indigo-700 transition"
                                 on:click={() => setMappingContext('id')}
                             >
-                                {primaryIdPair.primaryColumn && primaryIdPair.comparisonColumn ? 'Edit Mapping' : 'Set Mapping'}
+                                Edit
                             </button>
                         </div>
                         
@@ -411,7 +443,7 @@
                                 class="px-3 py-1 text-sm font-medium rounded-md bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-800 dark:text-green-200 dark:hover:bg-green-700 transition"
                                 on:click={addComparisonPair}
                             >
-                                + Add Pair
+                                + Add Manual Pair
                             </button>
                         </div>
                         
@@ -422,16 +454,25 @@
                         {:else}
                             <div class="space-y-3">
                                 {#each comparisonPairs as pair, index}
-                                    <div class="bg-gray-50 dark:bg-gray-700 p-3 rounded-md border border-gray-200 dark:border-gray-600">
+                                    <div 
+                                        class="bg-gray-50 dark:bg-gray-700 p-3 rounded-md border dark:border-gray-600"
+                                        class:border-gray-200={(pair.primaryColumn && pair.comparisonColumn) || (!pair.primaryColumn && !pair.comparisonColumn)}
+                                        class:border-red-300={(pair.primaryColumn && !pair.comparisonColumn) || (!pair.primaryColumn && pair.comparisonColumn)}
+                                    >
                                         <div class="flex justify-between items-center mb-1">
-                                            <h4 class="font-medium text-gray-800 dark:text-white">Comparison Pair #{index + 1}</h4>
+                                            <h4 class="font-medium text-gray-800 dark:text-white flex items-center">
+                                                Comparison Pair #{index + 1}
+                                                {#if (pair.primaryColumn && !pair.comparisonColumn) || (!pair.primaryColumn && pair.comparisonColumn)}
+                                                    <span class="ml-2 text-xs text-red-600 dark:text-red-400 italic">(incomplete)</span>
+                                                {/if}
+                                            </h4>
                                             <div class="flex space-x-2">
                                                 <button 
                                                     type="button"
                                                     class="px-2 py-1 text-xs font-medium rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-800 dark:text-blue-200 dark:hover:bg-blue-700 transition"
                                                     on:click={() => setMappingContext('comparison', index)}
                                                 >
-                                                    {pair.primaryColumn && pair.comparisonColumn ? 'Edit' : 'Set'}
+                                                    Edit
                                                 </button>
                                                 {#if comparisonPairs.length > 1}
                                                     <button 
@@ -475,15 +516,22 @@
                     Cancel
                 </button>
                 
-                <button 
-                    class="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition"
-                    disabled={!formValid}
-                    class:opacity-50={!formValid}
-                    class:cursor-not-allowed={!formValid}
-                    on:click={applyMapping}
-                >
-                    Apply & Continue
-                </button>
+                <div>
+                    {#if !formValid && primaryIdPairValid}
+                        <p class="text-xs text-red-600 dark:text-red-400 mb-2 text-right">
+                            Please complete or remove incomplete column pairs
+                        </p>
+                    {/if}
+                    <button 
+                        class="px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition"
+                        disabled={!formValid}
+                        class:opacity-50={!formValid}
+                        class:cursor-not-allowed={!formValid}
+                        on:click={applyMapping}
+                    >
+                        Apply & Continue
+                    </button>
+                </div>
             </div>
         </div>
     </div>
