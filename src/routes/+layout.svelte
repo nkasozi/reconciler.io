@@ -69,43 +69,43 @@
 				<div class="hidden md:block">
 					<a
 						href="/features"
-						class="ml-8 font-medium text-gray-700 transition duration-150 ease-in-out hover:text-red-400 focus:text-red-400 focus:outline-none"
+						class="ml-8 font-medium text-gray-700 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-gray-200 dark:hover:text-blue-400 dark:focus:text-blue-400"
 						>Features</a
 					>
 					<a
 						href="/pricing"
-						class="ml-8 font-medium text-gray-700 transition duration-150 ease-in-out hover:text-red-400 focus:text-red-400 focus:outline-none"
+						class="ml-8 font-medium text-gray-700 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-gray-200 dark:hover:text-blue-400 dark:focus:text-blue-400"
 						>Pricing</a
 					>
 					<a
 						href="/why-reconcile"
-						class="ml-8 font-medium text-gray-700 transition duration-150 ease-in-out hover:text-red-400 focus:text-red-400 focus:outline-none"
+						class="ml-8 font-medium text-gray-700 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-gray-200 dark:hover:text-blue-400 dark:focus:text-blue-400"
 						>Why Reconcile?</a
 					>
 					<a
-						href="/blog"
-						class="ml-8 font-medium text-gray-700 transition duration-150 ease-in-out hover:text-red-400 focus:text-red-400 focus:outline-none"
-						>Blog</a
+						href="/upload"
+						class="ml-8 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition duration-150 ease-in-out"
+						>Get Started</a
 					>
 				</div>
-				<div
-					class="hidden md:absolute md:inset-y-0 md:right-0 md:flex md:items-center md:justify-end"
-				>
-					<ul class="flex">
-						<li class="mb-3 block py-2 lg:mb-0 lg:px-4">
-							<a href="/login" title="Login" class="text-gray-700 hover:text-red-400">Login</a>
-						</li>
-						<li class="block py-2">
-							<a
-								href="/signup"
-								title="Sign Up"
-								class="mt-12 rounded border border-red-400 bg-red-400 px-4 py-3 font-semibold text-white hover:bg-red-600 hover:text-pink-100 lg:px-2 lg:py-2 lg:text-sm xl:px-4 xl:py-3 xl:text-base"
-							>
-								Sign Up
-							</a>
-						</li>
-					</ul>
-				</div>
+<!--				<div-->
+<!--					class="hidden md:absolute md:inset-y-0 md:right-0 md:flex md:items-center md:justify-end"-->
+<!--				>-->
+<!--					<ul class="flex">-->
+<!--						<li class="mb-3 block py-2 lg:mb-0 lg:px-4">-->
+<!--							<a href="/login" title="Login" class="text-gray-700 hover:text-red-400">Login</a>-->
+<!--						</li>-->
+<!--						<li class="block py-2">-->
+<!--							<a-->
+<!--								href="/signup"-->
+<!--								title="Sign Up"-->
+<!--								class="mt-12 rounded border border-red-400 bg-red-400 px-4 py-3 font-semibold text-white hover:bg-red-600 hover:text-pink-100 lg:px-2 lg:py-2 lg:text-sm xl:px-4 xl:py-3 xl:text-base"-->
+<!--							>-->
+<!--								Sign Up-->
+<!--							</a>-->
+<!--						</li>-->
+<!--					</ul>-->
+<!--				</div>-->
 			</nav>
 		</div>
 
@@ -148,21 +148,27 @@
 						<div class="px-2 pt-2 pb-3">
 							<a
 								href="/features"
-								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-gray-700 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-red-400 focus:bg-gray-50 focus:text-red-400 focus:outline-none"
+								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-gray-700 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-blue-600 focus:bg-gray-50 focus:text-blue-600 focus:outline-none dark:text-gray-200 dark:hover:text-blue-400 dark:focus:text-blue-400"
 							>
 								Features
 							</a>
 							<a
 								href="/pricing"
-								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-gray-700 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-red-400 focus:bg-gray-50 focus:text-red-400 focus:outline-none"
+								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-gray-700 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-blue-600 focus:bg-gray-50 focus:text-blue-600 focus:outline-none dark:text-gray-200 dark:hover:text-blue-400 dark:focus:text-blue-400"
 							>
 								Pricing
 							</a>
 							<a
 								href="/why-reconcile"
-								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-gray-700 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-red-400 focus:bg-gray-50 focus:text-red-400 focus:outline-none"
+								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-gray-700 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-blue-600 focus:bg-gray-50 focus:text-blue-600 focus:outline-none dark:text-gray-200 dark:hover:text-blue-400 dark:focus:text-blue-400"
 							>
 								Why Reconcile?
+							</a>
+							<a
+								href="/upload"
+								class="mt-4 block rounded-md bg-blue-600 px-3 py-2 text-center text-base font-medium text-white transition duration-150 ease-in-out hover:bg-blue-700 focus:outline-none"
+							>
+								Get Started
 							</a>
 							<a
 								href="/blog"
