@@ -495,6 +495,106 @@
 		}
 	}
 
+	function analyzeFailures() {
+		console.log("Analyze failures clicked");
+		
+		// If the reconciliation is not fully complete, warn the user
+		if (chunks && completedChunks < chunks.length) {
+			alert(`Reconciliation is only ${Math.round((completedChunks / chunks.length) * 100)}% complete. Analysis will be partial.`);
+		}
+		
+		// Prepare the reconciliation results for the analysis page
+		// We need to properly format matched and unmatched records
+		const matches = [];
+		const unmatchedPrimary = [];
+		
+		// Process all reconciliation results
+		for (let i = 0; i < reconciliationResults.length; i++) {
+			const result = reconciliationResults[i];
+			if (!result) continue;
+			
+			const primaryId = result.row[primaryIdPair.primaryColumn];
+			const comparisonRow = comparisonMap.get(primaryId);
+			
+			if (comparisonRow) {
+				// Found a matching ID - check if all mapped columns match
+				const comparisonResults = {};
+				let matchCount = 0;
+				
+				// Process each mapped column pair
+				for (const pair of comparisonPairs) {
+					if (pair.primaryColumn && pair.comparisonColumn) {
+						const primaryValue = result.row[pair.primaryColumn];
+						const comparisonValue = comparisonRow[pair.comparisonColumn];
+						
+						// Normalize and compare values
+						const normalizedPrimaryValue = (primaryValue || '').toString().trim().toLowerCase();
+						const normalizedComparisonValue = (comparisonValue || '').toString().trim().toLowerCase();
+						const isMatch = normalizedPrimaryValue === normalizedComparisonValue;
+						
+						comparisonResults[pair.primaryColumn] = {
+							primaryValue: primaryValue || '',
+							comparisonValue: comparisonValue || '',
+							match: isMatch,
+							difference: isMatch ? '' : 'Values differ'
+						};
+						
+						if (isMatch) matchCount++;
+					}
+				}
+				
+				// Calculate match score - percentage of matching columns
+				const matchScore = comparisonPairs.length > 0
+					? Math.round((matchCount / comparisonPairs.length) * 100)
+					: 100;
+				
+				matches.push({
+					primaryRow: result.row,
+					comparisonRow,
+					idValues: {
+						primary: primaryId,
+						comparison: comparisonRow[primaryIdPair.comparisonColumn]
+					},
+					comparisonResults,
+					matchScore
+				});
+			} else {
+				// No matching ID found
+				unmatchedPrimary.push(result.row);
+			}
+		}
+		
+		console.log("Prepared results:", {
+			totalRows: reconciliationResults.length,
+			matches: matches.length,
+			unmatchedPrimary: unmatchedPrimary.length,
+			partialMatches: matches.filter(m => m.matchScore < 100).length,
+			perfectMatches: matches.filter(m => m.matchScore === 100).length
+		});
+		
+		// Save the properly formatted results to the store
+		reconciliationStore.setResults({
+			matches,
+			unmatchedPrimary,
+			unmatchedComparison: [],
+			config: {
+				primaryIdPair,
+				comparisonPairs
+			},
+			summary: {
+				totalPrimaryRows: totalRows,
+				totalComparisonRows: comparisonMap.size,
+				matchedRows: matches.filter(m => m.matchScore === 100).length,
+				unmatchedPrimaryRows: unmatchedPrimary.length,
+				unmatchedComparisonRows: 0,
+				matchPercentage: Math.round((matches.filter(m => m.matchScore === 100).length / totalRows) * 100)
+			}
+		});
+		
+		// Navigate to the analysis page
+		goto('/reconciliation-results');
+	}
+	
 	function downloadResults() {
 		console.log("Download results clicked, completedChunks:", completedChunks, "total chunks:", chunks?.length);
 		
@@ -793,12 +893,18 @@
 			{/if}
 		</div>
 		{#if isReconciliationComplete}
-			<div class="mt-6 flex justify-center">
+			<div class="mt-6 flex justify-center space-x-4">
 				<button
 					on:click={downloadResults}
 					class="rounded border border-green-500 bg-green-500 px-6 py-3 font-semibold text-white transition-colors duration-200 hover:bg-green-600 hover:text-white dark:border-green-600 dark:bg-green-600 dark:hover:bg-green-700"
 				>
 					Download Results
+				</button>
+				<button
+					on:click={analyzeFailures}
+					class="rounded border border-blue-500 bg-blue-500 px-6 py-3 font-semibold text-white transition-colors duration-200 hover:bg-blue-600 hover:text-white dark:border-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700"
+				>
+					Analyze Failures
 				</button>
 			</div>
 		{/if}
