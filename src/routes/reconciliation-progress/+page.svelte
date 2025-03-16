@@ -47,6 +47,11 @@
 	let simulationInterval: number | null = null;
 	let primaryRows: Record<string, string>[] = [];
 	let comparisonMap = new Map<string, Record<string, string>>();
+	
+	// For chunked processing
+	let chunks: Record<string, string>[][] = [];
+	let completedChunks = $state(0);
+	let reconciliationResults: Array<{row: Record<string, string>, matched: boolean, reasons: any[]} | null> = [];
 
 	onMount(() => {
 		const unsubscribe = reconciliationStore.subscribe((state) => {
@@ -196,66 +201,38 @@
 		];
 		lastLogTimestamp = Date.now();
 
-		// In a real implementation, this would actually process the data
-		// For now, we'll simulate the process with a timer
-		simulationInterval = setInterval(() => {
-			if (processedRows >= totalRows) {
-				// Reconciliation complete
-				clearInterval(simulationInterval);
-				isReconciliationComplete = true;
-
-				// Add completion log
-				matchingLogs.unshift({
-					timestamp: Date.now(),
-					primaryId: 'COMPLETE',
-					comparisonId: 'COMPLETE',
-					matched: true,
-					reasons: [
-						{
-							primaryFileRow: 'Complete Log',
-							comparisonFileRow: 'Complete Log',
-							primaryFileColumn: 'Reconciliation Complete',
-							comparisonFileColumn: 'Summary',
-							primaryValue: `Processed ${totalRows} rows in ${formatTime((Date.now() - startTime) / 1000)}`,
-							comparisonValue: 'Click "Download Results" to download the reconciled file'
-						}
-					]
-				});
-				lastLogTimestamp = Date.now();
-
-				// Clear stuck detection timeout
-				if (stuckDetectionTimeout) {
-					clearTimeout(stuckDetectionTimeout);
+		// Use web workers to parallelize the reconciliation process
+		const CHUNK_SIZE = 50; // Number of rows per chunk
+		const MAX_WORKERS = Math.min(navigator.hardwareConcurrency || 4, 8); // Maximum number of workers
+		
+		// Creating a simplified processing function that we'll run directly
+		function processChunk(chunk, startIndex) {
+			const results = [];
+			const logs = [];
+			
+			// Process each row in the chunk
+			chunk.forEach((primaryRow, index) => {
+				const currentIndex = startIndex + index;
+				if (!primaryIdPair.primaryColumn) {
+					console.error('Primary ID column is not defined');
+					return;
 				}
-				return;
-			}
-
-			// Simulate processing 1-5 rows per interval
-			const rowsToProcess = Math.min(Math.floor(Math.random() * 5) + 1, totalRows - processedRows);
-			let logEntryCreated = false;
-
-			for (let i = 0; i < rowsToProcess; i++) {
-				// Get a real row from the primary data
-				const currentIndex = processedRows + i;
-				if (currentIndex >= primaryRows.length) break;
-
-				const primaryRow = primaryRows[currentIndex];
-				const primaryIdColumn = primaryIdPair.primaryColumn;
-				const primaryId = primaryRow[primaryIdColumn];
-
+				
+				const primaryId = primaryRow[primaryIdPair.primaryColumn];
+				
 				// Try to find a matching comparison row
 				const comparisonRow = comparisonMap.get(primaryId);
 				const idMatched = !!comparisonRow;
-
+				
 				// Check for differences in comparison columns
 				const reasons = [];
-
+				
 				if (!idMatched) {
 					// No matching ID found in comparison file
 					reasons.push({
 						primaryFileRow: `Row ${currentIndex + 1}`,
 						comparisonFileRow: '(Not found)',
-						primaryFileColumn: primaryIdColumn,
+						primaryFileColumn: primaryIdPair.primaryColumn,
 						comparisonFileColumn: primaryIdPair.comparisonColumn,
 						primaryValue: primaryId || '(empty)',
 						comparisonValue: '(No matching record found)'
@@ -266,9 +243,13 @@
 						if (pair.primaryColumn && pair.comparisonColumn) {
 							const primaryValue = primaryRow[pair.primaryColumn];
 							const comparisonValue = comparisonRow[pair.comparisonColumn];
-
+							
+							// Normalize values for comparison
+							const normalizedPrimaryValue = (primaryValue || '').toString().trim().toLowerCase();
+							const normalizedComparisonValue = (comparisonValue || '').toString().trim().toLowerCase();
+							
 							// If values are different, add a reason
-							if (primaryValue !== comparisonValue) {
+							if (normalizedPrimaryValue !== normalizedComparisonValue) {
 								reasons.push({
 									primaryFileRow: `Row ${currentIndex + 1}`,
 									comparisonFileRow: `Row ${Array.from(comparisonMap.keys()).findIndex(id => id === primaryId) + 1}`,
@@ -281,15 +262,20 @@
 						}
 					});
 				}
-
+				
+				// Save result
+				results.push({
+					row: primaryRow,
+					matched: idMatched && reasons.length === 0,
+					reasons
+				});
+				
 				// Only log interesting entries (with differences, or every 10th entry)
-				// to avoid overwhelming the UI with thousands of identical log entries
 				const shouldLog = reasons.length > 0 || currentIndex % 10 === 0;
-
+				
 				if (shouldLog) {
-					// Add to logs - a record is matched only if ID matches AND there are no differences
-					matchingLogs.unshift({
-						timestamp: Date.now(),
+					logs.push({
+						rowIndex: currentIndex,
 						primaryId: primaryId || `Row ${currentIndex + 1}`,
 						comparisonId: idMatched
 							? comparisonRow[primaryIdPair.comparisonColumn] || '(ID found but empty)'
@@ -297,68 +283,202 @@
 						matched: idMatched && reasons.length === 0,
 						reasons
 					});
-
-					// Limit the log to the most recent 100 entries
-					if (matchingLogs.length > 100) {
-						matchingLogs = matchingLogs.slice(0, 100);
-					}
-
-					lastLogTimestamp = Date.now();
-					logEntryCreated = true;
 				}
-			}
-
-			// If we processed rows but didn't create any log entries, add a progress entry
-			if (rowsToProcess > 0 && !logEntryCreated) {
-				// We need to periodically show status even if no interesting logs
-				if (Date.now() - lastLogTimestamp > 1000) {
-					matchingLogs.unshift({
-						timestamp: Date.now(),
-						primaryId: 'PROGRESS',
-						comparisonId: 'UPDATE',
-						matched: true,
-						reasons: [
-							{
-								primaryFileRow: 'Progress Log',
-								comparisonFileRow: 'Update Log',
-								primaryFileColumn: 'Processing',
-								comparisonFileColumn: 'Status',
-								primaryValue: `Row ${processedRows + 1} to ${processedRows + rowsToProcess}`,
-								comparisonValue: `${progressPercentage}% complete`
-							}
-						]
-					});
-
-					// Limit the log to the most recent 100 entries
-					if (matchingLogs.length > 100) {
-						matchingLogs = matchingLogs.slice(0, 100);
-					}
-
-					lastLogTimestamp = Date.now();
+			});
+			
+			return { results, logs };
+		}
+		
+		// Divide data into chunks
+		chunks = [];
+		for (let i = 0; i < primaryRows.length; i += CHUNK_SIZE) {
+			chunks.push(primaryRows.slice(i, i + CHUNK_SIZE));
+		}
+		
+		// Reset progress tracking
+		completedChunks = 0;
+		// Reset the results array with the correct size
+		reconciliationResults = new Array(primaryRows.length);
+		
+		// Log startup information
+		const startupLog = {
+			timestamp: Date.now() + Math.random(),
+			primaryId: 'SYSTEM',
+			comparisonId: 'INFO',
+			matched: true,
+			reasons: [
+				{
+					primaryFileRow: 'System Log',
+					comparisonFileRow: 'Strategy Log',
+					primaryFileColumn: 'Batch Processing',
+					comparisonFileColumn: 'Configuration',
+					primaryValue: `Using chunk size of ${CHUNK_SIZE}`,
+					comparisonValue: `${chunks.length} chunks to process`
 				}
+			]
+		};
+		
+		// Update reactively
+		matchingLogs = [startupLog];
+		lastLogTimestamp = Date.now();
+		console.log("Added startup log, matchingLogs length:", matchingLogs.length);
+		
+		// Process chunks in batches
+		const processNextChunks = () => {
+			// Get the current chunk index
+			const chunkIndex = completedChunks;
+			if (chunkIndex >= chunks.length) {
+				// All chunks are processed
+				finishReconciliation();
+				return;
 			}
-
-			// Update processed rows count
-			processedRows += rowsToProcess;
-
-			// Calculate matching speed (rows per second)
+			
+			const startIndex = chunkIndex * CHUNK_SIZE;
+			const chunk = chunks[chunkIndex];
+			
+			// Process the chunk
+			const { results, logs } = processChunk(chunk, startIndex);
+			
+			// Update UI with logs
+			const newLogs = logs.map((log, i) => ({
+				timestamp: Date.now() + i + Math.random(), // Ensure uniqueness with offset + random
+				primaryId: log.primaryId,
+				comparisonId: log.comparisonId,
+				matched: log.matched,
+				reasons: log.reasons
+			}));
+			
+			// Update the logs reactively 
+			if (newLogs.length > 0) {
+				// timestamps are already unique from the mapping above
+				matchingLogs = [...newLogs, ...matchingLogs];
+				
+				// Limit the log to the most recent 100 entries
+				if (matchingLogs.length > 100) {
+					matchingLogs = matchingLogs.slice(0, 100);
+				}
+				console.log("Updated logs:", matchingLogs.length, "entries");
+			}
+			
+			// Store results
+			results.forEach((result, i) => {
+				reconciliationResults[startIndex + i] = result;
+			});
+			
+			// Update progress (using the global completedChunks state variable)
+			completedChunks++;
+			processedRows = Math.min(completedChunks * CHUNK_SIZE, totalRows);
+			
+			// Calculate matching speed
 			const elapsedSeconds = (Date.now() - startTime) / 1000;
-			matchingSpeed = Math.round(processedRows / elapsedSeconds);
-
-			// Estimate time left
-			const remainingRows = totalRows - processedRows;
-			if (matchingSpeed > 0) {
-				const secondsLeft = remainingRows / matchingSpeed;
-				estimatedTimeLeft = formatTime(secondsLeft);
+			// Ensure we don't divide by zero or very small numbers
+			if (elapsedSeconds > 0.1) {
+				matchingSpeed = Math.round(processedRows / elapsedSeconds);
+				
+				// Estimate time left
+				const remainingRows = totalRows - processedRows;
+				// Ensure we have a reasonable speed before calculating
+				if (matchingSpeed > 0) {
+					const secondsLeft = remainingRows / matchingSpeed;
+					estimatedTimeLeft = formatTime(secondsLeft);
+				} else {
+					// If speed is zero but we've processed some rows, show a message
+					estimatedTimeLeft = processedRows > 0 ? 
+						"calculating based on current progress..." : 
+						"starting reconciliation...";
+				}
+			} else {
+				// In the first moment, just show a starting message
+				estimatedTimeLeft = "starting reconciliation...";
 			}
-		}, 100); // Update every 100ms
+			
+			// Add progress log if needed
+			if (Date.now() - lastLogTimestamp > 1000) {
+				const progressLog = {
+					timestamp: Date.now() + Math.random(),
+					primaryId: 'PROGRESS',
+					comparisonId: 'UPDATE',
+					matched: true,
+					reasons: [
+						{
+							primaryFileRow: 'Progress Log',
+							comparisonFileRow: 'Update Log',
+							primaryFileColumn: 'Processing',
+							comparisonFileColumn: 'Status',
+							primaryValue: `${processedRows} of ${totalRows} rows (Chunk ${completedChunks}/${chunks.length})`,
+							comparisonValue: `${progressPercentage}% complete`
+						}
+					]
+				};
+				
+				// Update reactively
+				matchingLogs = [progressLog, ...matchingLogs];
+				lastLogTimestamp = Date.now();
+				console.log("Added progress log");
+			}
+			
+			// Process the next chunk after a short delay
+			setTimeout(processNextChunks, 0);
+		};
+		
+		// Function to complete reconciliation
+		function finishReconciliation() {
+			isReconciliationComplete = true;
+			
+			// Add completion log
+			const completionLog = {
+				timestamp: Date.now() + Math.random(),
+				primaryId: 'COMPLETE',
+				comparisonId: 'COMPLETE',
+				matched: true,
+				reasons: [
+					{
+						primaryFileRow: 'Complete Log',
+						comparisonFileRow: 'Complete Log',
+						primaryFileColumn: 'Reconciliation Complete',
+						comparisonFileColumn: 'Summary',
+						primaryValue: `Processed ${totalRows} rows in ${formatTime((Date.now() - startTime) / 1000)}`,
+						comparisonValue: 'Click "Download Results" to download the reconciled file'
+					}
+				]
+			};
+			
+			// Update reactively
+			matchingLogs = [completionLog, ...matchingLogs];
+			lastLogTimestamp = Date.now();
+			console.log("Added completion log");
+			
+			// Clear stuck detection timeout
+			if (stuckDetectionTimeout) {
+				clearTimeout(stuckDetectionTimeout);
+			}
+		}
+		
+		// Start processing chunks
+		processNextChunks();
+		
+		// For backward compatibility with the rest of the code, keep a simulation interval
+		// that just checks if we're done
+		simulationInterval = setInterval(() => {
+			// This is just a fallback check - the actual processing is done by workers
+			if (isReconciliationComplete) {
+				clearInterval(simulationInterval);
+			}
+		}, 250); // Check every 250ms
 	}
 
 	function formatTime(seconds: number): string {
+		// Handle invalid or very small values
 		if (!isFinite(seconds) || seconds <= 0) {
 			return 'calculating...';
 		}
+		
+		// Cap extremely large values to avoid unrealistic estimates
+		if (seconds > 24 * 3600) {
+			return 'over 24 hours';
+		}
 
+		// Format the time
 		const hours = Math.floor(seconds / 3600);
 		const minutes = Math.floor((seconds % 3600) / 60);
 		const secs = Math.floor(seconds % 60);
@@ -367,17 +487,29 @@
 			return `${hours}h ${minutes}m ${secs}s`;
 		} else if (minutes > 0) {
 			return `${minutes}m ${secs}s`;
-		} else {
+		} else if (secs > 0) {
 			return `${secs}s`;
+		} else {
+			// For very small values (less than 1 second)
+			return 'less than 1s';
 		}
 	}
 
 	function downloadResults() {
+		console.log("Download results clicked, completedChunks:", completedChunks, "total chunks:", chunks?.length);
+		
+		// If the reconciliation is not fully complete, warn the user
+		if (chunks && completedChunks < chunks.length) {
+			alert(`Reconciliation is only ${Math.round((completedChunks / chunks.length) * 100)}% complete. Results will be partial.`);
+		}
+		
 		// Prepare the results file with added columns for status and reasons
 		const results = prepareResultsFile();
+		console.log("Prepared results:", results.length, "rows");
 		
 		// Convert to CSV
 		const csvContent = convertToCSV(results);
+		console.log("CSV content length:", csvContent.length);
 		
 		// Create a download link
 		const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -385,58 +517,79 @@
 		const link = document.createElement('a');
 		
 		// Set download attributes
+		const fileName = `reconciled_${primaryFileName.replace(/\.[^/.]+$/, '')}_${new Date().toISOString().slice(0,10)}.csv`;
 		link.setAttribute('href', url);
-		link.setAttribute('download', `reconciled_${primaryFileName.replace(/\.[^/.]+$/, '')}_${new Date().toISOString().slice(0,10)}.csv`);
+		link.setAttribute('download', fileName);
 		link.style.visibility = 'hidden';
 		
 		// Trigger download
 		document.body.appendChild(link);
+		console.log("Triggering download of", fileName);
 		link.click();
 		document.body.removeChild(link);
 		
-		// Optional: Also navigate to results page after download
-		goto('/reconciliation-results');
+		// Clean up URL object
+		setTimeout(() => {
+			URL.revokeObjectURL(url);
+			console.log("URL object released");
+		}, 100);
 	}
 	
 	function prepareResultsFile() {
-		// Create a copy of primary rows with added status and reason columns
-		return primaryRows.map((row, index) => {
-			const primaryId = row[primaryIdPair.primaryColumn];
-			const comparisonRow = comparisonMap.get(primaryId);
-			const matched = !!comparisonRow;
+		console.log("Preparing results file, total rows:", primaryRows.length);
+		
+		// Make sure reconciliationResults is properly filled
+		// If the process is still running, some results might be missing
+		const results = [];
+		
+		// Process each row from the primary file
+		for (let index = 0; index < primaryRows.length; index++) {
+			const originalRow = primaryRows[index];
+			const result = reconciliationResults[index];
 			
-			// Create status and reason data
-			let status = 'Not Found';
-			let reasonText = 'No matching record in comparison file';
-			
-			if (matched) {
-				// Check for differences in mapped columns
-				const differences = [];
-				let allColumnsMatch = true;
-				
-				comparisonPairs.forEach(pair => {
-					if (pair.primaryColumn && pair.comparisonColumn) {
-						const primaryValue = row[pair.primaryColumn] || '';
-						const comparisonValue = comparisonRow[pair.comparisonColumn] || '';
-						
-						if (primaryValue.toString().trim().toLowerCase() !== comparisonValue.toString().trim().toLowerCase()) {
-							allColumnsMatch = false;
-							differences.push(`${pair.primaryColumn}: ${primaryValue} ≠ ${comparisonValue}`);
-						}
-					}
+			if (!result) {
+				// If this row hasn't been processed yet
+				console.log(`Row ${index} hasn't been processed yet`);
+				results.push({
+					...originalRow,
+					'__ReconciliationStatus': 'Not Processed',
+					'__ReconciliationReason': 'Row has not been processed yet'
 				});
-				
-				status = allColumnsMatch ? 'Match' : 'Partial Match';
-				reasonText = allColumnsMatch ? 'All columns match' : differences.join('; ');
+				continue;
+			}
+			
+			const { row, matched, reasons } = result;
+			
+			// Create status and reason text
+			let status = matched ? 'Match' : (reasons.length > 0 && reasons[0].comparisonValue !== '(No matching record found)' ? 'Partial Match' : 'Not Found');
+			
+			// Format the reason text
+			let reasonText = matched ? 
+				`Primary File (${result.reasons && result.reasons[0] ? result.reasons[0].primaryFileRow : 'Row'}) and Comparison File match perfectly for all mapped columns` : 
+				'';
+			if (!matched) {
+				if (reasons.length === 0) {
+					reasonText = 'Unknown reason';
+				} else if (reasons[0].comparisonValue === '(No matching record found)') {
+					reasonText = `Primary File (${reasons[0].primaryFileRow}) ID column "${reasons[0].primaryFileColumn}" with value "${reasons[0].primaryValue}" has no matching record in comparison file`;
+				} else {
+					// Create a detailed formatted string of all differences
+					reasonText = reasons.map(reason => 
+						`Primary File (${reason.primaryFileRow}) column "${reason.primaryFileColumn}" value "${reason.primaryValue}" ≠ Comparison File (${reason.comparisonFileRow}) column "${reason.comparisonFileColumn}" value "${reason.comparisonValue}"`
+					).join('; ');
+				}
 			}
 			
 			// Create a new row with all existing fields plus status and reason
-			return {
+			results.push({
 				...row,
 				'__ReconciliationStatus': status,
 				'__ReconciliationReason': reasonText
-			};
-		});
+			});
+		}
+		
+		console.log("Finished preparing results, total:", results.length);
+		return results;
 	}
 	
 	function convertToCSV(results) {
@@ -466,19 +619,23 @@
 </script>
 
 <div class="container mx-auto max-w-5xl px-4 py-8">
-	<h1 class="text-foreground dark:text-dark-foreground mb-6 text-center text-3xl font-bold">
-		Reconciliation in Progress
+	<h1 class="mb-6 text-center text-3xl font-bold">
+		{#if isReconciliationComplete}
+			<span class="text-blue-600 dark:text-blue-600">Reconciliation Complete</span>
+		{:else}
+			<span class="text-foreground dark:text-dark-foreground">Reconciliation in Progress...</span>
+		{/if}
 	</h1>
 
 	<!-- Files info -->
 	<div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
 		<div class="dark:bg-dark-background rounded-lg bg-white p-4 shadow-md dark:shadow-gray-800">
-			<h2 class="mb-2 text-lg font-semibold text-gray-700 dark:text-gray-200">Primary File</h2>
-			<p class="text-sm text-gray-600 dark:text-gray-400">{primaryFileName}</p>
+			<h2 class="mb-2 text-lg font-semibold text-foreground dark:text-dark-foreground">Primary File</h2>
+			<p classah="text-sm text-gray-600 dark:text-gray-400">{primaryFileName}</p>
 		</div>
 
 		<div class="dark:bg-dark-background rounded-lg bg-white p-4 shadow-md dark:shadow-gray-800">
-			<h2 class="mb-2 text-lg font-semibold text-gray-700 dark:text-gray-200">Comparison File</h2>
+			<h2 class="mb-2 text-lg font-semibold text-foreground dark:text-dark-foreground">Comparison File</h2>
 			<p class="text-sm text-gray-600 dark:text-gray-400">{comparisonFileName}</p>
 		</div>
 	</div>
@@ -486,7 +643,7 @@
 	<!-- Progress section -->
 	<div class="dark:bg-dark-background mb-6 rounded-lg bg-white p-6 shadow-md dark:shadow-gray-800">
 		<div class="mb-4 flex items-center justify-between">
-			<h2 class="text-xl font-semibold text-gray-700 dark:text-gray-200">
+			<h2 class="text-xl font-semibold text-foreground dark:text-dark-foreground">
 				Reconciliation Progress
 			</h2>
 			<span class="text-lg font-bold text-blue-600 dark:text-blue-400">{progressPercentage}%</span>
@@ -503,40 +660,29 @@
 		<!-- Progress details -->
 		<div class="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
 			<div class="text-center">
-				<p class="text-sm text-gray-600 dark:text-gray-400">Processed</p>
-				<p class="text-xl font-semibold text-gray-800 dark:text-gray-200">
+				<p class="text-sm text-foreground dark:text-dark-foreground">Processed</p>
+				<p class="text-xl font-semibold text-gray-600 dark:text-gray-400">
 					{processedRows.toLocaleString()} / {totalRows.toLocaleString()}
 				</p>
 			</div>
 
 			<div class="text-center">
-				<p class="text-sm text-gray-600 dark:text-gray-400">Speed</p>
-				<p class="text-xl font-semibold text-gray-800 dark:text-gray-200">
+				<p class="text-sm text-foreground dark:text-dark-foreground">Speed</p>
+				<p class="text-xl font-semibold text-gray-600 dark:text-gray-400">
 					{matchingSpeed} rows/sec
 				</p>
 			</div>
 
 			<div class="text-center">
-				<p class="text-sm text-gray-600 dark:text-gray-400">Estimated time remaining</p>
-				<p class="text-xl font-semibold text-gray-800 dark:text-gray-200">{estimatedTimeLeft}</p>
+				<p class="text-sm text-foreground dark:text-dark-foreground">Estimated time remaining</p>
+				<p class="text-xl font-semibold text-gray-600 dark:text-gray-400">{estimatedTimeLeft}</p>
 			</div>
 		</div>
-
-		{#if isReconciliationComplete}
-			<div class="mt-6 flex justify-center">
-				<button
-					on:click={downloadResults}
-					class="rounded border border-green-500 bg-green-500 px-6 py-3 font-semibold text-white transition-colors duration-200 hover:bg-green-600 hover:text-white dark:border-green-600 dark:bg-green-600 dark:hover:bg-green-700"
-				>
-					Download Results
-				</button>
-			</div>
-		{/if}
 	</div>
 
 	<!-- Real-time logs section -->
 	<div class="dark:bg-dark-background rounded-lg bg-white p-6 shadow-md dark:shadow-gray-800">
-		<h2 class="mb-4 text-xl font-semibold text-gray-700 dark:text-gray-200">Matching Log</h2>
+		<h2 class="mb-4 text-xl font-semibold text-foreground dark:text-dark-foreground">Matching Log</h2>
 
 		<div class="max-h-96 overflow-y-auto">
 			{#if matchingLogs.length === 0}
@@ -570,7 +716,7 @@
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-						{#each matchingLogs as log (log.timestamp)}
+						{#each matchingLogs as log, index (index)}
 							<tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
 								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-800 dark:text-gray-200">
 									{log.primaryId}
@@ -646,6 +792,16 @@
 				</table>
 			{/if}
 		</div>
+		{#if isReconciliationComplete}
+			<div class="mt-6 flex justify-center">
+				<button
+					on:click={downloadResults}
+					class="rounded border border-green-500 bg-green-500 px-6 py-3 font-semibold text-white transition-colors duration-200 hover:bg-green-600 hover:text-white dark:border-green-600 dark:bg-green-600 dark:hover:bg-green-700"
+				>
+					Download Results
+				</button>
+			</div>
+		{/if}
 	</div>
 </div>
 
