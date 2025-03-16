@@ -3,6 +3,8 @@
 	import { parseFile, type ParsedFileData } from '$lib/utils/fileParser';
 	import { reconciliationStore } from '$lib/stores/reconciliationStore';
 	import { goto } from '$app/navigation';
+	import ColumnMappingModal from '$lib/components/ColumnMappingModal.svelte';
+	import type { ColumnPair } from '$lib/utils/reconciliation';
 
 	// File data state
 	type FileData = {
@@ -269,35 +271,35 @@
 		reconciliationStore.reset();
 	}
 
-	function goToNextStep() {
+	// Column mapping modal
+	let showMappingModal = $state(false);
+	
+	function openMappingModal() {
 		// Only proceed if both files are uploaded and parsed
 		if (primaryFileData.isUploaded && comparisonFileData.isUploaded && 
 			primaryFileData.parsedData && comparisonFileData.parsedData) {
 			
-			console.log("Next button clicked, preparing to navigate");
+			console.log("Opening column mapping modal");
 			
 			try {
 				// Force a refresh of the store data
 				reconciliationStore.reset();
 				
-				// Add a small delay to ensure store is reset
-				setTimeout(() => {
-					// Set the data in the store
-					console.log("Setting primary file data in store");
-					reconciliationStore.setPrimaryFileData(primaryFileData.parsedData);
-					
-					if (comparisonFileData.parsedData) {
-						console.log("Setting comparison file data in store");
-						reconciliationStore.setComparisonFileData(comparisonFileData.parsedData);
-					}
-					
-					// Use the SvelteKit goto function for navigation
-					console.log("Navigating to column selection page");
-					goto('/column-selection');
-				}, 100);
+				// Set the data in the store
+				console.log("Setting primary file data in store");
+				reconciliationStore.setPrimaryFileData(primaryFileData.parsedData);
+				
+				if (comparisonFileData.parsedData) {
+					console.log("Setting comparison file data in store");
+					reconciliationStore.setComparisonFileData(comparisonFileData.parsedData);
+				}
+				
+				// Show the mapping modal
+				showMappingModal = true;
+				
 			} catch (error) {
-				console.error("Error during navigation:", error);
-				errorMessage = "Error navigating to the next step. Please try again.";
+				console.error("Error preparing for column mapping:", error);
+				errorMessage = "Error preparing for column mapping. Please try again.";
 			}
 		} else {
 			console.warn("Cannot proceed - files not properly uploaded", {
@@ -307,6 +309,22 @@
 				comparisonHasData: !!comparisonFileData.parsedData
 			});
 		}
+	}
+	
+	// Handle column mapping completion
+	function handleColumnMapping(event: CustomEvent) {
+		const { primaryIdPair, comparisonPairs } = event.detail;
+		
+		console.log("Column mapping complete:", { primaryIdPair, comparisonPairs });
+		
+		// Store the mapping configuration
+		reconciliationStore.setConfig({
+			primaryIdPair,
+			comparisonPairs
+		});
+		
+		// Navigate to the results page
+		goto('/reconciliation-results');
 	}
 </script>
 
@@ -552,18 +570,29 @@
 		</details>
 	</div>
 	
-	<!-- Reconcile Button -->
+	<!-- Map Columns Button -->
 	<div class="mb-16 flex justify-center">
 		<button
-			on:click={goToNextStep}
+			on:click={openMappingModal}
 			disabled={!primaryFileData.isUploaded || !comparisonFileData.isUploaded || !primaryFileData.parsedData || !comparisonFileData.parsedData}
 			class="reconcile-button mt-2 rounded border border-green-500 bg-green-500 px-6 py-3 font-semibold text-white hover:bg-green-600 hover:text-white"
 			class:opacity-50={!primaryFileData.isUploaded || !comparisonFileData.isUploaded || !primaryFileData.parsedData || !comparisonFileData.parsedData}
 			class:cursor-not-allowed={!primaryFileData.isUploaded || !comparisonFileData.isUploaded || !primaryFileData.parsedData || !comparisonFileData.parsedData}
 		>
-			Next
+			Map Columns
 		</button>
 	</div>
+	
+	<!-- Column Mapping Modal -->
+	{#if primaryFileData.parsedData && comparisonFileData.parsedData}
+		<ColumnMappingModal
+			primaryFile={primaryFileData.parsedData}
+			comparisonFile={comparisonFileData.parsedData}
+			show={showMappingModal}
+			on:close={() => showMappingModal = false}
+			on:mapping={handleColumnMapping}
+		/>
+	{/if}
 </div>
 
 <style>

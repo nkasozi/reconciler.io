@@ -1,212 +1,211 @@
 import type { ParsedFileData } from './fileParser';
 
-// Types for reconciliation
+// Define the column pair type for mapping columns between files
 export type ColumnPair = {
-  primaryColumn: string | null;
-  comparisonColumn: string | null;
+    primaryColumn: string | null;
+    comparisonColumn: string | null;
 };
 
+// Define reconciliation configuration
 export type ReconciliationConfig = {
-  primaryIdPair: ColumnPair;
-  comparisonPairs: ColumnPair[];
-  contactEmail: string;
+    primaryIdPair: ColumnPair;
+    comparisonPairs: ColumnPair[];
+    contactEmail?: string;
 };
 
+// Define the result of a comparison between two values
+export type ComparisonResult = {
+    primaryValue: string | number | null;
+    comparisonValue: string | number | null;
+    match: boolean;
+    difference?: number | string;
+};
+
+// Define a row matching result
+export type RowMatchResult = {
+    primaryRow: Record<string, string>;
+    comparisonRow: Record<string, string>;
+    idValues: {
+        primary: string;
+        comparison: string;
+    };
+    comparisonResults: Record<string, ComparisonResult>;
+    matchScore: number; // Overall score between 0-100
+};
+
+// Define reconciliation results
 export type ReconciliationResult = {
-  matchedRecords: MatchedRecordResult[];
-  unmatchedPrimaryRecords: Record<string, string>[];
-  unmatchedComparisonRecords: Record<string, string>[];
-  reconciliationDate: string;
-  summary: ReconciliationSummary;
-};
-
-export type MatchedRecordResult = {
-  primaryRecord: Record<string, string>;
-  comparisonRecord: Record<string, string>;
-  matches: ComparisonMatch[];
-  allMatch: boolean;
-};
-
-export type ComparisonMatch = {
-  primaryColumn: string;
-  comparisonColumn: string;
-  primaryValue: string;
-  comparisonValue: string;
-  matches: boolean;
-};
-
-export type ReconciliationSummary = {
-  totalRecords: number;
-  matchedRecords: number;
-  unmatchedRecords: number;
-  partiallyMatchedRecords: number;
-  matchPercentage: number;
+    matches: RowMatchResult[];
+    unmatchedPrimary: Record<string, string>[];
+    unmatchedComparison: Record<string, string>[];
+    config: ReconciliationConfig;
+    summary: {
+        totalPrimaryRows: number;
+        totalComparisonRows: number;
+        matchedRows: number;
+        unmatchedPrimaryRows: number;
+        unmatchedComparisonRows: number;
+        matchPercentage: number;
+    };
 };
 
 /**
- * Perform reconciliation between two data sets
+ * Perform reconciliation between primary and comparison data sets
  */
 export function reconcileData(
-  primaryData: ParsedFileData,
-  comparisonData: ParsedFileData,
-  config: ReconciliationConfig
+    primaryData: ParsedFileData,
+    comparisonData: ParsedFileData,
+    config: ReconciliationConfig
 ): ReconciliationResult {
-  // Validate required config
-  if (!config.primaryIdPair.primaryColumn || !config.primaryIdPair.comparisonColumn) {
-    throw new Error('Primary ID columns must be specified');
-  }
-
-  const primaryIdColumn = config.primaryIdPair.primaryColumn;
-  const comparisonIdColumn = config.primaryIdPair.comparisonColumn;
-
-  // Create lookup maps for faster matching
-  const primaryMap = new Map<string, Record<string, string>>();
-  const comparisonMap = new Map<string, Record<string, string>>();
-
-  // Populate primary map
-  primaryData.rows.forEach(row => {
-    const idValue = row[primaryIdColumn];
-    if (idValue) {
-      primaryMap.set(idValue, row);
-    }
-  });
-
-  // Populate comparison map
-  comparisonData.rows.forEach(row => {
-    const idValue = row[comparisonIdColumn];
-    if (idValue) {
-      comparisonMap.set(idValue, row);
-    }
-  });
-
-  const matchedRecords: MatchedRecordResult[] = [];
-  const unmatchedPrimaryRecords: Record<string, string>[] = [];
-  const unmatchedComparisonRecords: Record<string, string>[] = [];
-
-  // Find matches and perform comparisons
-  primaryData.rows.forEach(primaryRow => {
-    const primaryId = primaryRow[primaryIdColumn];
+    // Extract columns for matching
+    const primaryIdColumn = config.primaryIdPair.primaryColumn;
+    const comparisonIdColumn = config.primaryIdPair.comparisonColumn;
     
-    if (!primaryId) {
-      unmatchedPrimaryRecords.push(primaryRow);
-      return;
+    if (!primaryIdColumn || !comparisonIdColumn) {
+        throw new Error('ID columns must be specified for reconciliation');
     }
-
-    const comparisonRow = comparisonMap.get(primaryId);
     
-    if (!comparisonRow) {
-      unmatchedPrimaryRecords.push(primaryRow);
-      return;
+    // Create lookup maps for fast matching
+    const primaryRowsMap = new Map<string, Record<string, string>>();
+    const comparisonRowsMap = new Map<string, Record<string, string>>();
+    
+    // Index the primary rows by ID
+    for (const row of primaryData.rows) {
+        const idValue = row[primaryIdColumn];
+        if (idValue) {
+            primaryRowsMap.set(idValue.toString().trim().toLowerCase(), row);
+        }
     }
-
-    // We found a match - now compare the specified columns
-    const matches: ComparisonMatch[] = [];
-    let allFieldsMatch = true;
-
-    config.comparisonPairs.forEach(pair => {
-      if (!pair.primaryColumn || !pair.comparisonColumn) return;
-
-      const primaryValue = primaryRow[pair.primaryColumn] || '';
-      const comparisonValue = comparisonRow[pair.comparisonColumn] || '';
-      const valuesMatch = compareValues(primaryValue, comparisonValue);
-
-      matches.push({
-        primaryColumn: pair.primaryColumn,
-        comparisonColumn: pair.comparisonColumn,
-        primaryValue,
-        comparisonValue,
-        matches: valuesMatch
-      });
-
-      if (!valuesMatch) {
-        allFieldsMatch = false;
-      }
-    });
-
-    matchedRecords.push({
-      primaryRecord: primaryRow,
-      comparisonRecord: comparisonRow,
-      matches,
-      allMatch: allFieldsMatch
-    });
-
-    // Remove from comparison map to track unmatched comparison records
-    comparisonMap.delete(primaryId);
-  });
-
-  // Any remaining items in comparisonMap are unmatched
-  comparisonMap.forEach(row => {
-    unmatchedComparisonRecords.push(row);
-  });
-
-  // Calculate summary statistics
-  const totalRecords = primaryData.rows.length;
-  const matchedCount = matchedRecords.length;
-  const fullMatchCount = matchedRecords.filter(record => record.allMatch).length;
-  const partialMatchCount = matchedCount - fullMatchCount;
-
-  const summary: ReconciliationSummary = {
-    totalRecords,
-    matchedRecords: matchedCount,
-    unmatchedRecords: unmatchedPrimaryRecords.length,
-    partiallyMatchedRecords: partialMatchCount,
-    matchPercentage: totalRecords > 0 ? (fullMatchCount / totalRecords) * 100 : 0
-  };
-
-  return {
-    matchedRecords,
-    unmatchedPrimaryRecords,
-    unmatchedComparisonRecords,
-    reconciliationDate: new Date().toISOString(),
-    summary
-  };
+    
+    // Index the comparison rows by ID
+    for (const row of comparisonData.rows) {
+        const idValue = row[comparisonIdColumn];
+        if (idValue) {
+            comparisonRowsMap.set(idValue.toString().trim().toLowerCase(), row);
+        }
+    }
+    
+    // Results containers
+    const matches: RowMatchResult[] = [];
+    const unmatchedPrimary: Record<string, string>[] = [];
+    const unmatchedComparison: Record<string, string>[] = [];
+    
+    // Process the primary rows and find matches
+    for (const [idValue, primaryRow] of primaryRowsMap.entries()) {
+        const comparisonRow = comparisonRowsMap.get(idValue);
+        
+        if (comparisonRow) {
+            // We found a match by ID
+            const comparisonResults: Record<string, ComparisonResult> = {};
+            let matchCount = 0;
+            
+            // Compare all the mapped column pairs
+            for (const pair of config.comparisonPairs) {
+                if (pair.primaryColumn && pair.comparisonColumn) {
+                    const primaryValue = primaryRow[pair.primaryColumn];
+                    const comparisonValue = comparisonRow[pair.comparisonColumn];
+                    
+                    // Compare the values
+                    const isMatch = compareValues(primaryValue, comparisonValue);
+                    
+                    comparisonResults[pair.primaryColumn] = {
+                        primaryValue,
+                        comparisonValue,
+                        match: isMatch,
+                        difference: calculateDifference(primaryValue, comparisonValue)
+                    };
+                    
+                    if (isMatch) {
+                        matchCount++;
+                    }
+                }
+            }
+            
+            // Calculate match score - percentage of matching columns
+            const matchScore = (config.comparisonPairs.length > 0)
+                ? Math.round((matchCount / config.comparisonPairs.length) * 100)
+                : 100; // If no comparison columns, then it's a 100% match by ID
+            
+            matches.push({
+                primaryRow,
+                comparisonRow,
+                idValues: {
+                    primary: primaryRow[primaryIdColumn],
+                    comparison: comparisonRow[comparisonIdColumn]
+                },
+                comparisonResults,
+                matchScore
+            });
+            
+            // Remove from comparison map to track unmatched comparison rows
+            comparisonRowsMap.delete(idValue);
+        } else {
+            // No match found for this primary row
+            unmatchedPrimary.push(primaryRow);
+        }
+    }
+    
+    // All remaining comparison rows are unmatched
+    for (const row of comparisonRowsMap.values()) {
+        unmatchedComparison.push(row);
+    }
+    
+    // Calculate summary statistics
+    const summary = {
+        totalPrimaryRows: primaryData.rows.length,
+        totalComparisonRows: comparisonData.rows.length,
+        matchedRows: matches.length,
+        unmatchedPrimaryRows: unmatchedPrimary.length,
+        unmatchedComparisonRows: unmatchedComparison.length,
+        matchPercentage: Math.round((matches.length / primaryData.rows.length) * 100)
+    };
+    
+    return {
+        matches,
+        unmatchedPrimary,
+        unmatchedComparison,
+        config,
+        summary
+    };
 }
 
 /**
- * Compare two string values, with normalization for common variations
+ * Compare two values and determine if they match
  */
-function compareValues(value1: string, value2: string): boolean {
-  // Basic case - exact match
-  if (value1 === value2) return true;
-
-  // Normalize and compare
-  const normalized1 = normalizeValue(value1);
-  const normalized2 = normalizeValue(value2);
-
-  return normalized1 === normalized2;
+function compareValues(value1: string | undefined, value2: string | undefined): boolean {
+    // Handle undefined or empty values
+    if (!value1 && !value2) return true;
+    if (!value1 || !value2) return false;
+    
+    // Normalize strings for comparison
+    const normalizedValue1 = value1.toString().trim().toLowerCase();
+    const normalizedValue2 = value2.toString().trim().toLowerCase();
+    
+    return normalizedValue1 === normalizedValue2;
 }
 
 /**
- * Normalize a value for comparison
- * - Trim whitespace
- * - Remove currency symbols
- * - Standardize numbers
+ * Calculate the difference between two values
+ * For numbers, it returns the numerical difference
+ * For strings, it returns a string describing the difference
  */
-function normalizeValue(value: string): string {
-  // Handle empty values
-  if (!value) return '';
-
-  // Convert to string if not already
-  let result = String(value);
-
-  // Trim whitespace
-  result = result.trim();
-
-  // Remove currency symbols and formatting
-  result = result.replace(/[$£€¥]/g, '');
-
-  // Try to parse as number and standardize format
-  const numericValue = parseFloat(result.replace(/,/g, ''));
-  if (!isNaN(numericValue)) {
-    return numericValue.toString();
-  }
-
-  // For dates, try to standardize format
-  const dateValue = new Date(result);
-  if (!isNaN(dateValue.getTime())) {
-    return dateValue.toISOString().split('T')[0]; // YYYY-MM-DD format
-  }
-
-  // Lowercase for general string comparison
-  return result.toLowerCase();
+function calculateDifference(value1: string | undefined, value2: string | undefined): number | string {
+    // Handle undefined or empty values
+    if (!value1 && !value2) return 0;
+    if (!value1) return 'Missing in primary';
+    if (!value2) return 'Missing in comparison';
+    
+    // Try to parse as numbers
+    const num1 = parseFloat(value1);
+    const num2 = parseFloat(value2);
+    
+    if (!isNaN(num1) && !isNaN(num2)) {
+        // Numerical difference
+        return num1 - num2;
+    }
+    
+    // String difference
+    if (value1 === value2) return 'No difference';
+    
+    return 'Text differs';
 }
