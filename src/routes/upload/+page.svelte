@@ -329,9 +329,10 @@
 	}
 </script>
 
+<div class="min-h-screen bg-gray-900 dark:bg-gray-900 text-white">
 <div class="container mx-auto pt-16 pb-2 text-center">
 	<h1
-		class="mb-8 px-8 text-2xl leading-tight font-semibold text-gray-700 sm:text-3xl md:text-5xl lg:px-0 lg:text-5xl xl:text-5xl"
+		class="mb-8 px-8 text-2xl leading-tight font-semibold text-white sm:text-3xl md:text-5xl lg:px-0 lg:text-5xl xl:text-5xl"
 	>
 		<span class="font-extrabold text-red-500">Reconciliation</span> has <br /> never been so
 		<span class="animated-text font-extrabold text-blue-600">{currentText}</span>
@@ -602,11 +603,11 @@
 
 	<!-- Debug State Info -->
 	<div
-		class="mx-auto mb-4 max-w-4xl rounded-md border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600"
+		class="mx-auto mb-4 max-w-4xl rounded-md border border-gray-700 bg-gray-800 p-3 text-xs text-gray-300"
 	>
 		<details>
 			<summary class="cursor-pointer font-semibold">Debug State Info (Click to expand)</summary>
-			<div class="mt-2 rounded bg-white p-2 text-left">
+			<div class="mt-2 rounded bg-gray-700 p-2 text-left">
 				<div class="mb-1">
 					<b>Primary File:</b>
 					{primaryFileData.isUploaded ? 'Uploaded' : 'Not Uploaded'}
@@ -681,6 +682,7 @@
 		/>
 	{/if}
 </div>
+</div>
 
 <style>
 	/* Upload area styling */
@@ -691,16 +693,16 @@
 		justify-content: center;
 		align-items: center;
 		height: 150px;
-		border: 2px dashed #ccc;
+		border: 2px dashed #4a5568;
 		border-radius: 8px;
-		background-color: #f5f5f5;
+		background-color: #2d3748;
 		transition: all 0.3s ease;
 		overflow: hidden;
 	}
 
 	.upload-area.highlight {
 		border-color: #4caf50;
-		background-color: rgba(76, 175, 80, 0.1);
+		background-color: rgba(76, 175, 80, 0.2);
 	}
 
 	.drop-here {
@@ -717,7 +719,7 @@
 	.upload-message {
 		text-align: center;
 		font-size: 1rem;
-		color: #666;
+		color: #e2e8f0;
 		line-height: 1.5;
 	}
 
@@ -735,7 +737,7 @@
 
 	.progress-bar {
 		height: 10px;
-		background-color: #e0e0e0;
+		background-color: #4a5568;
 		border-radius: 5px;
 		overflow: hidden;
 		margin-bottom: 5px;
@@ -749,7 +751,7 @@
 
 	.progress-text {
 		font-size: 0.8rem;
-		color: #666;
+		color: #e2e8f0;
 	}
 
 	/* Preview table styling */
@@ -803,7 +805,7 @@
 		right: -5px;
 		top: 0;
 		height: 100%;
-		border-right: 0.1em solid #666;
+		border-right: 0.1em solid #e2e8f0;
 		animation: blink 1s step-end infinite;
 	}
 
@@ -813,18 +815,19 @@
 			border-color: transparent;
 		}
 		50% {
-			border-color: #666;
+			border-color: #e2e8f0;
 		}
 	}
 
-	/* Dark mode styles */
+	/* Dark mode styles are now the default since we have a dark background */
+	/* These styles will still apply for explicit dark mode */
 	:global(.dark) .upload-area {
 		background-color: #1e1e1e;
 		border-color: #444;
 	}
 
 	:global(.dark) .upload-message {
-		color: #bbb;
+		color: #e2e8f0;
 	}
 
 	:global(.dark) .preview-area {
@@ -833,12 +836,12 @@
 
 	:global(.dark) .preview-table th {
 		background-color: #2a2a2a;
-		color: #ddd;
+		color: #e2e8f0;
 		border-bottom-color: #444;
 	}
 
 	:global(.dark) .preview-table td {
-		color: #bbb;
+		color: #e2e8f0;
 		border-bottom-color: #333;
 	}
 

@@ -32,7 +32,7 @@
 </script>
 
 <!-- Main layout with navigation -->
-<div class="h-screen bg-white text-gray-700">
+<div class="h-screen bg-gray-900 text-white">
 	<!-- Navigation -->
 	<nav class="mx-auto w-full max-w-xl pt-8 md:max-w-2xl lg:max-w-4xl xl:max-w-5xl">
 		<div class="container px-8 py-2 lg:px-0">
@@ -47,7 +47,7 @@
 							<!-- Mobile menu button -->
 							<button
 								type="button"
-								class="cursor-pointer px-2 text-gray-700 hover:text-red-500 focus:text-red-500 focus:outline-none"
+								class="cursor-pointer px-2 text-white hover:text-red-500 focus:text-red-500 focus:outline-none"
 								aria-label="Toggle mobile menu"
 								on:click={() => {
 									console.log('Menu button clicked');
@@ -69,23 +69,18 @@
 				<div class="hidden md:block">
 					<a
 						href="/features"
-						class="ml-8 font-medium text-gray-700 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-gray-200 dark:hover:text-blue-400 dark:focus:text-blue-400"
+						class="ml-8 font-medium text-blue-500 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-blue-400 dark:hover:text-blue-300 dark:focus:text-blue-300"
 						>Features</a
 					>
 					<a
 						href="/pricing"
-						class="ml-8 font-medium text-gray-700 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-gray-200 dark:hover:text-blue-400 dark:focus:text-blue-400"
+						class="ml-8 font-medium text-blue-500 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-blue-400 dark:hover:text-blue-300 dark:focus:text-blue-300"
 						>Pricing</a
 					>
 					<a
 						href="/why-reconcile"
-						class="ml-8 font-medium text-gray-700 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-gray-200 dark:hover:text-blue-400 dark:focus:text-blue-400"
+						class="ml-8 font-medium text-blue-500 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-blue-400 dark:hover:text-blue-300 dark:focus:text-blue-300"
 						>Why Reconcile?</a
-					>
-					<a
-						href="/upload"
-						class="ml-8 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition duration-150 ease-in-out"
-						>Get Started</a
 					>
 				</div>
 <!--				<div-->
@@ -113,7 +108,7 @@
 		{#if mobileNavOpen}
 			<div class="absolute inset-x-0 top-0 z-[9999] p-2 md:hidden">
 				<div class="origin-top-right transform rounded-lg shadow-md transition">
-					<div class="overflow-hidden rounded-lg bg-white shadow-xs">
+					<div class="overflow-hidden rounded-lg bg-gray-800 shadow-xs">
 						<div class="flex items-center justify-between px-5 pt-4">
 							<div>
 								<a href="/" title="Transactions Reconciliation tool">
@@ -127,7 +122,7 @@
 								<!-- Close menu button -->
 								<button
 									type="button"
-									class="inline-flex cursor-pointer items-center justify-center rounded-md p-2 text-gray-400 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-gray-700 focus:bg-gray-50 focus:text-gray-700 focus:outline-none"
+									class="inline-flex cursor-pointer items-center justify-center rounded-md p-2 text-gray-400 transition duration-150 ease-in-out hover:bg-gray-700 hover:text-white focus:bg-gray-700 focus:text-white focus:outline-none"
 									aria-label="Close mobile menu"
 									on:click={() => {
 										console.log('Close button clicked');
@@ -148,19 +143,19 @@
 						<div class="px-2 pt-2 pb-3">
 							<a
 								href="/features"
-								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-gray-700 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-blue-600 focus:bg-gray-50 focus:text-blue-600 focus:outline-none dark:text-gray-200 dark:hover:text-blue-400 dark:focus:text-blue-400"
+								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-blue-500 transition duration-150 ease-in-out hover:bg-gray-700 hover:text-blue-300 focus:bg-gray-700 focus:text-blue-300 focus:outline-none"
 							>
 								Features
 							</a>
 							<a
 								href="/pricing"
-								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-gray-700 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-blue-600 focus:bg-gray-50 focus:text-blue-600 focus:outline-none dark:text-gray-200 dark:hover:text-blue-400 dark:focus:text-blue-400"
+								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-blue-500 transition duration-150 ease-in-out hover:bg-gray-700 hover:text-blue-300 focus:bg-gray-700 focus:text-blue-300 focus:outline-none"
 							>
 								Pricing
 							</a>
 							<a
 								href="/why-reconcile"
-								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-gray-700 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-blue-600 focus:bg-gray-50 focus:text-blue-600 focus:outline-none dark:text-gray-200 dark:hover:text-blue-400 dark:focus:text-blue-400"
+								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-blue-500 transition duration-150 ease-in-out hover:bg-gray-700 hover:text-blue-300 focus:bg-gray-700 focus:text-blue-300 focus:outline-none"
 							>
 								Why Reconcile?
 							</a>
@@ -172,7 +167,7 @@
 							</a>
 							<a
 								href="/blog"
-								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-gray-700 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-red-400 focus:bg-gray-50 focus:text-red-400 focus:outline-none"
+								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-white transition duration-150 ease-in-out hover:bg-gray-700 hover:text-blue-300 focus:bg-gray-700 focus:text-blue-300 focus:outline-none"
 							>
 								Blog
 							</a>
@@ -180,13 +175,13 @@
 						<div>
 							<a
 								href="/login"
-								class="block w-full bg-gray-50 px-5 py-3 text-center font-medium text-gray-700 transition duration-150 ease-in-out hover:bg-red-600 hover:text-pink-100 focus:bg-gray-50 focus:text-indigo-700 focus:outline-none"
+								class="block w-full bg-gray-700 px-5 py-3 text-center font-medium text-white transition duration-150 ease-in-out hover:bg-red-600 hover:text-pink-100 focus:outline-none"
 							>
 								Login
 							</a>
 							<a
 								href="/signup"
-								class="block w-full bg-red-400 px-5 py-3 text-center font-medium text-white transition duration-150 ease-in-out hover:bg-red-600 hover:text-pink-100 focus:bg-gray-50 focus:text-indigo-700 focus:outline-none"
+								class="block w-full bg-red-400 px-5 py-3 text-center font-medium text-white transition duration-150 ease-in-out hover:bg-red-600 hover:text-pink-100 focus:outline-none"
 							>
 								Sign Up
 							</a>
@@ -225,7 +220,7 @@
 		height: 400px;
 		left: -200px;
 		top: -100px;
-		background: rgb(0 0 0 / 0.1);
+		background: rgb(255 255 255 / 0.05);
 		animation: pulse-1 15s ease-in-out infinite alternate;
 	}
 
@@ -234,7 +229,7 @@
 		height: 600px;
 		right: -300px;
 		top: -200px;
-		background: rgb(0 0 0 / 0.1);
+		background: rgb(255 255 255 / 0.05);
 		animation: pulse-2 20s ease-in-out infinite alternate;
 	}
 
@@ -243,7 +238,7 @@
 		height: 300px;
 		left: 10%;
 		bottom: 10%;
-		background: rgb(0 0 0 / 0.1);
+		background: rgb(255 255 255 / 0.05);
 		animation: pulse-3 12s ease-in-out infinite alternate;
 	}
 
@@ -252,67 +247,67 @@
 		height: 200px;
 		right: 5%;
 		bottom: 5%;
-		background: rgb(20 20 20 / 0.1);
+		background: rgb(255 255 255 / 0.05);
 		animation: pulse-4 18s ease-in-out infinite alternate;
 	}
 
 	@keyframes pulse-1 {
 		0% {
 			transform: scale(1);
-			opacity: 0.1;
+			opacity: 0.05;
 		}
 		50% {
 			transform: scale(1.1);
-			opacity: 0.15;
+			opacity: 0.08;
 		}
 		100% {
 			transform: scale(1);
-			opacity: 0.1;
+			opacity: 0.05;
 		}
 	}
 
 	@keyframes pulse-2 {
 		0% {
 			transform: scale(1);
-			opacity: 0.08;
+			opacity: 0.04;
 		}
 		50% {
 			transform: scale(1.05);
-			opacity: 0.12;
+			opacity: 0.07;
 		}
 		100% {
 			transform: scale(1);
-			opacity: 0.08;
+			opacity: 0.04;
 		}
 	}
 
 	@keyframes pulse-3 {
 		0% {
 			transform: scale(1);
-			opacity: 0.12;
+			opacity: 0.06;
 		}
 		50% {
 			transform: scale(1.15);
-			opacity: 0.18;
+			opacity: 0.09;
 		}
 		100% {
 			transform: scale(1);
-			opacity: 0.12;
+			opacity: 0.06;
 		}
 	}
 
 	@keyframes pulse-4 {
 		0% {
 			transform: scale(1);
-			opacity: 0.1;
+			opacity: 0.05;
 		}
 		50% {
 			transform: scale(1.2);
-			opacity: 0.16;
+			opacity: 0.08;
 		}
 		100% {
 			transform: scale(1);
-			opacity: 0.1;
+			opacity: 0.05;
 		}
 	}
 </style>
