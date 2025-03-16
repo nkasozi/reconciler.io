@@ -1,394 +1,683 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { reconciliationStore } from '$lib/stores/reconciliationStore';
+	import { reconcileData } from '$lib/utils/reconciliation';
+	import type { ReconciliationResult, ComparisonMatch, MatchedRecordResult } from '$lib/utils/reconciliation';
+	import type { ParsedFileData } from '$lib/utils/fileParser';
 
-	// Types for reconciliation results
-	type ReconciliationStatus = 'success' | 'failure';
+	// Reconciliation state
+	let primaryFileData: ParsedFileData | null = null;
+	let comparisonFileData: ParsedFileData | null = null;
+	let reconciliationConfig = null;
+	let reconciliationResult: ReconciliationResult | null = null;
+	let isLoading = $state(true);
+	let errorMessage = $state<string | null>(null);
+
+	// Simplified view of reconciliation results for display
+	type ReconciliationStatus = 'success' | 'failure' | 'partial';
 
 	interface ReconciliationRow {
-		primaryRowIndex: number;
-		comparisonRowIndex: number | null;
 		primaryId: string;
 		status: ReconciliationStatus;
+		primaryRecord: Record<string, string>;
+		comparisonRecord: Record<string, string> | null;
 		failureReason?: string;
-		comparisonResults: {
-			primaryColumn: string;
-			comparisonColumn: string;
-			primaryValue: string;
-			comparisonValue: string;
-			matches: boolean;
-		}[];
+		comparisonMatches: ComparisonMatch[];
 	}
 
-	// Mock reconciliation results
-	let reconciliationResults = $state<ReconciliationRow[]>([
-		{
-			primaryRowIndex: 0,
-			comparisonRowIndex: 0,
-			primaryId: 'TX001',
-			status: 'success',
-			comparisonResults: [
-				{
-					primaryColumn: 'Date',
-					comparisonColumn: 'Payment Date',
-					primaryValue: '2023-01-01',
-					comparisonValue: '01/01/2023',
-					matches: true
-				},
-				{
-					primaryColumn: 'Amount',
-					comparisonColumn: 'Payment Amount',
-					primaryValue: '$100.00',
-					comparisonValue: '100.00',
-					matches: true
-				}
-			]
-		},
-		{
-			primaryRowIndex: 1,
-			comparisonRowIndex: 1,
-			primaryId: 'TX002',
-			status: 'failure',
-			failureReason: 'Amount mismatch',
-			comparisonResults: [
-				{
-					primaryColumn: 'Date',
-					comparisonColumn: 'Payment Date',
-					primaryValue: '2023-01-02',
-					comparisonValue: '01/02/2023',
-					matches: true
-				},
-				{
-					primaryColumn: 'Amount',
-					comparisonColumn: 'Payment Amount',
-					primaryValue: '$250.50',
-					comparisonValue: '251.50',
-					matches: false
-				}
-			]
-		},
-		{
-			primaryRowIndex: 2,
-			comparisonRowIndex: null,
-			primaryId: 'TX003',
-			status: 'failure',
-			failureReason: 'No matching row found in comparison file',
-			comparisonResults: []
-		}
-	]);
-
+	let reconciliationRows = $state<ReconciliationRow[]>([]);
+	
 	// Summary statistics
-	let totalRows = $state(0);
-	let successCount = $state(0);
-	let failureCount = $state(0);
-	let successRate = $state(0);
-
-	// UI state
-	let selectedFilter = $state<'all' | 'success' | 'failure'>('all');
-	let searchTerm = $state('');
-	let filteredResults = $state<ReconciliationRow[]>([]);
-
-	// Apply filters and calculate statistics
-	$effect(() => {
-		// Filter results based on selected filter and search term
-		filteredResults = reconciliationResults.filter((row) => {
-			const matchesFilter = selectedFilter === 'all' || row.status === selectedFilter;
-
-			const matchesSearch =
-				!searchTerm ||
-				row.primaryId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-				(row.failureReason && row.failureReason.toLowerCase().includes(searchTerm.toLowerCase()));
-
-			return matchesFilter && matchesSearch;
-		});
-
-		// Calculate statistics
-		totalRows = reconciliationResults.length;
-		successCount = reconciliationResults.filter((row) => row.status === 'success').length;
-		failureCount = reconciliationResults.filter((row) => row.status === 'failure').length;
-		successRate = totalRows > 0 ? Math.round((successCount / totalRows) * 100) : 0;
+	let summaryStats = $state({
+		totalRecords: 0,
+		matchedRecords: 0,
+		unmatchedRecords: 0,
+		partialMatchRecords: 0,
+		matchPercentage: 0
 	});
 
-	// Download results as CSV
-	function downloadResults() {
-		// Create CSV content
-		let csvContent = 'data:text/csv;charset=utf-8,';
+	// Filter state
+	let filterStatus = $state<ReconciliationStatus | 'all'>('all');
 
-		// Headers
-		csvContent +=
-			'Primary ID,Status,Failure Reason,Primary Columns,Comparison Columns,Primary Values,Comparison Values,Match\n';
+	// Filtered results
+	let filteredResults = $derived(
+		filterStatus === 'all'
+			? reconciliationRows
+			: reconciliationRows.filter((row) => row.status === filterStatus)
+	);
 
-		// Data rows
-		reconciliationResults.forEach((row) => {
-			if (row.comparisonResults.length > 0) {
-				// Rows with comparison results
-				row.comparisonResults.forEach((comp, index) => {
-					if (index === 0) {
-						// First comparison for this row
-						csvContent += `"${row.primaryId}","${row.status}"`;
-						csvContent += row.failureReason ? `,"${row.failureReason}"` : ',';
-					} else {
-						// Additional comparisons for the same row
-						csvContent += `,,`;
-					}
+	onMount(async () => {
+		const unsubscribe = reconciliationStore.subscribe((state) => {
+			primaryFileData = state.primaryFileData;
+			comparisonFileData = state.comparisonFileData;
+			reconciliationConfig = state.reconciliationConfig;
+			reconciliationResult = state.reconciliationResult;
 
-					csvContent += `,"${comp.primaryColumn}","${comp.comparisonColumn}","${comp.primaryValue}","${comp.comparisonValue}","${comp.matches}"\n`;
-				});
+			// Check if we have all the data we need
+			if (!primaryFileData || !comparisonFileData || !reconciliationConfig) {
+				errorMessage = 'Required data is missing. Please go back and complete the previous steps.';
+				setTimeout(() => {
+					goto('/upload');
+				}, 2000);
+				return;
+			}
+
+			// Perform reconciliation if we don't already have results
+			if (!reconciliationResult) {
+				performReconciliation();
 			} else {
-				// Rows without comparison results (like missing match)
-				csvContent += `"${row.primaryId}","${row.status}","${row.failureReason || ''}",,,,,\n`;
+				// Use existing results
+				processReconciliationResults(reconciliationResult);
+				isLoading = false;
 			}
 		});
 
-		// Create download link
+		// Cleanup subscription
+		return () => {
+			unsubscribe();
+		};
+	});
+
+	async function performReconciliation() {
+		isLoading = true;
+		errorMessage = null;
+
+		try {
+			if (!primaryFileData || !comparisonFileData || !reconciliationConfig) {
+				throw new Error('Missing required data for reconciliation');
+			}
+
+			// Perform the reconciliation
+			const result = reconcileData(
+				primaryFileData,
+				comparisonFileData,
+				reconciliationConfig
+			);
+
+			// Store result in the global store
+			reconciliationStore.setResults(result);
+
+			// Process results for display
+			processReconciliationResults(result);
+		} catch (error) {
+			// Handle error
+			if (error instanceof Error) {
+				errorMessage = `Error performing reconciliation: ${error.message}`;
+			} else {
+				errorMessage = 'An unknown error occurred during reconciliation';
+			}
+			console.error('Reconciliation error:', error);
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	function processReconciliationResults(result: ReconciliationResult) {
+		if (!reconciliationConfig || !primaryFileData) return;
+	
+		const primaryIdColumn = reconciliationConfig.primaryIdPair.primaryColumn;
+		if (!primaryIdColumn) return;
+
+		// Process matched records
+		const matchedRows = result.matchedRecords.map((match) => {
+			return createReconciliationRow(match, primaryIdColumn);
+		});
+
+		// Process unmatched primary records
+		const unmatchedRows = result.unmatchedPrimaryRecords.map((record) => {
+			return {
+				primaryId: record[primaryIdColumn] || 'Unknown',
+				status: 'failure' as ReconciliationStatus,
+				primaryRecord: record,
+				comparisonRecord: null,
+				failureReason: 'No matching record found',
+				comparisonMatches: []
+			};
+		});
+
+		// Combine all rows
+		reconciliationRows = [...matchedRows, ...unmatchedRows];
+		
+		// Update summary stats
+		summaryStats = {
+			totalRecords: result.summary.totalRecords,
+			matchedRecords: result.summary.matchedRecords - result.summary.partiallyMatchedRecords,
+			unmatchedRecords: result.summary.unmatchedRecords,
+			partialMatchRecords: result.summary.partiallyMatchedRecords,
+			matchPercentage: result.summary.matchPercentage
+		};
+	}
+
+	function createReconciliationRow(
+		match: MatchedRecordResult,
+		primaryIdColumn: string
+	): ReconciliationRow {
+		return {
+			primaryId: match.primaryRecord[primaryIdColumn] || 'Unknown',
+			status: match.allMatch ? 'success' : 'partial',
+			primaryRecord: match.primaryRecord,
+			comparisonRecord: match.comparisonRecord,
+			comparisonMatches: match.matches
+		};
+	}
+
+	// Export to CSV
+	function exportToCsv() {
+		if (!reconciliationResult) return;
+
+		const headers = [
+			'Primary ID',
+			'Status',
+			'Primary Column',
+			'Primary Value',
+			'Comparison Column',
+			'Comparison Value',
+			'Matches'
+		];
+
+		const rows = reconciliationRows.flatMap((row) => {
+			if (row.comparisonMatches.length === 0) {
+				return [
+					[
+						row.primaryId,
+						row.status,
+						'',
+						'',
+						'',
+						'',
+						''
+					]
+				];
+			}
+
+			return row.comparisonMatches.map((comparison, index) => {
+				if (index === 0) {
+					return [
+						row.primaryId,
+						row.status,
+						comparison.primaryColumn,
+						comparison.primaryValue,
+						comparison.comparisonColumn,
+						comparison.comparisonValue,
+						comparison.matches ? 'Yes' : 'No'
+					];
+				} else {
+					return [
+						'',
+						'',
+						comparison.primaryColumn,
+						comparison.primaryValue,
+						comparison.comparisonColumn,
+						comparison.comparisonValue,
+						comparison.matches ? 'Yes' : 'No'
+					];
+				}
+			});
+		});
+
+		// Escape commas and quotes in CSV fields
+		const escapeCsvField = (field: string) => {
+			if (field === null || field === undefined) return '';
+			const str = String(field);
+			if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+				return `"${str.replace(/"/g, '""')}"`;
+			}
+			return str;
+		};
+
+		const csvContent =
+			'data:text/csv;charset=utf-8,' +
+			[headers.join(','), ...rows.map((row) => row.map(escapeCsvField).join(','))].join('\n');
+
 		const encodedUri = encodeURI(csvContent);
 		const link = document.createElement('a');
 		link.setAttribute('href', encodedUri);
 		link.setAttribute('download', 'reconciliation_results.csv');
 		document.body.appendChild(link);
-
-		// Trigger download
 		link.click();
-
-		// Clean up
 		document.body.removeChild(link);
-	}
-
-	// Handle filter changes
-	function setFilter(filter: 'all' | 'success' | 'failure') {
-		selectedFilter = filter;
 	}
 </script>
 
 <div class="container mx-auto max-w-6xl px-4 py-8">
-	<h1 class="mb-6 text-center text-3xl font-bold text-gray-800">Reconciliation Results</h1>
+	<h1 class="mb-6 text-center text-3xl font-bold text-foreground dark:text-dark-foreground">
+		Reconciliation Results
+	</h1>
 
-	<!-- Stats summary cards -->
-	<div class="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
-		<div class="rounded-lg bg-white p-4 shadow-md">
-			<h3 class="text-sm font-medium text-gray-500">Total Rows</h3>
-			<p class="text-2xl font-bold text-gray-800">{totalRows}</p>
-		</div>
-
-		<div class="rounded-lg bg-white p-4 shadow-md">
-			<h3 class="text-sm font-medium text-gray-500">Successful Matches</h3>
-			<p class="text-2xl font-bold text-green-600">{successCount}</p>
-		</div>
-
-		<div class="rounded-lg bg-white p-4 shadow-md">
-			<h3 class="text-sm font-medium text-gray-500">Failed Matches</h3>
-			<p class="text-2xl font-bold text-red-600">{failureCount}</p>
-		</div>
-
-		<div class="rounded-lg bg-white p-4 shadow-md">
-			<h3 class="text-sm font-medium text-gray-500">Success Rate</h3>
-			<p class="text-2xl font-bold text-blue-600">{successRate}%</p>
-		</div>
-	</div>
-
-	<!-- Controls section -->
-	<div class="mb-6 rounded-lg bg-white p-4 shadow-md">
-		<div class="mb-4 flex flex-col items-center justify-between md:flex-row">
-			<div class="mb-4 flex space-x-2 md:mb-0">
-				<button
-					on:click={() => setFilter('all')}
-					class="rounded-md px-4 py-2 text-sm font-medium focus:outline-none"
-					class:bg-blue-100={selectedFilter === 'all'}
-					class:text-blue-800={selectedFilter === 'all'}
-					class:bg-gray-100={selectedFilter !== 'all'}
-					class:text-gray-800={selectedFilter !== 'all'}
-				>
-					All
-				</button>
-				<button
-					on:click={() => setFilter('success')}
-					class="rounded-md px-4 py-2 text-sm font-medium focus:outline-none"
-					class:bg-green-100={selectedFilter === 'success'}
-					class:text-green-800={selectedFilter === 'success'}
-					class:bg-gray-100={selectedFilter !== 'success'}
-					class:text-gray-800={selectedFilter !== 'success'}
-				>
-					Success
-				</button>
-				<button
-					on:click={() => setFilter('failure')}
-					class="rounded-md px-4 py-2 text-sm font-medium focus:outline-none"
-					class:bg-red-100={selectedFilter === 'failure'}
-					class:text-red-800={selectedFilter === 'failure'}
-					class:bg-gray-100={selectedFilter !== 'failure'}
-					class:text-gray-800={selectedFilter !== 'failure'}
-				>
-					Failures
-				</button>
-			</div>
-
-			<div class="flex w-full space-x-2 md:w-auto">
-				<input
-					type="text"
-					placeholder="Search by ID or failure reason..."
-					bind:value={searchTerm}
-					class="w-full rounded-md border px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none md:w-64"
-				/>
-
-				<button
-					on:click={downloadResults}
-					class="rounded-md bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-				>
-					Download CSV
-				</button>
+	<!-- Loading state -->
+	{#if isLoading}
+		<div class="flex items-center justify-center py-12">
+			<div class="flex flex-col items-center">
+				<div class="h-12 w-12 animate-spin rounded-full border-4 border-t-4 border-primary border-t-transparent dark:border-dark-primary dark:border-t-transparent"></div>
+				<p class="mt-4 text-gray-600 dark:text-gray-400">Processing reconciliation...</p>
 			</div>
 		</div>
-	</div>
+	{:else if errorMessage}
+		<!-- Error state -->
+		<div class="mx-auto mb-6 max-w-2xl">
+			<div class="rounded-md bg-red-50 p-4 dark:bg-red-900/20">
+				<div class="flex">
+					<div class="ml-3">
+						<h3 class="text-sm font-medium text-red-800 dark:text-red-400">Error</h3>
+						<div class="mt-2 text-sm text-red-700 dark:text-red-300">
+							<p>{errorMessage}</p>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	{:else}
+		<!-- Results stats -->
+		<div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
+			<div class="rounded-lg bg-white p-4 shadow dark:bg-dark-background dark:shadow-gray-800">
+				<div class="flex items-center">
+					<div class="flex-shrink-0 rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+						<svg class="h-6 w-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+						</svg>
+					</div>
+					<div class="ml-5">
+						<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Records</p>
+						<p class="mt-1 text-xl font-semibold text-gray-900 dark:text-gray-50">{summaryStats.totalRecords}</p>
+					</div>
+				</div>
+			</div>
 
-	<!-- Results table -->
-	<div class="overflow-hidden rounded-lg bg-white shadow-md">
-		<div class="overflow-x-auto">
-			<table class="min-w-full divide-y divide-gray-200">
-				<thead class="bg-gray-50">
-					<tr>
-						<th
-							scope="col"
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-						>
-							Primary ID
-						</th>
-						<th
-							scope="col"
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-						>
-							Status
-						</th>
-						<th
-							scope="col"
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-						>
-							Failure Reason
-						</th>
-						<th
-							scope="col"
-							class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-						>
-							Details
-						</th>
-					</tr>
-				</thead>
-				<tbody class="divide-y divide-gray-200 bg-white">
-					{#each filteredResults as row}
+			<div class="rounded-lg bg-white p-4 shadow dark:bg-dark-background dark:shadow-gray-800">
+				<div class="flex items-center">
+					<div class="flex-shrink-0 rounded-md bg-green-100 p-3 dark:bg-green-900/30">
+						<svg class="h-6 w-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+						</svg>
+					</div>
+					<div class="ml-5">
+						<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Matched</p>
+						<p class="mt-1 text-xl font-semibold text-gray-900 dark:text-gray-50">{summaryStats.matchedRecords}</p>
+					</div>
+				</div>
+			</div>
+
+			<div class="rounded-lg bg-white p-4 shadow dark:bg-dark-background dark:shadow-gray-800">
+				<div class="flex items-center">
+					<div class="flex-shrink-0 rounded-md bg-yellow-100 p-3 dark:bg-yellow-900/30">
+						<svg class="h-6 w-6 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+						</svg>
+					</div>
+					<div class="ml-5">
+						<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Partial Matches</p>
+						<p class="mt-1 text-xl font-semibold text-gray-900 dark:text-gray-50">{summaryStats.partialMatchRecords}</p>
+					</div>
+				</div>
+			</div>
+
+			<div class="rounded-lg bg-white p-4 shadow dark:bg-dark-background dark:shadow-gray-800">
+				<div class="flex items-center">
+					<div class="flex-shrink-0 rounded-md bg-red-100 p-3 dark:bg-red-900/30">
+						<svg class="h-6 w-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+						</svg>
+					</div>
+					<div class="ml-5">
+						<p class="text-sm font-medium text-gray-500 dark:text-gray-400">Unmatched</p>
+						<p class="mt-1 text-xl font-semibold text-gray-900 dark:text-gray-50">{summaryStats.unmatchedRecords}</p>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Results controls -->
+		<div class="mb-4 flex flex-col items-center justify-between space-y-4 md:flex-row md:space-y-0">
+			<div class="w-full md:w-1/3">
+				<label for="filter" class="mb-1 block text-sm font-bold text-gray-700 dark:text-gray-300">
+					Filter by status:
+				</label>
+				<select
+					id="filter"
+					class="focus:shadow-outline w-full appearance-none rounded border px-3 py-2 leading-tight text-gray-700 shadow focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+					bind:value={filterStatus}
+				>
+					<option value="all">All Results</option>
+					<option value="success">Matched</option>
+					<option value="partial">Partially Matched</option>
+					<option value="failure">Unmatched</option>
+				</select>
+			</div>
+
+			<div>
+				<button
+					type="button"
+					on:click={exportToCsv}
+					class="rounded border border-primary bg-primary px-4 py-2 font-semibold text-white hover:bg-primary-hover dark:border-dark-primary dark:bg-dark-primary dark:hover:bg-dark-primary-hover"
+				>
+					Export to CSV
+				</button>
+			</div>
+		</div>
+
+		<!-- Results table -->
+		{#if filteredResults.length > 0}
+			<div class="overflow-x-auto">
+				<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+					<thead class="bg-gray-50 dark:bg-gray-800">
 						<tr>
-							<td class="px-6 py-4 text-sm font-medium whitespace-nowrap text-gray-900">
-								{row.primaryId}
-							</td>
-							<td class="px-6 py-4 text-sm whitespace-nowrap">
-								{#if row.status === 'success'}
-									<span
-										class="inline-flex rounded-full bg-green-100 px-2 text-xs leading-5 font-semibold text-green-800"
+							<th
+								scope="col"
+								class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
+							>
+								Primary ID
+							</th>
+							<th
+								scope="col"
+								class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
+							>
+								Status
+							</th>
+							<th
+								scope="col"
+								class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
+							>
+								Details
+							</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-900">
+						{#each filteredResults as row, rowIndex}
+							<tr
+								class={rowIndex % 2 === 0
+									? 'bg-white dark:bg-gray-900'
+									: 'bg-gray-50 dark:bg-gray-800'}
+							>
+								<td class="whitespace-nowrap px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+									{row.primaryId}
+								</td>
+								<td class="whitespace-nowrap px-6 py-4 text-sm">
+									{#if row.status === 'success'}
+										<span
+											class="inline-flex rounded-full bg-green-100 px-2 text-xs font-semibold leading-5 text-green-800 dark:bg-green-900/50 dark:text-green-400"
+										>
+											Matched
+										</span>
+									{:else if row.status === 'partial'}
+										<span
+											class="inline-flex rounded-full bg-yellow-100 px-2 text-xs font-semibold leading-5 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-400"
+										>
+											Partial Match
+										</span>
+									{:else}
+										<span
+											class="inline-flex rounded-full bg-red-100 px-2 text-xs font-semibold leading-5 text-red-800 dark:bg-red-900/50 dark:text-red-400"
+										>
+											Unmatched
+										</span>
+									{/if}
+								</td>
+								<td class="whitespace-nowrap px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+									<button
+										class="text-accent hover:text-accent-hover focus:outline-none dark:text-dark-accent dark:hover:text-dark-accent-hover"
+										data-toggle="modal"
+										data-target="modal-{rowIndex}"
+										onclick={() => {
+											const modal = document.getElementById(`modal-${rowIndex}`);
+											if (modal) modal.classList.remove('hidden');
+										}}
 									>
-										Success
-									</span>
-								{:else}
-									<span
-										class="inline-flex rounded-full bg-red-100 px-2 text-xs leading-5 font-semibold text-red-800"
-									>
-										Failure
-									</span>
-								{/if}
-							</td>
-							<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-500">
-								{row.failureReason || '-'}
-							</td>
-							<td class="px-6 py-4 text-right text-sm font-medium whitespace-nowrap">
-								<details class="text-left">
-									<summary class="cursor-pointer text-blue-600 hover:text-blue-900">
 										View Details
-									</summary>
-									<div class="mt-2 rounded bg-gray-50 p-3">
-										{#if row.comparisonResults.length > 0}
-											<table class="min-w-full divide-y divide-gray-200">
-												<thead class="bg-gray-100">
-													<tr>
-														<th
-															scope="col"
-															class="px-3 py-2 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-														>
-															Primary Column
-														</th>
-														<th
-															scope="col"
-															class="px-3 py-2 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-														>
-															Comparison Column
-														</th>
-														<th
-															scope="col"
-															class="px-3 py-2 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-														>
-															Primary Value
-														</th>
-														<th
-															scope="col"
-															class="px-3 py-2 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-														>
-															Comparison Value
-														</th>
-														<th
-															scope="col"
-															class="px-3 py-2 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-														>
-															Match
-														</th>
-													</tr>
-												</thead>
-												<tbody class="divide-y divide-gray-200 bg-white">
-													{#each row.comparisonResults as comp}
-														<tr>
-															<td class="px-3 py-2 text-sm whitespace-nowrap"
-																>{comp.primaryColumn}</td
-															>
-															<td class="px-3 py-2 text-sm whitespace-nowrap"
-																>{comp.comparisonColumn}</td
-															>
-															<td class="px-3 py-2 text-sm whitespace-nowrap"
-																>{comp.primaryValue}</td
-															>
-															<td class="px-3 py-2 text-sm whitespace-nowrap"
-																>{comp.comparisonValue}</td
-															>
-															<td class="px-3 py-2 text-sm whitespace-nowrap">
-																{#if comp.matches}
-																	<span class="text-green-600">✓</span>
-																{:else}
-																	<span class="text-red-600">✗</span>
-																{/if}
-															</td>
-														</tr>
-													{/each}
-												</tbody>
-											</table>
-										{:else}
-											<p class="text-sm text-gray-500">No comparison data available.</p>
-										{/if}
-									</div>
-								</details>
-							</td>
-						</tr>
-					{:else}
-						<tr>
-							<td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">
-								No results found matching your filter criteria.
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-	</div>
+									</button>
 
-	<!-- Back to home button -->
-	<div class="mt-8 flex justify-center">
-		<a
-			href="/"
-			class="rounded-md bg-gray-600 px-6 py-3 text-sm font-medium text-white hover:bg-gray-700 focus:ring-2 focus:ring-gray-500 focus:outline-none"
-		>
-			Back to Home
-		</a>
-	</div>
+									<!-- Modal for record details -->
+									<div
+										id="modal-{rowIndex}"
+										class="fixed inset-0 z-50 hidden overflow-y-auto"
+										aria-modal="true"
+										role="dialog"
+									>
+										<div class="flex min-h-screen items-end justify-center px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+											<!-- Background overlay -->
+											<div
+												class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+												aria-hidden="true"
+												onclick={() => {
+													const modal = document.getElementById(`modal-${rowIndex}`);
+													if (modal) modal.classList.add('hidden');
+												}}
+											></div>
+
+											<!-- Modal panel -->
+											<div class="inline-block transform overflow-hidden rounded-lg bg-white text-left align-bottom shadow-xl transition-all dark:bg-gray-800 sm:my-8 sm:w-full sm:max-w-3xl sm:align-middle">
+												<div class="bg-white px-4 pt-5 pb-4 dark:bg-gray-800 sm:p-6">
+													<div class="mb-3 flex justify-between">
+														<h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-gray-100">
+															Record Details
+														</h3>
+														<button
+															type="button"
+															class="text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400"
+															onclick={() => {
+																const modal = document.getElementById(`modal-${rowIndex}`);
+																if (modal) modal.classList.add('hidden');
+															}}
+														>
+															<span class="sr-only">Close</span>
+															<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+															</svg>
+														</button>
+													</div>
+
+													<!-- Comparison details -->
+													{#if row.comparisonRecord}
+														<div class="mt-2">
+															<h4 class="font-semibold text-gray-700 dark:text-gray-200">Comparison Results</h4>
+															<div class="mt-2 overflow-hidden overflow-x-auto border border-gray-200 dark:border-gray-700">
+																<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+																	<thead class="bg-gray-50 dark:bg-gray-700">
+																		<tr>
+																			<th
+																				scope="col"
+																				class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
+																			>
+																				Primary Column
+																			</th>
+																			<th
+																				scope="col"
+																				class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
+																			>
+																				Primary Value
+																			</th>
+																			<th
+																				scope="col"
+																				class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
+																			>
+																				Comparison Column
+																			</th>
+																			<th
+																				scope="col"
+																				class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
+																			>
+																				Comparison Value
+																			</th>
+																			<th
+																				scope="col"
+																				class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
+																			>
+																				Match
+																			</th>
+																		</tr>
+																	</thead>
+																	<tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+																		{#each row.comparisonMatches as match, matchIndex}
+																			<tr
+																				class={matchIndex % 2 === 0
+																					? 'bg-white dark:bg-gray-900'
+																					: 'bg-gray-50 dark:bg-gray-800'}
+																			>
+																				<td class="whitespace-nowrap px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
+																					{match.primaryColumn}
+																				</td>
+																				<td class="whitespace-nowrap px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
+																					{match.primaryValue}
+																				</td>
+																				<td class="whitespace-nowrap px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
+																					{match.comparisonColumn}
+																				</td>
+																				<td class="whitespace-nowrap px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
+																					{match.comparisonValue}
+																				</td>
+																				<td class="whitespace-nowrap px-4 py-2 text-sm">
+																					{#if match.matches}
+																						<span
+																							class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/50 dark:text-green-400"
+																						>
+																							Yes
+																						</span>
+																					{:else}
+																						<span
+																							class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900/50 dark:text-red-400"
+																						>
+																							No
+																						</span>
+																					{/if}
+																				</td>
+																			</tr>
+																		{/each}
+																	</tbody>
+																</table>
+															</div>
+														</div>
+													{:else}
+														<div class="rounded-md bg-red-50 p-4 dark:bg-red-900/20">
+															<div class="flex">
+																<div class="flex-shrink-0">
+																	<svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+																		<path
+																			fill-rule="evenodd"
+																			d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+																			clip-rule="evenodd"
+																		/>
+																	</svg>
+																</div>
+																<div class="ml-3">
+																	<p class="text-sm text-red-700 dark:text-red-300">
+																		{row.failureReason || 'No matching record found in comparison file.'}
+																	</p>
+																</div>
+															</div>
+														</div>
+													{/if}
+
+													<!-- Primary Record Data -->
+													<div class="mt-4">
+														<h4 class="font-semibold text-gray-700 dark:text-gray-200">Primary Record Data</h4>
+														<div class="mt-2 overflow-hidden overflow-x-auto border border-gray-200 dark:border-gray-700">
+															<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+																<thead class="bg-gray-50 dark:bg-gray-700">
+																	<tr>
+																		<th
+																			scope="col"
+																			class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
+																		>
+																			Column
+																		</th>
+																		<th
+																			scope="col"
+																			class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
+																		>
+																			Value
+																		</th>
+																	</tr>
+																</thead>
+																<tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+																	{#each Object.entries(row.primaryRecord) as [key, value], index}
+																		<tr
+																			class={index % 2 === 0
+																				? 'bg-white dark:bg-gray-900'
+																				: 'bg-gray-50 dark:bg-gray-800'}
+																		>
+																			<td class="whitespace-nowrap px-4 py-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+																				{key}
+																			</td>
+																			<td class="whitespace-nowrap px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
+																				{value}
+																			</td>
+																		</tr>
+																	{/each}
+																</tbody>
+															</table>
+														</div>
+													</div>
+
+													<!-- Comparison Record Data (if exists) -->
+													{#if row.comparisonRecord}
+														<div class="mt-4">
+															<h4 class="font-semibold text-gray-700 dark:text-gray-200">
+																Comparison Record Data
+															</h4>
+															<div class="mt-2 overflow-hidden overflow-x-auto border border-gray-200 dark:border-gray-700">
+																<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+																	<thead class="bg-gray-50 dark:bg-gray-700">
+																		<tr>
+																			<th
+																				scope="col"
+																				class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
+																			>
+																				Column
+																			</th>
+																			<th
+																				scope="col"
+																				class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
+																			>
+																				Value
+																			</th>
+																		</tr>
+																	</thead>
+																	<tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+																		{#each Object.entries(row.comparisonRecord) as [key, value], index}
+																			<tr
+																				class={index % 2 === 0
+																					? 'bg-white dark:bg-gray-900'
+																					: 'bg-gray-50 dark:bg-gray-800'}
+																			>
+																				<td class="whitespace-nowrap px-4 py-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+																					{key}
+																				</td>
+																				<td class="whitespace-nowrap px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
+																					{value}
+																				</td>
+																			</tr>
+																		{/each}
+																	</tbody>
+																</table>
+															</div>
+														</div>
+													{/if}
+												</div>
+												<div class="bg-gray-50 px-4 py-3 dark:bg-gray-700 sm:px-6 sm:flex sm:flex-row-reverse">
+													<button
+														type="button"
+														class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+														onclick={() => {
+															const modal = document.getElementById(`modal-${rowIndex}`);
+															if (modal) modal.classList.add('hidden');
+														}}
+													>
+														Close
+													</button>
+												</div>
+											</div>
+										</div>
+									</div>
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{:else}
+			<div class="rounded-lg bg-white p-8 text-center shadow dark:bg-dark-background dark:shadow-gray-800">
+				<p class="text-gray-600 dark:text-gray-400">No results match the current filter.</p>
+			</div>
+		{/if}
+	{/if}
 </div>

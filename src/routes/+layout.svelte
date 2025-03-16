@@ -4,9 +4,30 @@
 
 	let { children } = $props();
 	let mobileNavOpen = $state(false);
+	
+	onMount(() => {
+		console.log('Layout component mounted');
+		
+		// Add a global click handler to diagnose if clicks are being registered
+		document.addEventListener('click', (e) => {
+			console.log('Document click detected:', e.target);
+		});
+	});
 
 	function toggleMobileNav() {
+		console.log('toggleMobileNav function called - BEFORE:', mobileNavOpen);
 		mobileNavOpen = !mobileNavOpen;
+		console.log('toggleMobileNav function called - AFTER:', mobileNavOpen);
+	}
+	
+	function openMobileNav() {
+		console.log('openMobileNav called');
+		mobileNavOpen = true;
+	}
+	
+	function closeMobileNav() {
+		console.log('closeMobileNav called');
+		mobileNavOpen = false;
 	}
 </script>
 
@@ -23,11 +44,15 @@
 							<span class="text-2xl tracking-tight text-green-500">.io</span>
 						</a>
 						<div class="-mr-2 flex items-center md:hidden">
+							<!-- Mobile menu button -->
 							<button
-								onclick={toggleMobileNav}
 								type="button"
-								class="px-2 text-gray-700 hover:text-red-500 focus:text-red-500 focus:outline-none"
+								class="px-2 text-gray-700 hover:text-red-500 focus:text-red-500 focus:outline-none cursor-pointer"
 								aria-label="Toggle mobile menu"
+								on:click={() => {
+									console.log('Menu button clicked');
+									toggleMobileNav();
+								}}
 							>
 								<svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
 									<path
@@ -86,22 +111,26 @@
 
 		<!-- Mobile navigation menu -->
 		{#if mobileNavOpen}
-			<div class="absolute inset-x-0 top-0 p-2 md:hidden">
+			<div class="absolute inset-x-0 top-0 p-2 z-[9999] md:hidden">
 				<div class="origin-top-right transform rounded-lg shadow-md transition">
 					<div class="overflow-hidden rounded-lg bg-white shadow-xs">
 						<div class="flex items-center justify-between px-5 pt-4">
 							<div>
 								<a href="/" title="Transactions Reconciliation tool">
-									<span class="text-2xl font-extrabold tracking-tight">Reconciler</span>
-									<span class="text-2xl tracking-tight">.io</span>
+									<span class="text-2xl font-extrabold tracking-tight text-blue-500">Reconciler</span>
+									<span class="text-2xl tracking-tight text-green-500">.io</span>
 								</a>
 							</div>
 							<div class="-mr-2">
+								<!-- Close menu button -->
 								<button
-									onclick={toggleMobileNav}
 									type="button"
-									class="inline-flex items-center justify-center rounded-md p-2 text-gray-400 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-gray-700 focus:bg-gray-50 focus:text-gray-700 focus:outline-none"
+									class="inline-flex items-center justify-center rounded-md p-2 text-gray-400 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-gray-700 focus:bg-gray-50 focus:text-gray-700 focus:outline-none cursor-pointer"
 									aria-label="Close mobile menu"
+									on:click={() => {
+										console.log('Close button clicked');
+										closeMobileNav();
+									}}
 								>
 									<svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
 										<path
@@ -172,47 +201,49 @@
 </div>
 
 <style>
-	/* Decorative circles styling */
-	.home-page-circle-1 {
+	/* Decorative circles styling - adding pointer-events: none to allow clicks to pass through */
+	.home-page-circle-1, 
+	.home-page-circle-2,
+	.home-page-circle-3,
+	.right_bottom_circle {
 		position: absolute;
+		border-radius: 50%;
+		z-index: -1;
+		pointer-events: none; /* This prevents the circles from intercepting clicks */
+	}
+	
+	.home-page-circle-1 {
 		width: 400px;
 		height: 400px;
 		left: -200px;
 		top: -100px;
-		border-radius: 50%;
 		background: rgb(0 0 0 / 0.1);
 		animation: pulse-1 15s ease-in-out infinite alternate;
 	}
 
 	.home-page-circle-2 {
-		position: absolute;
 		width: 600px;
 		height: 600px;
 		right: -300px;
 		top: -200px;
-		border-radius: 50%;
 		background: rgb(0 0 0 / 0.1);
 		animation: pulse-2 20s ease-in-out infinite alternate;
 	}
 
 	.home-page-circle-3 {
-		position: absolute;
 		width: 300px;
 		height: 300px;
 		left: 10%;
 		bottom: 10%;
-		border-radius: 50%;
 		background: rgb(0 0 0 / 0.1);
 		animation: pulse-3 12s ease-in-out infinite alternate;
 	}
 
 	.right_bottom_circle {
-		position: absolute;
 		width: 200px;
 		height: 200px;
 		right: 5%;
 		bottom: 5%;
-		border-radius: 50%;
 		background: rgb(20 20 20 / 0.1);
 		animation: pulse-4 18s ease-in-out infinite alternate;
 	}
