@@ -4,10 +4,10 @@
 
 	let { children } = $props();
 	let mobileNavOpen = $state(false);
-	
+
 	onMount(() => {
 		console.log('Layout component mounted');
-		
+
 		// Add a global click handler to diagnose if clicks are being registered
 		document.addEventListener('click', (e) => {
 			console.log('Document click detected:', e.target);
@@ -19,12 +19,12 @@
 		mobileNavOpen = !mobileNavOpen;
 		console.log('toggleMobileNav function called - AFTER:', mobileNavOpen);
 	}
-	
+
 	function openMobileNav() {
 		console.log('openMobileNav called');
 		mobileNavOpen = true;
 	}
-	
+
 	function closeMobileNav() {
 		console.log('closeMobileNav called');
 		mobileNavOpen = false;
@@ -47,7 +47,7 @@
 							<!-- Mobile menu button -->
 							<button
 								type="button"
-								class="px-2 text-gray-700 hover:text-red-500 focus:text-red-500 focus:outline-none cursor-pointer"
+								class="cursor-pointer px-2 text-gray-700 hover:text-red-500 focus:text-red-500 focus:outline-none"
 								aria-label="Toggle mobile menu"
 								on:click={() => {
 									console.log('Menu button clicked');
@@ -111,13 +111,15 @@
 
 		<!-- Mobile navigation menu -->
 		{#if mobileNavOpen}
-			<div class="absolute inset-x-0 top-0 p-2 z-[9999] md:hidden">
+			<div class="absolute inset-x-0 top-0 z-[9999] p-2 md:hidden">
 				<div class="origin-top-right transform rounded-lg shadow-md transition">
 					<div class="overflow-hidden rounded-lg bg-white shadow-xs">
 						<div class="flex items-center justify-between px-5 pt-4">
 							<div>
 								<a href="/" title="Transactions Reconciliation tool">
-									<span class="text-2xl font-extrabold tracking-tight text-blue-500">Reconciler</span>
+									<span class="text-2xl font-extrabold tracking-tight text-blue-500"
+										>Reconciler</span
+									>
 									<span class="text-2xl tracking-tight text-green-500">.io</span>
 								</a>
 							</div>
@@ -125,7 +127,7 @@
 								<!-- Close menu button -->
 								<button
 									type="button"
-									class="inline-flex items-center justify-center rounded-md p-2 text-gray-400 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-gray-700 focus:bg-gray-50 focus:text-gray-700 focus:outline-none cursor-pointer"
+									class="inline-flex cursor-pointer items-center justify-center rounded-md p-2 text-gray-400 transition duration-150 ease-in-out hover:bg-gray-50 hover:text-gray-700 focus:bg-gray-50 focus:text-gray-700 focus:outline-none"
 									aria-label="Close mobile menu"
 									on:click={() => {
 										console.log('Close button clicked');
@@ -202,7 +204,7 @@
 
 <style>
 	/* Decorative circles styling - adding pointer-events: none to allow clicks to pass through */
-	.home-page-circle-1, 
+	.home-page-circle-1,
 	.home-page-circle-2,
 	.home-page-circle-3,
 	.right_bottom_circle {
@@ -211,7 +213,7 @@
 		z-index: -1;
 		pointer-events: none; /* This prevents the circles from intercepting clicks */
 	}
-	
+
 	.home-page-circle-1 {
 		width: 400px;
 		height: 400px;
