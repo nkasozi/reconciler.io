@@ -1,10 +1,31 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   
   let isAnnual = true;
   let isHoveredPro = false;
   let isHoveredEnterprise = false;
+  let upgradeNotice = $state<string | null>(null);
+  
+  // Check for upgrade prompt from file upload
+  onMount(() => {
+    // Get the upgrade reason from session storage
+    const reason = sessionStorage.getItem('upgrade_reason');
+    if (reason) {
+      upgradeNotice = reason;
+      // Highlight the Pro tier
+      isHoveredPro = true;
+      setTimeout(() => {
+        // Reset the highlighting after 3 seconds
+        isHoveredPro = false;
+      }, 3000);
+    }
+  });
+  
+  onDestroy(() => {
+    // Clear the upgrade reason when navigating away
+    sessionStorage.removeItem('upgrade_reason');
+  });
   
   function switchBilling() {
     isAnnual = !isAnnual;
@@ -37,6 +58,24 @@
 
 <div class="bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800 py-16">
   <div class="container mx-auto px-4">
+    <!-- Upgrade notice -->
+    {#if upgradeNotice}
+      <div class="mx-auto max-w-3xl mb-8">
+        <div class="bg-yellow-100 dark:bg-yellow-900/30 border-l-4 border-yellow-500 p-4 rounded">
+          <div class="flex">
+            <div class="flex-shrink-0">
+              <svg class="h-5 w-5 text-yellow-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 5zm0 10a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <div class="ml-3">
+              <p class="text-sm text-yellow-800 dark:text-yellow-200">{upgradeNotice}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    {/if}
+    
     <div class="text-center mb-16">
       <h1 class="text-4xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-white">
         Simple, Transparent <span class="text-blue-600 dark:text-blue-400">Pricing</span>
@@ -81,7 +120,7 @@
               <svg class="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
               </svg>
-              <span class="ml-2 text-gray-600 dark:text-gray-300">Upload & reconcile up to 1,000 rows</span>
+              <span class="ml-2 text-gray-600 dark:text-gray-300">Upload & reconcile up to 10,000 rows</span>
             </li>
             <li class="flex items-start">
               <svg class="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -303,7 +342,7 @@
           <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
             <tr>
               <td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">Maximum rows</td>
-              <td class="px-6 py-4 text-sm text-center text-gray-700 dark:text-gray-300">1,000</td>
+              <td class="px-6 py-4 text-sm text-center text-gray-700 dark:text-gray-300">10,000</td>
               <td class="px-6 py-4 text-sm text-center text-gray-700 dark:text-gray-300">100,000</td>
               <td class="px-6 py-4 text-sm text-center text-gray-700 dark:text-gray-300">Unlimited</td>
             </tr>

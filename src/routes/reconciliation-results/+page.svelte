@@ -410,7 +410,7 @@
 					<div class="ml-5">
 						<p class="text-sm font-medium text-gray-300">Failures</p>
 						<p class="mt-1 text-xl font-semibold text-white">
-							{summaryStats.partialMatchRecords + summaryStats.unmatchedRecords}
+							{totalFailures}
 						</p>
 					</div>
 				</div>

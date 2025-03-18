@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { parseFile, type ParsedFileData } from '$lib/utils/fileParser';
+	import { parseFile, type ParsedFileData, RowLimitExceededError } from '$lib/utils/fileParser';
 	import { reconciliationStore } from '$lib/stores/reconciliationStore';
 	import { goto } from '$app/navigation';
 	import ColumnMappingModal from '$lib/components/ColumnMappingModal.svelte';
@@ -48,110 +48,84 @@
 
 	function typeText() {
 		const currentPhrase = phrases[currentPhraseIndex];
-		const fullText = currentPhrase;
+		const length = currentText.length;
 
+		// If we're deleting text
 		if (isDeleting) {
-			// Deleting text
-			currentText = fullText.substring(0, currentText.length - 1);
-		} else {
-			// Typing text
-			currentText = fullText.substring(0, currentText.length + 1);
+			currentText = currentPhrase.substring(0, length - 1);
+			typingSpeed = 70; // Faster when deleting
+
+			// If we've deleted everything, start typing the next phrase
+			if (currentText === '') {
+				isDeleting = false;
+				currentPhraseIndex = (currentPhraseIndex + 1) % phrases.length;
+				typingSpeed = 100; // Normal speed when typing
+			}
+		}
+		// If we're typing text
+		else {
+			currentText = currentPhrase.substring(0, length + 1);
+
+			// If we've typed the entire phrase, start deleting after a pause
+			if (length === currentPhrase.length) {
+				typingSpeed = 1500; // Pause at the end of phrase
+				isDeleting = true;
+			} else {
+				typingSpeed = 100 + Math.random() * 100; // Vary typing speed for realism
+			}
 		}
 
-		// Set typing speed
-		typingSpeed = isDeleting ? 50 : 100;
-
-		// Check if word is complete
-		if (!isDeleting && currentText === fullText) {
-			// Pause at end of word
-			typingSpeed = 1500;
-			isDeleting = true;
-		} else if (isDeleting && currentText === '') {
-			// Word is completely deleted
-			isDeleting = false;
-			currentPhraseIndex = (currentPhraseIndex + 1) % phrases.length;
-			typingSpeed = 500;
-		}
-
+		// Schedule the next frame
 		setTimeout(typeText, typingSpeed);
 	}
 
-	function handlePrimaryFileUpload(event: Event) {
-		const input = event.target as HTMLInputElement;
-		if (input.files?.length) {
-			handleFileSelected(input.files[0], 'primary');
-		}
-	}
-
-	function handleComparisonFileUpload(event: Event) {
-		const input = event.target as HTMLInputElement;
-		if (input.files?.length) {
-			handleFileSelected(input.files[0], 'comparison');
-		}
-	}
-
-	function handleDrop(event: DragEvent, type: 'primary' | 'comparison') {
-		event.preventDefault();
-
-		if (event.dataTransfer?.files.length) {
-			handleFileSelected(event.dataTransfer.files[0], type);
-		}
-
-		// Remove the highlight
-		const dropArea = event.currentTarget as HTMLElement;
-		dropArea.classList.remove('highlight');
-	}
-
+	// Handle drag and drop
 	function handleDragOver(event: DragEvent) {
 		event.preventDefault();
-		const dropArea = event.currentTarget as HTMLElement;
-		dropArea.classList.add('highlight');
+		const target = event.currentTarget as HTMLElement;
+		if (target) target.classList.add('highlight');
 	}
 
 	function handleDragLeave(event: DragEvent) {
 		event.preventDefault();
-		const dropArea = event.currentTarget as HTMLElement;
-		dropArea.classList.remove('highlight');
+		const target = event.currentTarget as HTMLElement;
+		if (target) target.classList.remove('highlight');
 	}
 
-	function handleFileSelected(file: File, type: 'primary' | 'comparison') {
-		console.log(`Handling ${type} file:`, file.name, file.type);
+	function handleDrop(event: DragEvent, type: 'primary' | 'comparison') {
+		event.preventDefault();
+		const target = event.currentTarget as HTMLElement;
+		if (target) target.classList.remove('highlight');
 
-		// Check if file is a valid type (Excel, PDF, DOC, CSV, RTF)
-		const validTypes = [
-			'application/vnd.ms-excel',
-			'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-			'application/pdf',
-			'application/msword',
-			'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-			'text/csv',
-			'application/rtf',
-			'text/plain' // For testing purposes
-		];
+		const files = event.dataTransfer?.files;
+		if (!files || files.length === 0) return;
 
-		console.log(`Validating ${type} file type:`, {
-			fileType: file.type,
-			validTypes: validTypes.includes(file.type),
-			extensionValid: !!file.name.match(/\.(xlsx|xls|pdf|doc|docx|csv|rtf|txt)$/i)
-		});
-
-		if (
-			!validTypes.includes(file.type) &&
-			!file.name.match(/\.(xlsx|xls|pdf|doc|docx|csv|rtf|txt)$/i)
-		) {
-			errorMessage = `File type ${file.type} not supported. Please upload Excel, PDF, DOC, CSV, or RTF files.`;
-			console.error('Invalid file type:', file.type);
-			return;
-		}
-
-		// Reset error message
-		errorMessage = null;
-
-		// Start upload and parsing
+		const file = files[0];
 		processFile(file, type);
 	}
 
+	// Handle file input change
+	function handlePrimaryFileUpload(event: Event) {
+		const input = event.target as HTMLInputElement;
+		if (!input.files || input.files.length === 0) return;
+		const file = input.files[0];
+		processFile(file, 'primary');
+	}
+
+	function handleComparisonFileUpload(event: Event) {
+		const input = event.target as HTMLInputElement;
+		if (!input.files || input.files.length === 0) return;
+		const file = input.files[0];
+		processFile(file, 'comparison');
+	}
+
+	// Process the uploaded file
 	async function processFile(file: File, type: 'primary' | 'comparison') {
+		console.log(`Processing ${type} file:`, file.name, file.type);
+
+		// Reset any previous error
+		errorMessage = null;
+
 		// Update state to show uploading
 		if (type === 'primary') {
 			primaryFileData = {
@@ -237,6 +211,17 @@
 					...comparisonFileData,
 					isUploading: false
 				};
+			}
+
+			// Special handling for row limit errors
+			if (error instanceof RowLimitExceededError) {
+				// Store the error message in sessionStorage
+				sessionStorage.setItem('upgrade_reason', 
+					`Your file has ${error.rowCount.toLocaleString()} rows, which exceeds the free tier limit of 10,000 rows. Please upgrade to Pro.`);
+				
+				// Redirect to pricing page
+				goto('/pricing?source=row_limit');
+				return;
 			}
 
 			if (error instanceof Error) {
@@ -402,7 +387,7 @@
 							on:change={handlePrimaryFileUpload}
 						/>
 						<div class="upload-message">
-							Drag &amp; Drop <br /> an Excel or CSV file here
+							Drag &amp; Drop <br /> an Excel (.xlsx/.xls) or CSV file here
 						</div>
 					{:else}
 						<!-- Uploading state -->
@@ -525,7 +510,7 @@
 							on:change={handleComparisonFileUpload}
 						/>
 						<div class="upload-message">
-							Drag &amp; Drop <br /> another Excel or CSV file here
+							Drag &amp; Drop <br /> another Excel (.xlsx/.xls) or CSV file here
 						</div>
 					{:else}
 						<!-- Uploading state -->
@@ -797,76 +782,5 @@
 	.preview-table-wrapper thead {
 		position: sticky;
 		top: 0;
-		z-index: 10;
-		background-color: #f9f9f9;
-	}
-
-	.preview-table-wrapper th {
-		position: sticky;
-		top: 0;
-		z-index: 10;
-		min-width: 150px; /* Minimum width for columns */
-	}
-
-	.preview-table-wrapper td {
-		min-width: 150px; /* Ensure consistent column width */
-		max-width: 300px; /* Prevent overly wide columns */
-	}
-
-	/* Animated typing effect */
-	.animated-text {
-		display: inline-block;
-		min-width: 100px;
-		position: relative;
-	}
-
-	.animated-text::after {
-		content: '';
-		position: absolute;
-		right: -5px;
-		top: 0;
-		height: 100%;
-		border-right: 0.1em solid #e2e8f0;
-		animation: blink 1s step-end infinite;
-	}
-
-	@keyframes blink {
-		from,
-		to {
-			border-color: transparent;
-		}
-		50% {
-			border-color: #e2e8f0;
-		}
-	}
-
-	/* Dark mode styles are now the default since we have a dark background */
-	/* These styles will still apply for explicit dark mode */
-	:global(.dark) .upload-area {
-		background-color: #1e1e1e;
-		border-color: #444;
-	}
-
-	:global(.dark) .upload-message {
-		color: #e2e8f0;
-	}
-
-	:global(.dark) .preview-area {
-		background-color: #1e1e1e;
-	}
-
-	:global(.dark) .preview-table th {
-		background-color: #2a2a2a;
-		color: #e2e8f0;
-		border-bottom-color: #444;
-	}
-
-	:global(.dark) .preview-table td {
-		color: #e2e8f0;
-		border-bottom-color: #333;
-	}
-
-	:global(.dark) .preview-table tr:nth-child(even) {
-		background-color: #252525;
 	}
 </style>

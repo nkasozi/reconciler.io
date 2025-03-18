@@ -183,18 +183,6 @@
 							>
 								Why Reconcile?
 							</a>
-							<a
-								href="/upload"
-								class="mt-4 block rounded-md bg-blue-600 px-3 py-2 text-center text-base font-medium text-white transition duration-150 ease-in-out hover:bg-blue-700 focus:outline-none"
-							>
-								Get Started
-							</a>
-							<a
-								href="/blog"
-								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-white transition duration-150 ease-in-out hover:bg-gray-700 hover:text-blue-300 focus:bg-gray-700 focus:text-blue-300 focus:outline-none"
-							>
-								Blog
-							</a>
 						</div>
 						<div>
 							<a

@@ -50,6 +50,24 @@ export function getFileType(file: File): string {
 }
 
 /**
+ * Error class for files that exceed row limits
+ */
+export class RowLimitExceededError extends Error {
+	rowCount: number;
+	
+	constructor(rowCount: number) {
+		super(`File exceeds the maximum allowed rows. Found ${rowCount.toLocaleString()} rows, maximum is 10,000 rows.`);
+		this.name = 'RowLimitExceededError';
+		this.rowCount = rowCount;
+	}
+}
+
+/**
+ * Maximum allowed rows for free tier
+ */
+export const MAX_FREE_TIER_ROWS = 10000;
+
+/**
  * Main function to parse any supported file type
  */
 export async function parseFile(file: File): Promise<ParsedFileData> {
@@ -109,6 +127,14 @@ async function parseCSV(file: File): Promise<ParsedFileData> {
 				if (lines.length === 0) {
 					throw new Error('CSV file is empty');
 				}
+				
+				// Get a rough estimate of row count (excluding header and empty lines)
+				const estimatedRowCount = lines.filter(line => line.trim() !== '').length - 1;
+				
+				// Check if file exceeds row limit
+				if (estimatedRowCount > MAX_FREE_TIER_ROWS) {
+					throw new RowLimitExceededError(estimatedRowCount);
+				}
 
 				// Parse header row
 				const columns = parseCSVLine(lines[0]);
@@ -126,6 +152,11 @@ async function parseCSV(file: File): Promise<ParsedFileData> {
 					});
 
 					rows.push(rowData);
+					
+					// Check row limit during parsing
+					if (rows.length > MAX_FREE_TIER_ROWS) {
+						throw new RowLimitExceededError(estimatedRowCount);
+					}
 				}
 
 				resolve({
@@ -186,46 +217,86 @@ function parseCSVLine(line: string): string[] {
 }
 
 /**
- * Parses Excel file (XLSX/XLS)
- * In a real implementation, this would use a library like SheetJS/xlsx
- * For this prototype, we'll use a simple placeholder
+ * Parses Excel file (XLSX/XLS) using SheetJS/xlsx library
  */
 async function parseExcel(file: File): Promise<ParsedFileData> {
-	// For prototype purposes, we'll use a placeholder implementation
-	// In a real app, you would use a library like SheetJS/xlsx
+	// Import the xlsx library
+	const xlsx = await import('xlsx');
 
-	return new Promise((resolve) => {
-		// Simulate async parsing
-		setTimeout(() => {
-			const columns = ['Date', 'Transaction ID', 'Amount', 'Description'];
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
 
-			const rows = [
-				{
-					Date: '2023-01-01',
-					'Transaction ID': 'TX001',
-					Amount: '$100.00',
-					Description: 'Payment'
-				},
-				{
-					Date: '2023-01-02',
-					'Transaction ID': 'TX002',
-					Amount: '$250.50',
-					Description: 'Refund'
-				},
-				{
-					Date: '2023-01-03',
-					'Transaction ID': 'TX003',
-					Amount: '$75.25',
-					Description: 'Subscription'
+		reader.onload = (event) => {
+			try {
+				const data = event.target?.result;
+				if (!data) {
+					throw new Error('Failed to read Excel file');
 				}
-			];
-
-			resolve({
-				columns,
-				rows,
-				fileName: file.name,
-				fileType: 'excel'
-			});
-		}, 500);
+				
+				// Parse the Excel data
+				const workbook = xlsx.read(data, { type: 'array' });
+				
+				// Get the first sheet
+				const firstSheetName = workbook.SheetNames[0];
+				const worksheet = workbook.Sheets[firstSheetName];
+				
+				// Get an initial row count estimate
+				const range = xlsx.utils.decode_range(worksheet['!ref'] || 'A1:A1');
+				const estimatedRowCount = range.e.r; // End row index (0-based)
+				
+				// Check for row limit before full processing
+				if (estimatedRowCount > MAX_FREE_TIER_ROWS) {
+					throw new RowLimitExceededError(estimatedRowCount);
+				}
+				
+				// Convert to JSON
+				const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+				
+				if (jsonData.length === 0) {
+					throw new Error('Excel file is empty');
+				}
+				
+				// Extract columns (first row)
+				const columns = (jsonData[0] as any[]).map(col => String(col));
+				
+				// Process data rows
+				const rows: Record<string, string>[] = [];
+				for (let i = 1; i < jsonData.length; i++) {
+					const rowData: Record<string, string> = {};
+					const row = jsonData[i] as any[];
+					
+					// Skip empty rows
+					if (!row || row.length === 0) continue;
+					
+					columns.forEach((column, index) => {
+						// Convert all values to strings
+						rowData[column] = index < row.length ? String(row[index] ?? '') : '';
+					});
+					
+					rows.push(rowData);
+					
+					// Check row limit during parsing in case our estimate was off
+					if (rows.length > MAX_FREE_TIER_ROWS) {
+						throw new RowLimitExceededError(rows.length);
+					}
+				}
+				
+				resolve({
+					columns,
+					rows,
+					fileName: file.name,
+					fileType: 'excel'
+				});
+			} catch (error) {
+				reject(error instanceof Error ? error : new Error('Failed to parse Excel file'));
+			}
+		};
+		
+		reader.onerror = () => {
+			reject(new Error('Error reading Excel file'));
+		};
+		
+		// Read the file as an array buffer
+		reader.readAsArrayBuffer(file);
 	});
 }
