@@ -158,7 +158,9 @@ export function reconcileData(
 		matchedRows: matches.length,
 		unmatchedPrimaryRows: unmatchedPrimary.length,
 		unmatchedComparisonRows: unmatchedComparison.length,
-		matchPercentage: Math.round((matches.length / primaryData.rows.length) * 100)
+		matchPercentage: primaryData.rows.length > 0 
+			? Math.round((matches.length / primaryData.rows.length) * 100)
+			: 0 // Handle division by zero for empty datasets
 	};
 
 	return {
