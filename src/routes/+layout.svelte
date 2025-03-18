@@ -98,9 +98,9 @@
 				>
 					<ul class="flex">
 						<li class="mb-3 block py-2 lg:mb-0 lg:px-4">
-							<a 
-								href="/login" 
-								title="Login" 
+							<a
+								href="/login"
+								title="Login"
 								class="text-white hover:text-blue-400"
 								on:click={showComingSoon}
 							>

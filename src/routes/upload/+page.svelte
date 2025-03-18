@@ -216,9 +216,11 @@
 			// Special handling for row limit errors
 			if (error instanceof RowLimitExceededError) {
 				// Store the error message in sessionStorage
-				sessionStorage.setItem('upgrade_reason', 
-					`Your file has ${error.rowCount.toLocaleString()} rows, which exceeds the free tier limit of 10,000 rows. Please upgrade to Pro.`);
-				
+				sessionStorage.setItem(
+					'upgrade_reason',
+					`Your file has ${error.rowCount.toLocaleString()} rows, which exceeds the free tier limit of 10,000 rows. Please upgrade to Pro.`
+				);
+
 				// Redirect to pricing page
 				goto('/pricing?source=row_limit');
 				return;
@@ -314,359 +316,359 @@
 	}
 </script>
 
-<div class="min-h-screen bg-gray-900 dark:bg-gray-900 text-white">
-<div class="container mx-auto pt-16 pb-2 text-center">
-	<h1
-		class="mb-8 px-8 text-2xl leading-tight font-semibold text-white sm:text-3xl md:text-5xl lg:px-0 lg:text-5xl xl:text-5xl"
-	>
-		<span class="font-extrabold text-green-500">Reconciliation</span> has <br /> never been so
-		<span class="animated-text font-extrabold text-blue-600">{currentText}</span>
-	</h1>
-
-	<!-- File Upload Areas -->
-	<div class="mx-auto flex max-w-6xl flex-wrap justify-center p-4">
-		<!-- Primary File Section -->
-		<div class="mb-8 w-full p-4 sm:w-1/2 md:w-1/2 lg:w-1/2 xl:w-1/2">
-			<!-- File Info Header -->
-			{#if primaryFileData.parsedData}
-				<div class="mb-3 overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800">
-					<div
-						class="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-700"
-					>
-						<div>
-							<h3 class="text-lg font-bold text-gray-900 dark:text-white">
-								Primary File: <span class="font-medium">{primaryFileData.file?.name || ''}</span>
-							</h3>
-							<p class="mt-1 text-sm text-gray-700 dark:text-gray-300">
-								{primaryFileData.parsedData.rows.length.toLocaleString()} rows, {primaryFileData
-									.parsedData.columns.length} columns
-							</p>
-						</div>
-						<button
-							class="focus:ring-opacity-50 flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600 focus:ring-2 focus:ring-red-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-red-900 dark:hover:text-red-400"
-							aria-label="Remove file"
-							title="Remove file"
-							on:click={() => removeFile('primary')}
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="18"
-								height="18"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<line x1="18" y1="6" x2="6" y2="18"></line>
-								<line x1="6" y1="6" x2="18" y2="18"></line>
-							</svg>
-						</button>
-					</div>
-				</div>
-			{/if}
-
-			<!-- Upload Area or Preview -->
-			{#if !primaryFileData.isUploaded}
-				<!-- Upload Area -->
-				<div
-					class="upload-area"
-					class:highlight={false}
-					class:uploading={primaryFileData.isUploading}
-					on:dragover|preventDefault={handleDragOver}
-					on:dragleave|preventDefault={handleDragLeave}
-					on:drop|preventDefault={(e) => handleDrop(e, 'primary')}
-				>
-					{#if !primaryFileData.isUploading}
-						<!-- Normal upload state -->
-						<input
-							type="file"
-							class="drop-here"
-							accept=".xlsx,.xls,.pdf,.doc,.docx,.csv,.rtf,.txt"
-							on:change={handlePrimaryFileUpload}
-						/>
-						<div class="upload-message">
-							Drag &amp; Drop <br /> an Excel (.xlsx/.xls) or CSV file here
-						</div>
-					{:else}
-						<!-- Uploading state -->
-						<div class="upload-progress">
-							<div class="uploading-text">Uploading...</div>
-							<div class="progress-bar">
-								<div class="progress-fill" style="width: {primaryFileData.progress}%"></div>
-							</div>
-							<div class="progress-text">{Math.round(primaryFileData.progress)}%</div>
-						</div>
-					{/if}
-				</div>
-			{:else}
-				<!-- Preview Table -->
-				<div
-					class="preview-container overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800"
-				>
-					<div
-						class="border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-medium tracking-wider text-gray-600 uppercase dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300"
-					>
-						File Preview (First 20 rows)
-					</div>
-					<div class="preview-table-wrapper max-h-[400px] overflow-auto">
-						<table class="w-auto">
-							<thead class="sticky top-0 z-10">
-								<tr class="bg-gray-50 dark:bg-gray-700">
-									{#each primaryFileData.parsedData.columns as column}
-										<th
-											class="min-w-[150px] border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold tracking-wider whitespace-nowrap text-gray-600 uppercase dark:border-gray-700 dark:text-gray-300"
-										>
-											{column}
-										</th>
-									{/each}
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-								{#each primaryFileData.parsedData.rows.slice(0, 20) as row, i}
-									<tr
-										class={i % 2 === 0
-											? 'bg-white dark:bg-gray-800'
-											: 'bg-gray-50 dark:bg-gray-700'}
-									>
-										{#each primaryFileData.parsedData.columns as column}
-											<td
-												class="max-w-[300px] min-w-[150px] overflow-hidden px-4 py-2 text-sm text-ellipsis whitespace-nowrap text-gray-600 dark:text-gray-300"
-											>
-												{row[column] || ''}
-											</td>
-										{/each}
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				</div>
-			{/if}
-		</div>
-
-		<!-- Comparison File Section -->
-		<div class="mb-8 w-full p-4 sm:w-1/2 md:w-1/2 lg:w-1/2 xl:w-1/2">
-			<!-- File Info Header -->
-			{#if comparisonFileData.parsedData}
-				<div class="mb-3 overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800">
-					<div
-						class="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-700"
-					>
-						<div>
-							<h3 class="text-lg font-bold text-gray-900 dark:text-white">
-								Comparison File: <span class="font-medium"
-									>{comparisonFileData.file?.name || ''}</span
-								>
-							</h3>
-							<p class="mt-1 text-sm text-gray-700 dark:text-gray-300">
-								{comparisonFileData.parsedData.rows.length.toLocaleString()} rows, {comparisonFileData
-									.parsedData.columns.length} columns
-							</p>
-						</div>
-						<button
-							class="focus:ring-opacity-50 flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600 focus:ring-2 focus:ring-red-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-red-900 dark:hover:text-red-400"
-							aria-label="Remove file"
-							title="Remove file"
-							on:click={() => removeFile('comparison')}
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="18"
-								height="18"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<line x1="18" y1="6" x2="6" y2="18"></line>
-								<line x1="6" y1="6" x2="18" y2="18"></line>
-							</svg>
-						</button>
-					</div>
-				</div>
-			{/if}
-
-			<!-- Upload Area or Preview -->
-			{#if !comparisonFileData.isUploaded}
-				<!-- Upload Area -->
-				<div
-					class="upload-area"
-					class:highlight={false}
-					class:uploading={comparisonFileData.isUploading}
-					on:dragover|preventDefault={handleDragOver}
-					on:dragleave|preventDefault={handleDragLeave}
-					on:drop|preventDefault={(e) => handleDrop(e, 'comparison')}
-				>
-					{#if !comparisonFileData.isUploading}
-						<!-- Normal upload state -->
-						<input
-							type="file"
-							class="drop-here"
-							accept=".xlsx,.xls,.pdf,.doc,.docx,.csv,.rtf,.txt"
-							on:change={handleComparisonFileUpload}
-						/>
-						<div class="upload-message">
-							Drag &amp; Drop <br /> another Excel (.xlsx/.xls) or CSV file here
-						</div>
-					{:else}
-						<!-- Uploading state -->
-						<div class="upload-progress">
-							<div class="uploading-text">Uploading...</div>
-							<div class="progress-bar">
-								<div class="progress-fill" style="width: {comparisonFileData.progress}%"></div>
-							</div>
-							<div class="progress-text">{Math.round(comparisonFileData.progress)}%</div>
-						</div>
-					{/if}
-				</div>
-			{:else}
-				<!-- Preview Table -->
-				<div
-					class="preview-container overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800"
-				>
-					<div
-						class="border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-medium tracking-wider text-gray-600 uppercase dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300"
-					>
-						File Preview (First 20 rows)
-					</div>
-					<div class="preview-table-wrapper max-h-[400px] overflow-auto">
-						<table class="w-auto">
-							<thead class="sticky top-0 z-10">
-								<tr class="bg-gray-50 dark:bg-gray-700">
-									{#each comparisonFileData.parsedData.columns as column}
-										<th
-											class="min-w-[150px] border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold tracking-wider whitespace-nowrap text-gray-600 uppercase dark:border-gray-700 dark:text-gray-300"
-										>
-											{column}
-										</th>
-									{/each}
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-								{#each comparisonFileData.parsedData.rows.slice(0, 20) as row, i}
-									<tr
-										class={i % 2 === 0
-											? 'bg-white dark:bg-gray-800'
-											: 'bg-gray-50 dark:bg-gray-700'}
-									>
-										{#each comparisonFileData.parsedData.columns as column}
-											<td
-												class="max-w-[300px] min-w-[150px] overflow-hidden px-4 py-2 text-sm text-ellipsis whitespace-nowrap text-gray-600 dark:text-gray-300"
-											>
-												{row[column] || ''}
-											</td>
-										{/each}
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				</div>
-			{/if}
-		</div>
-	</div>
-
-	<!-- Error message display -->
-	{#if errorMessage}
-		<div class="mx-auto mb-4 max-w-2xl">
-			<div class="rounded-md bg-red-50 p-4">
-				<div class="flex">
-					<div class="ml-3">
-						<h3 class="text-sm font-medium text-red-800">Error</h3>
-						<div class="mt-2 text-sm text-red-700">
-							<p>{errorMessage}</p>
-						</div>
-					</div>
-				</div>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Debug State Info -->
-	<div
-		class="mx-auto mb-4 max-w-4xl rounded-md border border-gray-700 bg-gray-800 p-3 text-xs text-gray-300"
-	>
-		<details>
-			<summary class="cursor-pointer font-semibold">Debug State Info (Click to expand)</summary>
-			<div class="mt-2 rounded bg-gray-700 p-2 text-left">
-				<div class="mb-1">
-					<b>Primary File:</b>
-					{primaryFileData.isUploaded ? 'Uploaded' : 'Not Uploaded'}
-				</div>
-				<div class="mb-1">
-					<b>Primary File Uploading:</b>
-					{primaryFileData.isUploading ? 'Yes' : 'No'}
-				</div>
-				<div class="mb-1"><b>Primary File Progress:</b> {primaryFileData.progress}%</div>
-				<div class="mb-1"><b>Has Primary Data:</b> {!!primaryFileData.parsedData}</div>
-				{#if primaryFileData.parsedData}
-					<div class="mb-1">
-						<b>Primary Columns:</b>
-						{primaryFileData.parsedData.columns.length}
-					</div>
-					<div class="mb-1"><b>Primary Rows:</b> {primaryFileData.parsedData.rows.length}</div>
-				{/if}
-				<div class="mb-1">
-					<b>Comparison File:</b>
-					{comparisonFileData.isUploaded ? 'Uploaded' : 'Not Uploaded'}
-				</div>
-				<div class="mb-1">
-					<b>Comparison File Uploading:</b>
-					{comparisonFileData.isUploading ? 'Yes' : 'No'}
-				</div>
-				<div class="mb-1"><b>Comparison File Progress:</b> {comparisonFileData.progress}%</div>
-				<div class="mb-1"><b>Has Comparison Data:</b> {!!comparisonFileData.parsedData}</div>
-				{#if comparisonFileData.parsedData}
-					<div class="mb-1">
-						<b>Comparison Columns:</b>
-						{comparisonFileData.parsedData.columns.length}
-					</div>
-					<div class="mb-1">
-						<b>Comparison Rows:</b>
-						{comparisonFileData.parsedData.rows.length}
-					</div>
-				{/if}
-			</div>
-		</details>
-	</div>
-
-	<!-- Map Columns Button -->
-	<div class="mb-16 flex justify-center">
-		<button
-			on:click={openMappingModal}
-			disabled={!primaryFileData.isUploaded ||
-				!comparisonFileData.isUploaded ||
-				!primaryFileData.parsedData ||
-				!comparisonFileData.parsedData}
-			class="btn-breathing mt-2 rounded-lg border-2 border-green-500 bg-green-500 px-6 py-3 font-semibold text-white hover:bg-green-600 hover:text-white transition-all duration-300 transform hover:scale-105"
-			class:opacity-50={!primaryFileData.isUploaded ||
-				!comparisonFileData.isUploaded ||
-				!primaryFileData.parsedData ||
-				!comparisonFileData.parsedData}
-			class:cursor-not-allowed={!primaryFileData.isUploaded ||
-				!comparisonFileData.isUploaded ||
-				!primaryFileData.parsedData ||
-				!comparisonFileData.parsedData}
+<div class="min-h-screen bg-gray-900 text-white dark:bg-gray-900">
+	<div class="container mx-auto pt-16 pb-2 text-center">
+		<h1
+			class="mb-8 px-8 text-2xl leading-tight font-semibold text-white sm:text-3xl md:text-5xl lg:px-0 lg:text-5xl xl:text-5xl"
 		>
-			Map Columns
-		</button>
-	</div>
+			<span class="font-extrabold text-green-500">Reconciliation</span> has <br /> never been so
+			<span class="animated-text font-extrabold text-blue-600">{currentText}</span>
+		</h1>
 
-	<!-- Column Mapping Modal -->
-	{#if primaryFileData.parsedData && comparisonFileData.parsedData}
-		<ColumnMappingModal
-			primaryFile={primaryFileData.parsedData}
-			comparisonFile={comparisonFileData.parsedData}
-			show={showMappingModal}
-			on:close={() => (showMappingModal = false)}
-			on:mapping={handleColumnMapping}
-		/>
-	{/if}
-</div>
+		<!-- File Upload Areas -->
+		<div class="mx-auto flex max-w-6xl flex-wrap justify-center p-4">
+			<!-- Primary File Section -->
+			<div class="mb-8 w-full p-4 sm:w-1/2 md:w-1/2 lg:w-1/2 xl:w-1/2">
+				<!-- File Info Header -->
+				{#if primaryFileData.parsedData}
+					<div class="mb-3 overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800">
+						<div
+							class="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-700"
+						>
+							<div>
+								<h3 class="text-lg font-bold text-gray-900 dark:text-white">
+									Primary File: <span class="font-medium">{primaryFileData.file?.name || ''}</span>
+								</h3>
+								<p class="mt-1 text-sm text-gray-700 dark:text-gray-300">
+									{primaryFileData.parsedData.rows.length.toLocaleString()} rows, {primaryFileData
+										.parsedData.columns.length} columns
+								</p>
+							</div>
+							<button
+								class="focus:ring-opacity-50 flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600 focus:ring-2 focus:ring-red-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-red-900 dark:hover:text-red-400"
+								aria-label="Remove file"
+								title="Remove file"
+								on:click={() => removeFile('primary')}
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<line x1="18" y1="6" x2="6" y2="18"></line>
+									<line x1="6" y1="6" x2="18" y2="18"></line>
+								</svg>
+							</button>
+						</div>
+					</div>
+				{/if}
+
+				<!-- Upload Area or Preview -->
+				{#if !primaryFileData.isUploaded}
+					<!-- Upload Area -->
+					<div
+						class="upload-area"
+						class:highlight={false}
+						class:uploading={primaryFileData.isUploading}
+						on:dragover|preventDefault={handleDragOver}
+						on:dragleave|preventDefault={handleDragLeave}
+						on:drop|preventDefault={(e) => handleDrop(e, 'primary')}
+					>
+						{#if !primaryFileData.isUploading}
+							<!-- Normal upload state -->
+							<input
+								type="file"
+								class="drop-here"
+								accept=".xlsx,.xls,.pdf,.doc,.docx,.csv,.rtf,.txt"
+								on:change={handlePrimaryFileUpload}
+							/>
+							<div class="upload-message">
+								Drag &amp; Drop <br /> an Excel (.xlsx/.xls) or CSV file here
+							</div>
+						{:else}
+							<!-- Uploading state -->
+							<div class="upload-progress">
+								<div class="uploading-text">Uploading...</div>
+								<div class="progress-bar">
+									<div class="progress-fill" style="width: {primaryFileData.progress}%"></div>
+								</div>
+								<div class="progress-text">{Math.round(primaryFileData.progress)}%</div>
+							</div>
+						{/if}
+					</div>
+				{:else}
+					<!-- Preview Table -->
+					<div
+						class="preview-container overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800"
+					>
+						<div
+							class="border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-medium tracking-wider text-gray-600 uppercase dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300"
+						>
+							File Preview (First 20 rows)
+						</div>
+						<div class="preview-table-wrapper max-h-[400px] overflow-auto">
+							<table class="w-auto">
+								<thead class="sticky top-0 z-10">
+									<tr class="bg-gray-50 dark:bg-gray-700">
+										{#each primaryFileData.parsedData.columns as column}
+											<th
+												class="min-w-[150px] border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold tracking-wider whitespace-nowrap text-gray-600 uppercase dark:border-gray-700 dark:text-gray-300"
+											>
+												{column}
+											</th>
+										{/each}
+									</tr>
+								</thead>
+								<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+									{#each primaryFileData.parsedData.rows.slice(0, 20) as row, i}
+										<tr
+											class={i % 2 === 0
+												? 'bg-white dark:bg-gray-800'
+												: 'bg-gray-50 dark:bg-gray-700'}
+										>
+											{#each primaryFileData.parsedData.columns as column}
+												<td
+													class="max-w-[300px] min-w-[150px] overflow-hidden px-4 py-2 text-sm text-ellipsis whitespace-nowrap text-gray-600 dark:text-gray-300"
+												>
+													{row[column] || ''}
+												</td>
+											{/each}
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Comparison File Section -->
+			<div class="mb-8 w-full p-4 sm:w-1/2 md:w-1/2 lg:w-1/2 xl:w-1/2">
+				<!-- File Info Header -->
+				{#if comparisonFileData.parsedData}
+					<div class="mb-3 overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800">
+						<div
+							class="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-700"
+						>
+							<div>
+								<h3 class="text-lg font-bold text-gray-900 dark:text-white">
+									Comparison File: <span class="font-medium"
+										>{comparisonFileData.file?.name || ''}</span
+									>
+								</h3>
+								<p class="mt-1 text-sm text-gray-700 dark:text-gray-300">
+									{comparisonFileData.parsedData.rows.length.toLocaleString()} rows, {comparisonFileData
+										.parsedData.columns.length} columns
+								</p>
+							</div>
+							<button
+								class="focus:ring-opacity-50 flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600 focus:ring-2 focus:ring-red-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-red-900 dark:hover:text-red-400"
+								aria-label="Remove file"
+								title="Remove file"
+								on:click={() => removeFile('comparison')}
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<line x1="18" y1="6" x2="6" y2="18"></line>
+									<line x1="6" y1="6" x2="18" y2="18"></line>
+								</svg>
+							</button>
+						</div>
+					</div>
+				{/if}
+
+				<!-- Upload Area or Preview -->
+				{#if !comparisonFileData.isUploaded}
+					<!-- Upload Area -->
+					<div
+						class="upload-area"
+						class:highlight={false}
+						class:uploading={comparisonFileData.isUploading}
+						on:dragover|preventDefault={handleDragOver}
+						on:dragleave|preventDefault={handleDragLeave}
+						on:drop|preventDefault={(e) => handleDrop(e, 'comparison')}
+					>
+						{#if !comparisonFileData.isUploading}
+							<!-- Normal upload state -->
+							<input
+								type="file"
+								class="drop-here"
+								accept=".xlsx,.xls,.pdf,.doc,.docx,.csv,.rtf,.txt"
+								on:change={handleComparisonFileUpload}
+							/>
+							<div class="upload-message">
+								Drag &amp; Drop <br /> another Excel (.xlsx/.xls) or CSV file here
+							</div>
+						{:else}
+							<!-- Uploading state -->
+							<div class="upload-progress">
+								<div class="uploading-text">Uploading...</div>
+								<div class="progress-bar">
+									<div class="progress-fill" style="width: {comparisonFileData.progress}%"></div>
+								</div>
+								<div class="progress-text">{Math.round(comparisonFileData.progress)}%</div>
+							</div>
+						{/if}
+					</div>
+				{:else}
+					<!-- Preview Table -->
+					<div
+						class="preview-container overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800"
+					>
+						<div
+							class="border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-medium tracking-wider text-gray-600 uppercase dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300"
+						>
+							File Preview (First 20 rows)
+						</div>
+						<div class="preview-table-wrapper max-h-[400px] overflow-auto">
+							<table class="w-auto">
+								<thead class="sticky top-0 z-10">
+									<tr class="bg-gray-50 dark:bg-gray-700">
+										{#each comparisonFileData.parsedData.columns as column}
+											<th
+												class="min-w-[150px] border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold tracking-wider whitespace-nowrap text-gray-600 uppercase dark:border-gray-700 dark:text-gray-300"
+											>
+												{column}
+											</th>
+										{/each}
+									</tr>
+								</thead>
+								<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+									{#each comparisonFileData.parsedData.rows.slice(0, 20) as row, i}
+										<tr
+											class={i % 2 === 0
+												? 'bg-white dark:bg-gray-800'
+												: 'bg-gray-50 dark:bg-gray-700'}
+										>
+											{#each comparisonFileData.parsedData.columns as column}
+												<td
+													class="max-w-[300px] min-w-[150px] overflow-hidden px-4 py-2 text-sm text-ellipsis whitespace-nowrap text-gray-600 dark:text-gray-300"
+												>
+													{row[column] || ''}
+												</td>
+											{/each}
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					</div>
+				{/if}
+			</div>
+		</div>
+
+		<!-- Error message display -->
+		{#if errorMessage}
+			<div class="mx-auto mb-4 max-w-2xl">
+				<div class="rounded-md bg-red-50 p-4">
+					<div class="flex">
+						<div class="ml-3">
+							<h3 class="text-sm font-medium text-red-800">Error</h3>
+							<div class="mt-2 text-sm text-red-700">
+								<p>{errorMessage}</p>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Debug State Info -->
+		<div
+			class="mx-auto mb-4 max-w-4xl rounded-md border border-gray-700 bg-gray-800 p-3 text-xs text-gray-300"
+		>
+			<details>
+				<summary class="cursor-pointer font-semibold">Debug State Info (Click to expand)</summary>
+				<div class="mt-2 rounded bg-gray-700 p-2 text-left">
+					<div class="mb-1">
+						<b>Primary File:</b>
+						{primaryFileData.isUploaded ? 'Uploaded' : 'Not Uploaded'}
+					</div>
+					<div class="mb-1">
+						<b>Primary File Uploading:</b>
+						{primaryFileData.isUploading ? 'Yes' : 'No'}
+					</div>
+					<div class="mb-1"><b>Primary File Progress:</b> {primaryFileData.progress}%</div>
+					<div class="mb-1"><b>Has Primary Data:</b> {!!primaryFileData.parsedData}</div>
+					{#if primaryFileData.parsedData}
+						<div class="mb-1">
+							<b>Primary Columns:</b>
+							{primaryFileData.parsedData.columns.length}
+						</div>
+						<div class="mb-1"><b>Primary Rows:</b> {primaryFileData.parsedData.rows.length}</div>
+					{/if}
+					<div class="mb-1">
+						<b>Comparison File:</b>
+						{comparisonFileData.isUploaded ? 'Uploaded' : 'Not Uploaded'}
+					</div>
+					<div class="mb-1">
+						<b>Comparison File Uploading:</b>
+						{comparisonFileData.isUploading ? 'Yes' : 'No'}
+					</div>
+					<div class="mb-1"><b>Comparison File Progress:</b> {comparisonFileData.progress}%</div>
+					<div class="mb-1"><b>Has Comparison Data:</b> {!!comparisonFileData.parsedData}</div>
+					{#if comparisonFileData.parsedData}
+						<div class="mb-1">
+							<b>Comparison Columns:</b>
+							{comparisonFileData.parsedData.columns.length}
+						</div>
+						<div class="mb-1">
+							<b>Comparison Rows:</b>
+							{comparisonFileData.parsedData.rows.length}
+						</div>
+					{/if}
+				</div>
+			</details>
+		</div>
+
+		<!-- Map Columns Button -->
+		<div class="mb-16 flex justify-center">
+			<button
+				on:click={openMappingModal}
+				disabled={!primaryFileData.isUploaded ||
+					!comparisonFileData.isUploaded ||
+					!primaryFileData.parsedData ||
+					!comparisonFileData.parsedData}
+				class="btn-breathing mt-2 transform rounded-lg border-2 border-green-500 bg-green-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 hover:text-white"
+				class:opacity-50={!primaryFileData.isUploaded ||
+					!comparisonFileData.isUploaded ||
+					!primaryFileData.parsedData ||
+					!comparisonFileData.parsedData}
+				class:cursor-not-allowed={!primaryFileData.isUploaded ||
+					!comparisonFileData.isUploaded ||
+					!primaryFileData.parsedData ||
+					!comparisonFileData.parsedData}
+			>
+				Map Columns
+			</button>
+		</div>
+
+		<!-- Column Mapping Modal -->
+		{#if primaryFileData.parsedData && comparisonFileData.parsedData}
+			<ColumnMappingModal
+				primaryFile={primaryFileData.parsedData}
+				comparisonFile={comparisonFileData.parsedData}
+				show={showMappingModal}
+				on:close={() => (showMappingModal = false)}
+				on:mapping={handleColumnMapping}
+			/>
+		{/if}
+	</div>
 </div>
 
 <style>
