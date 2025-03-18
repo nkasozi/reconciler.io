@@ -81,48 +81,65 @@
 	}
 </script>
 
-<div class="container mx-auto max-w-3xl px-4 py-8">
-	<h1 class="text-foreground dark:text-dark-foreground mb-8 text-center text-3xl font-bold">
+<div class="min-h-screen bg-gray-900 text-white py-8 relative">
+<!-- Desktop SVG illustrations -->
+<div class="hidden md:block">
+	<img
+		src="/images/details.svg"
+		alt="Details illustration"
+		class="absolute top-1/2 right-0 -translate-y-1/2 max-w-sm px-16 opacity-30"
+	/>
+</div>
+
+<div class="hidden md:block">
+	<img
+		src="/images/reconcile.svg"
+		alt="Reconcile illustration"
+		class="absolute top-1/2 left-0 -translate-y-1/2 max-w-xs px-16 opacity-30"
+	/>
+</div>
+<div class="container mx-auto max-w-3xl px-4">
+	<h1 class="mb-8 text-center text-3xl font-bold text-white">
 		Reconciliation Summary
 	</h1>
 
 	<!-- Files summary section -->
-	<div class="dark:bg-dark-background mb-8 rounded-lg bg-white p-6 shadow dark:shadow-gray-800">
-		<h2 class="text-foreground dark:text-dark-foreground mb-4 text-xl font-semibold">Files</h2>
+	<div class="mb-8 rounded-lg bg-gray-800 p-6 shadow shadow-gray-800">
+		<h2 class="mb-4 text-xl font-semibold text-white">Files</h2>
 
 		<div class="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-			<div class="rounded-md bg-gray-50 p-4 dark:bg-gray-800">
-				<h3 class="text-foreground dark:text-dark-foreground mb-2 font-medium">Primary File</h3>
-				<p class="text-sm text-gray-700 dark:text-gray-300">{primaryFileName}</p>
+			<div class="rounded-md bg-gray-700 p-4">
+				<h3 class="mb-2 font-medium text-white">Primary File</h3>
+				<p class="text-sm text-gray-300">{primaryFileName}</p>
 			</div>
 
-			<div class="rounded-md bg-gray-50 p-4 dark:bg-gray-800">
-				<h3 class="text-foreground dark:text-dark-foreground mb-2 font-medium">Comparison File</h3>
-				<p class="text-sm text-gray-700 dark:text-gray-300">{comparisonFileName}</p>
+			<div class="rounded-md bg-gray-700 p-4">
+				<h3 class="mb-2 font-medium text-white">Comparison File</h3>
+				<p class="text-sm text-gray-300">{comparisonFileName}</p>
 			</div>
 		</div>
 	</div>
 
 	<!-- Column mappings section -->
-	<div class="dark:bg-dark-background mb-8 rounded-lg bg-white p-6 shadow dark:shadow-gray-800">
-		<h2 class="text-foreground dark:text-dark-foreground mb-4 text-xl font-semibold">
+	<div class="mb-8 rounded-lg bg-gray-800 p-6 shadow shadow-gray-800">
+		<h2 class="mb-4 text-xl font-semibold text-white">
 			Column Mappings
 		</h2>
 
 		<div class="mb-4">
-			<h3 class="text-foreground dark:text-dark-foreground mb-2 font-medium">ID Columns</h3>
-			<div class="rounded-md bg-gray-50 p-4 dark:bg-gray-800">
+			<h3 class="mb-2 font-medium text-white">ID Columns</h3>
+			<div class="rounded-md bg-gray-700 p-4">
 				<div class="flex items-center justify-between">
 					<div class="w-5/12">
-						<p class="text-sm font-medium text-gray-700 dark:text-gray-300">
+						<p class="text-sm font-medium text-white">
 							{primaryIdColumn}
 						</p>
-						<p class="text-xs text-gray-500 dark:text-gray-400">Primary File</p>
+						<p class="text-xs text-blue-300">Primary File</p>
 					</div>
 
 					<div class="flex w-2/12 justify-center">
 						<svg
-							class="text-primary dark:text-dark-primary h-5 w-5"
+							class="h-5 w-5 text-blue-400"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
@@ -138,10 +155,10 @@
 					</div>
 
 					<div class="w-5/12">
-						<p class="text-sm font-medium text-gray-700 dark:text-gray-300">
+						<p class="text-sm font-medium text-white">
 							{comparisonIdColumn}
 						</p>
-						<p class="text-xs text-gray-500 dark:text-gray-400">Comparison File</p>
+						<p class="text-xs text-blue-300">Comparison File</p>
 					</div>
 				</div>
 			</div>
@@ -149,23 +166,23 @@
 
 		{#if columnMappings.length > 0}
 			<div>
-				<h3 class="text-foreground dark:text-dark-foreground mb-2 font-medium">
+				<h3 class="mb-2 font-medium text-white">
 					Comparison Columns
 				</h3>
 				<div class="space-y-2">
 					{#each columnMappings as mapping}
-						<div class="rounded-md bg-gray-50 p-4 dark:bg-gray-800">
+						<div class="rounded-md bg-gray-700 p-4">
 							<div class="flex items-center justify-between">
 								<div class="w-5/12">
-									<p class="text-sm font-medium text-gray-700 dark:text-gray-300">
+									<p class="text-sm font-medium text-white">
 										{mapping.primaryColumn}
 									</p>
-									<p class="text-xs text-gray-500 dark:text-gray-400">Primary File</p>
+									<p class="text-xs text-blue-300">Primary File</p>
 								</div>
 
 								<div class="flex w-2/12 justify-center">
 									<svg
-										class="text-primary dark:text-dark-primary h-5 w-5"
+										class="h-5 w-5 text-blue-400"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
@@ -181,10 +198,10 @@
 								</div>
 
 								<div class="w-5/12">
-									<p class="text-sm font-medium text-gray-700 dark:text-gray-300">
+									<p class="text-sm font-medium text-white">
 										{mapping.comparisonColumn}
 									</p>
-									<p class="text-xs text-gray-500 dark:text-gray-400">Comparison File</p>
+									<p class="text-xs text-blue-300">Comparison File</p>
 								</div>
 							</div>
 						</div>
@@ -196,19 +213,19 @@
 
 	<!-- Contact information form -->
 	<div class="container mx-auto pt-8 pb-2 text-center">
-		<div class="dark:bg-dark-background mb-8 rounded-lg bg-white p-6 shadow dark:shadow-gray-800">
-			<h2 class="text-foreground dark:text-dark-foreground mb-4 text-xl font-semibold">
+		<div class="mb-8 rounded-lg bg-gray-800 p-6 shadow shadow-gray-800">
+			<h2 class="mb-4 text-xl font-semibold text-white">
 				Contact Information
 			</h2>
 
 			<div class="mb-8">
-				<h1 class="mb-4 text-xl font-semibold text-red-500">
+				<h1 class="mb-4 text-xl font-semibold text-red-400">
 					One more thing! <br />
 					The files you uploaded are quite large <br />
 					and this may take a few minutes.
 				</h1>
 
-				<p class="text-foreground dark:text-dark-foreground mb-6 text-lg">
+				<p class="mb-6 text-lg text-white">
 					How can we contact you with the results?
 				</p>
 			</div>
@@ -224,19 +241,19 @@
 					<div class="mb-6">
 						<div class="flex items-center justify-between">
 							<label
-								class="text-foreground dark:text-dark-foreground mb-1 block font-semibold"
+								class="mb-1 block font-semibold text-white"
 								for="email"
 							>
-								Email <span class="text-red-500">*</span>
+								Email <span class="text-red-400">*</span>
 							</label>
 							{#if isFormSubmitted && !isValidEmail}
-								<p class="text-sm text-red-600 dark:text-red-400">
+								<p class="text-sm text-red-400">
 									Please enter a valid email address
 								</p>
 							{/if}
 						</div>
 						<input
-							class="w-full appearance-none rounded border-2 border-gray-200 bg-gray-100 px-4 py-2 leading-tight text-gray-700 focus:border-blue-400 focus:bg-white focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:focus:border-blue-500"
+							class="w-full appearance-none rounded border-2 border-gray-600 bg-gray-700 px-4 py-2 leading-tight text-white focus:border-blue-500 focus:outline-none"
 							id="email"
 							type="email"
 							placeholder="your.email@example.com"
@@ -248,19 +265,19 @@
 					<div class="mb-6">
 						<div class="flex items-center justify-between">
 							<label
-								class="text-foreground dark:text-dark-foreground mb-1 block font-semibold"
+								class="mb-1 block font-semibold text-white"
 								for="phone"
 							>
 								Phone Number (optional)
 							</label>
 							{#if isFormSubmitted && phone && !isValidPhone}
-								<p class="text-sm text-red-600 dark:text-red-400">
+								<p class="text-sm text-red-400">
 									Please enter a valid phone number
 								</p>
 							{/if}
 						</div>
 						<input
-							class="w-full appearance-none rounded border-2 border-gray-200 bg-gray-100 px-4 py-2 leading-tight text-gray-700 focus:border-blue-400 focus:bg-white focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:focus:border-blue-500"
+							class="w-full appearance-none rounded border-2 border-gray-600 bg-gray-700 px-4 py-2 leading-tight text-white focus:border-blue-500 focus:outline-none"
 							id="phone"
 							type="tel"
 							placeholder="+1234567890"
@@ -271,7 +288,7 @@
 					<div class="flex justify-center">
 						<button
 							type="submit"
-							class="focus:ring-opacity-50 rounded border border-green-500 bg-green-500 px-6 py-2 font-semibold text-white hover:bg-green-600 focus:ring-2 focus:ring-green-400 focus:outline-none dark:border-green-600 dark:bg-green-600 dark:hover:bg-green-700"
+							class="btn-breathing focus:ring-opacity-50 rounded-lg border-2 border-green-500 bg-green-500 px-6 py-3 font-semibold text-white hover:bg-green-600 transition-all duration-300 transform hover:scale-105 focus:ring-2 focus:ring-green-400 focus:outline-none"
 							disabled={!isFormValid}
 							class:opacity-50={!isFormValid}
 							class:cursor-not-allowed={!isFormValid}
@@ -284,3 +301,27 @@
 		</div>
 	</div>
 </div>
+</div>
+
+<style>
+	/* Button animation */
+	@keyframes btn-breathing {
+		0% {
+			transform: scale(1);
+			box-shadow: 0 5px 15px rgba(46, 213, 115, 0.2);
+		}
+		50% {
+			transform: scale(1.03);
+			box-shadow: 0 10px 20px rgba(46, 213, 115, 0.4);
+		}
+		100% {
+			transform: scale(1);
+			box-shadow: 0 5px 15px rgba(46, 213, 115, 0.2);
+		}
+	}
+
+	.btn-breathing {
+		animation: btn-breathing 4s ease-in-out infinite;
+		box-shadow: 0 5px 15px rgba(46, 213, 115, 0.3);
+	}
+</style>

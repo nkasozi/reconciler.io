@@ -29,6 +29,11 @@
 		console.log('closeMobileNav called');
 		mobileNavOpen = false;
 	}
+
+	function showComingSoon(event) {
+		event.preventDefault();
+		alert('Login and signup functionality coming soon!');
+	}
 </script>
 
 <!-- Main layout with navigation -->
@@ -68,6 +73,11 @@
 				</div>
 				<div class="hidden md:block">
 					<a
+						href="/"
+						class="ml-8 font-medium text-blue-500 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-blue-400 dark:hover:text-blue-300 dark:focus:text-blue-300"
+						>Home</a
+					>
+					<a
 						href="/features"
 						class="ml-8 font-medium text-blue-500 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-blue-400 dark:hover:text-blue-300 dark:focus:text-blue-300"
 						>Features</a
@@ -83,24 +93,32 @@
 						>Why Reconcile?</a
 					>
 				</div>
-<!--				<div-->
-<!--					class="hidden md:absolute md:inset-y-0 md:right-0 md:flex md:items-center md:justify-end"-->
-<!--				>-->
-<!--					<ul class="flex">-->
-<!--						<li class="mb-3 block py-2 lg:mb-0 lg:px-4">-->
-<!--							<a href="/login" title="Login" class="text-gray-700 hover:text-red-400">Login</a>-->
-<!--						</li>-->
-<!--						<li class="block py-2">-->
-<!--							<a-->
-<!--								href="/signup"-->
-<!--								title="Sign Up"-->
-<!--								class="mt-12 rounded border border-red-400 bg-red-400 px-4 py-3 font-semibold text-white hover:bg-red-600 hover:text-pink-100 lg:px-2 lg:py-2 lg:text-sm xl:px-4 xl:py-3 xl:text-base"-->
-<!--							>-->
-<!--								Sign Up-->
-<!--							</a>-->
-<!--						</li>-->
-<!--					</ul>-->
-<!--				</div>-->
+				<div
+					class="hidden md:absolute md:inset-y-0 md:right-0 md:flex md:items-center md:justify-end"
+				>
+					<ul class="flex">
+						<li class="mb-3 block py-2 lg:mb-0 lg:px-4">
+							<a 
+								href="/login" 
+								title="Login" 
+								class="text-white hover:text-blue-400"
+								on:click={showComingSoon}
+							>
+								Login
+							</a>
+						</li>
+						<li class="block py-2">
+							<a
+								href="/signup"
+								title="Sign Up"
+								class="mt-12 rounded border border-red-400 bg-red-400 px-4 py-3 font-semibold text-white hover:bg-red-600 hover:text-white lg:px-2 lg:py-2 lg:text-sm xl:px-4 xl:py-3 xl:text-base"
+								on:click={showComingSoon}
+							>
+								Sign Up
+							</a>
+						</li>
+					</ul>
+				</div>
 			</nav>
 		</div>
 
@@ -142,6 +160,12 @@
 						</div>
 						<div class="px-2 pt-2 pb-3">
 							<a
+								href="/"
+								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-blue-500 transition duration-150 ease-in-out hover:bg-gray-700 hover:text-blue-300 focus:bg-gray-700 focus:text-blue-300 focus:outline-none"
+							>
+								Home
+							</a>
+							<a
 								href="/features"
 								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-blue-500 transition duration-150 ease-in-out hover:bg-gray-700 hover:text-blue-300 focus:bg-gray-700 focus:text-blue-300 focus:outline-none"
 							>
@@ -175,13 +199,15 @@
 						<div>
 							<a
 								href="/login"
-								class="block w-full bg-gray-700 px-5 py-3 text-center font-medium text-white transition duration-150 ease-in-out hover:bg-red-600 hover:text-pink-100 focus:outline-none"
+								class="block w-full bg-gray-700 px-5 py-3 text-center font-medium text-white transition duration-150 ease-in-out hover:bg-gray-600 hover:text-white focus:outline-none"
+								on:click={showComingSoon}
 							>
 								Login
 							</a>
 							<a
 								href="/signup"
-								class="block w-full bg-red-400 px-5 py-3 text-center font-medium text-white transition duration-150 ease-in-out hover:bg-red-600 hover:text-pink-100 focus:outline-none"
+								class="block w-full bg-red-400 px-5 py-3 text-center font-medium text-white transition duration-150 ease-in-out hover:bg-red-600 hover:text-white focus:outline-none"
+								on:click={showComingSoon}
 							>
 								Sign Up
 							</a>

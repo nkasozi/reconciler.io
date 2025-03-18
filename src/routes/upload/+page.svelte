@@ -334,7 +334,7 @@
 	<h1
 		class="mb-8 px-8 text-2xl leading-tight font-semibold text-white sm:text-3xl md:text-5xl lg:px-0 lg:text-5xl xl:text-5xl"
 	>
-		<span class="font-extrabold text-red-500">Reconciliation</span> has <br /> never been so
+		<span class="font-extrabold text-green-500">Reconciliation</span> has <br /> never been so
 		<span class="animated-text font-extrabold text-blue-600">{currentText}</span>
 	</h1>
 
@@ -657,7 +657,7 @@
 				!comparisonFileData.isUploaded ||
 				!primaryFileData.parsedData ||
 				!comparisonFileData.parsedData}
-			class="reconcile-button mt-2 rounded border border-green-500 bg-green-500 px-6 py-3 font-semibold text-white hover:bg-green-600 hover:text-white"
+			class="btn-breathing mt-2 rounded-lg border-2 border-green-500 bg-green-500 px-6 py-3 font-semibold text-white hover:bg-green-600 hover:text-white transition-all duration-300 transform hover:scale-105"
 			class:opacity-50={!primaryFileData.isUploaded ||
 				!comparisonFileData.isUploaded ||
 				!primaryFileData.parsedData ||
@@ -685,6 +685,27 @@
 </div>
 
 <style>
+	/* Button animation */
+	@keyframes btn-breathing {
+		0% {
+			transform: scale(1);
+			box-shadow: 0 5px 15px rgba(46, 213, 115, 0.2);
+		}
+		50% {
+			transform: scale(1.03);
+			box-shadow: 0 10px 20px rgba(46, 213, 115, 0.4);
+		}
+		100% {
+			transform: scale(1);
+			box-shadow: 0 5px 15px rgba(46, 213, 115, 0.2);
+		}
+	}
+
+	.btn-breathing {
+		animation: btn-breathing 4s ease-in-out infinite;
+		box-shadow: 0 5px 15px rgba(46, 213, 115, 0.3);
+	}
+
 	/* Upload area styling */
 	.upload-area {
 		position: relative;

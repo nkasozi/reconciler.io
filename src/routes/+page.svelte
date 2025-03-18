@@ -45,17 +45,17 @@
 
 <div class="min-h-screen bg-gray-900 dark:bg-gray-900 text-white">
 <div class="container mx-auto pt-24 pb-2 text-center">
-	<div class="flex flex-col justify-center items-center min-h-[80vh]">
+	<div class="flex flex-col justify-start items-center min-h-[80vh] pt-28">
 		<h1
-			class="mb-8 px-8 text-2xl leading-tight font-semibold text-white sm:text-3xl md:text-5xl lg:px-0 lg:text-5xl xl:text-5xl"
+			class="mb-12 px-8 text-3xl leading-tight font-semibold text-white sm:text-4xl md:text-6xl lg:px-0 lg:text-6xl xl:text-7xl"
 		>
-			<span class="font-extrabold text-red-500">Reconciliation</span> has <br /> never been so
-			<span class="animated-text font-extrabold text-blue-600">{currentText}</span>
+			<span class="font-extrabold text-green-500">Reconciliation</span> has <br /> never been so
+			<span class="animated-text font-extrabold">{currentText}</span>
 		</h1>
 
-		<div class="error fraud mb-8 px-8 text-white sm:leading-loose lg:px-0">
+		<div class="error fraud mb-16 px-8 text-white sm:leading-loose lg:px-0">
 			<span
-				class="mr-4 text-lg leading-tight font-semibold sm:text-xl md:text-xl lg:text-xl xl:text-xl"
+				class="mr-4 text-xl leading-tight font-semibold sm:text-2xl md:text-2xl lg:text-2xl xl:text-2xl"
 			>
 				Detect Errors, Prevent Fraud, Confirm Balances.
 			</span>
@@ -64,32 +64,32 @@
 		<a
 			href="/upload"
 			title="Try It Now"
-			class="btn-bottom-animation rounded border border-green-500 bg-green-500 px-4 py-4 font-semibold text-white hover:bg-green-600 hover:text-pink-100 lg:px-4 lg:py-2 lg:text-sm xl:px-4 xl:py-3 xl:text-base"
+			class="btn-bottom-animation rounded-lg border-2 border-green-500 bg-green-500 px-8 py-5 text-lg font-bold text-white hover:bg-green-600 hover:text-white transition-all duration-300 transform hover:scale-105 lg:px-10 lg:py-4 xl:px-12 xl:py-5"
 		>
 			Try It Now For Free
 		</a>
 	</div>
 
 	<!-- Desktop SVG illustrations -->
-	<div class="mt-24 hidden md:block">
+	<div class="hidden md:block">
 		<img
 			src="/images/details.svg"
 			alt="Details illustration"
-			class="absolute top-0 right-0 mt-24 max-w-sm px-16 py-24"
+			class="absolute top-[60%] right-0 -translate-y-1/2 max-w-sm px-16 opacity-30 z-0"
 		/>
 	</div>
 
-	<div class="mt-24 hidden md:block">
+	<div class="hidden md:block">
 		<img
 			src="/images/reconcile.svg"
 			alt="Reconcile illustration"
-			class="absolute top-0 left-0 mt-24 max-w-xs px-16 py-24"
+			class="absolute top-[60%] left-0 -translate-y-1/2 max-w-xs px-16 opacity-30 z-0"
 		/>
 	</div>
 
 	<!-- Mobile SVG illustration -->
-	<div class="-mt-12 text-center md:hidden">
-		<img src="/images/details.svg" alt="Details illustration" class="mx-auto mt-2 max-w-sm px-4" />
+	<div class="text-center md:hidden mt-20">
+		<img src="/images/details.svg" alt="Details illustration" class="mx-auto max-w-sm px-4 opacity-30" />
 	</div>
 </div>
 </div>
@@ -97,43 +97,51 @@
 <style>
 	@keyframes btn-bottom-animation {
 		0% {
-			transform: translateY(-10px);
+			transform: translateY(-8px) scale(1);
+			box-shadow: 0 10px 25px rgba(46, 213, 115, 0.2);
 		}
 		50% {
-			transform: translateY(10px);
+			transform: translateY(8px) scale(1.05);
+			box-shadow: 0 15px 30px rgba(46, 213, 115, 0.4);
 		}
 		100% {
-			transform: translateY(-10px);
+			transform: translateY(-8px) scale(1);
+			box-shadow: 0 10px 25px rgba(46, 213, 115, 0.2);
 		}
 	}
 
 	.btn-bottom-animation {
-		animation: btn-bottom-animation 3s ease-in-out infinite;
+		animation: btn-bottom-animation 4s ease-in-out infinite;
+		box-shadow: 0 10px 25px rgba(46, 213, 115, 0.3);
 	}
 
 	.animated-text {
 		display: inline-block;
-		min-width: 100px;
+		min-width: 140px;
 		position: relative;
+		color: #63b3ed;
+		text-shadow: 0 0 15px rgba(99, 179, 237, 0.5);
 	}
 
 	.animated-text::after {
 		content: '';
 		position: absolute;
-		right: -5px;
+		right: -8px;
 		top: 0;
 		height: 100%;
-		border-right: 0.1em solid #e2e8f0;
-		animation: blink 1s step-end infinite;
+		border-right: 0.12em solid #63b3ed;
+		animation: blink 1.2s step-end infinite;
 	}
 
 	@keyframes blink {
 		from,
 		to {
 			border-color: transparent;
+			opacity: 0;
 		}
 		50% {
-			border-color: #e2e8f0;
+			border-color: #63b3ed;
+			opacity: 1;
 		}
 	}
 </style>

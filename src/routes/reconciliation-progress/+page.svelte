@@ -19,6 +19,8 @@
 	let startTime = $state(0);
 	let lastLogTimestamp = $state(0);
 	let stuckDetectionTimeout: number | null = null;
+	let hasFailures = $state(false); // Track if there are any failures
+	let failureCount = $state(0); // Count of failures
 
 	// Primary ID and comparison columns
 	let primaryIdPair = $state<ColumnPair>({
@@ -425,6 +427,16 @@
 		function finishReconciliation() {
 			isReconciliationComplete = true;
 			
+			// Check if there are any failures in the results and count them
+			hasFailures = false;
+			failureCount = 0;
+			for (const result of reconciliationResults) {
+				if (result && !result.matched) {
+					hasFailures = true;
+					failureCount++;
+				}
+			}
+			
 			// Add completion log
 			const completionLog = {
 				timestamp: Date.now() + Math.random(),
@@ -438,7 +450,9 @@
 						primaryFileColumn: 'Reconciliation Complete',
 						comparisonFileColumn: 'Summary',
 						primaryValue: `Processed ${totalRows} rows in ${formatTime((Date.now() - startTime) / 1000)}`,
-						comparisonValue: 'Click "Download Results" to download the reconciled file'
+						comparisonValue: hasFailures 
+							? 'Some mismatches found. You can download the results or analyze failures.'
+							: 'All records match! Click "Download Results" to download the reconciled file'
 					}
 				]
 			};
@@ -446,7 +460,7 @@
 			// Update reactively
 			matchingLogs = [completionLog, ...matchingLogs];
 			lastLogTimestamp = Date.now();
-			console.log("Added completion log");
+			console.log("Added completion log, hasFailures:", hasFailures);
 			
 			// Clear stuck detection timeout
 			if (stuckDetectionTimeout) {
@@ -467,6 +481,11 @@
 		}, 250); // Check every 250ms
 	}
 
+	// Get the count of failures in the reconciliation results
+	function getFailureCount(): number {
+		return failureCount;
+	}
+	
 	function formatTime(seconds: number): string {
 		// Handle invalid or very small values
 		if (!isFinite(seconds) || seconds <= 0) {
@@ -718,41 +737,59 @@
 	}
 </script>
 
+<div class="min-h-screen bg-gray-900 text-white py-8 relative">
+<!-- Desktop SVG illustrations (with lower opacity for background) -->
+<div class="hidden md:block">
+	<img
+		src="/images/details.svg"
+		alt="Details illustration"
+		class="absolute top-[60%] right-0 -translate-y-1/2 max-w-sm px-16 opacity-10 z-0"
+	/>
+</div>
+
+<div class="hidden md:block">
+	<img
+		src="/images/reconcile.svg"
+		alt="Reconcile illustration"
+		class="absolute top-[60%] left-0 -translate-y-1/2 max-w-xs px-16 opacity-10 z-0"
+	/>
+</div>
+
 <div class="container mx-auto max-w-5xl px-4 py-8">
-	<h1 class="mb-6 text-center text-3xl font-bold">
+	<h1 class="mb-6 text-center text-3xl font-bold text-white">
 		{#if isReconciliationComplete}
-			<span class="text-blue-600 dark:text-blue-600">Reconciliation Complete</span>
+			<span class="text-blue-400">Reconciliation Complete</span>
 		{:else}
-			<span class="text-foreground dark:text-dark-foreground">Reconciliation in Progress...</span>
+			<span class="text-white">Reconciliation in Progress...</span>
 		{/if}
 	</h1>
 
 	<!-- Files info -->
 	<div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-		<div class="dark:bg-dark-background rounded-lg bg-white p-4 shadow-md dark:shadow-gray-800">
-			<h2 class="mb-2 text-lg font-semibold text-foreground dark:text-dark-foreground">Primary File</h2>
-			<p classah="text-sm text-gray-600 dark:text-gray-400">{primaryFileName}</p>
+		<div class="rounded-lg bg-gray-800 p-4 shadow-md shadow-gray-800">
+			<h2 class="mb-2 text-lg font-semibold text-white">Primary File</h2>
+			<p class="text-sm text-gray-300">{primaryFileName}</p>
 		</div>
 
-		<div class="dark:bg-dark-background rounded-lg bg-white p-4 shadow-md dark:shadow-gray-800">
-			<h2 class="mb-2 text-lg font-semibold text-foreground dark:text-dark-foreground">Comparison File</h2>
-			<p class="text-sm text-gray-600 dark:text-gray-400">{comparisonFileName}</p>
+		<div class="rounded-lg bg-gray-800 p-4 shadow-md shadow-gray-800">
+			<h2 class="mb-2 text-lg font-semibold text-white">Comparison File</h2>
+			<p class="text-sm text-gray-300">{comparisonFileName}</p>
 		</div>
 	</div>
 
 	<!-- Progress section -->
-	<div class="dark:bg-dark-background mb-6 rounded-lg bg-white p-6 shadow-md dark:shadow-gray-800">
+	<div class="mb-6 rounded-lg bg-gray-800 p-6 shadow-md shadow-gray-800">
 		<div class="mb-4 flex items-center justify-between">
-			<h2 class="text-xl font-semibold text-foreground dark:text-dark-foreground">
+			<h2 class="text-xl font-semibold text-white">
 				Reconciliation Progress
 			</h2>
-			<span class="text-lg font-bold text-blue-600 dark:text-blue-400">{progressPercentage}%</span>
+			<span class="text-lg font-bold text-blue-400">{progressPercentage}%</span>
 		</div>
 
 		<!-- Progress bar -->
-		<div class="mb-4 h-5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+		<div class="mb-4 h-5 overflow-hidden rounded-full bg-gray-700">
 			<div
-				class="h-full rounded-full bg-blue-500 transition-all duration-500 ease-out dark:bg-blue-600"
+				class="h-full rounded-full bg-blue-500 transition-all duration-500 ease-out"
 				style="width: {progressPercentage}%"
 			></div>
 		</div>
@@ -760,119 +797,119 @@
 		<!-- Progress details -->
 		<div class="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
 			<div class="text-center">
-				<p class="text-sm text-foreground dark:text-dark-foreground">Processed</p>
-				<p class="text-xl font-semibold text-gray-600 dark:text-gray-400">
+				<p class="text-sm text-white">Processed</p>
+				<p class="text-xl font-semibold text-gray-300">
 					{processedRows.toLocaleString()} / {totalRows.toLocaleString()}
 				</p>
 			</div>
 
 			<div class="text-center">
-				<p class="text-sm text-foreground dark:text-dark-foreground">Speed</p>
-				<p class="text-xl font-semibold text-gray-600 dark:text-gray-400">
+				<p class="text-sm text-white">Speed</p>
+				<p class="text-xl font-semibold text-gray-300">
 					{matchingSpeed} rows/sec
 				</p>
 			</div>
 
 			<div class="text-center">
-				<p class="text-sm text-foreground dark:text-dark-foreground">Estimated time remaining</p>
-				<p class="text-xl font-semibold text-gray-600 dark:text-gray-400">{estimatedTimeLeft}</p>
+				<p class="text-sm text-white">Estimated time remaining</p>
+				<p class="text-xl font-semibold text-gray-300">{estimatedTimeLeft}</p>
 			</div>
 		</div>
 	</div>
 
 	<!-- Real-time logs section -->
-	<div class="dark:bg-dark-background rounded-lg bg-white p-6 shadow-md dark:shadow-gray-800">
-		<h2 class="mb-4 text-xl font-semibold text-foreground dark:text-dark-foreground">Matching Log</h2>
+	<div class="rounded-lg bg-gray-800 p-6 shadow-md shadow-gray-800">
+		<h2 class="mb-4 text-xl font-semibold text-white">Matching Log</h2>
 
 		<div class="max-h-96 overflow-y-auto">
 			{#if matchingLogs.length === 0}
-				<p class="py-4 text-center text-gray-500 dark:text-gray-400">
+				<p class="py-4 text-center text-gray-400">
 					Reconciliation process starting...
 				</p>
 			{:else}
-				<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-					<thead class="bg-gray-50 dark:bg-gray-700">
+				<table class="min-w-full divide-y divide-gray-700">
+					<thead class="bg-gray-700">
 						<tr>
 							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300"
+								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-300 uppercase"
 							>
 								Primary ID
 							</th>
 							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300"
+								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-300 uppercase"
 							>
 								Comparison ID
 							</th>
 							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300"
+								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-300 uppercase"
 							>
 								Status
 							</th>
 							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300"
+								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-300 uppercase"
 							>
 								Reason
 							</th>
 						</tr>
 					</thead>
-					<tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+					<tbody class="divide-y divide-gray-700 bg-gray-800">
 						{#each matchingLogs as log, index (index)}
-							<tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
-								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-800 dark:text-gray-200">
+							<tr class="hover:bg-gray-700">
+								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-200">
 									{log.primaryId}
 								</td>
-								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-800 dark:text-gray-200">
+								<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-200">
 									{log.comparisonId}
 								</td>
 								<td class="px-6 py-4 text-sm whitespace-nowrap">
 									{#if log.matched}
 										<span
-											class="rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-800 dark:bg-green-900 dark:text-green-200"
+											class="rounded-full bg-green-900 px-2 py-1 text-xs font-semibold text-green-200"
 										>
 											Matched
 										</span>
 									{:else}
 										<span
-											class="rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-800 dark:bg-red-900 dark:text-red-200"
+											class="rounded-full bg-red-900 px-2 py-1 text-xs font-semibold text-red-200"
 										>
 											Differences
 										</span>
 									{/if}
 								</td>
-								<td class="px-6 py-4 text-sm text-gray-800 dark:text-gray-200">
+								<td class="px-6 py-4 text-sm text-gray-200">
 									{#if log.reasons.length > 0}
 										<details>
-											<summary class="cursor-pointer text-blue-600 dark:text-blue-400">
+											<summary class="cursor-pointer text-blue-400">
 												{log.reasons.length}
 												{log.reasons.length === 1 ? 'reason' : 'reasons'}
 											</summary>
 											<div class="mt-2">
 												{#each log.reasons as reason}
-													<div class="mb-1 rounded bg-gray-50 p-2 dark:bg-gray-700">
+													<div class="mb-1 rounded bg-gray-700 p-2">
 														<p class="font-semibold">
 															{reason.primaryFileColumn} / {reason.comparisonFileColumn}
 														</p>
 														<div class="mt-1 grid grid-cols-1 gap-2">
 															<div>
-																<span class="text-xs text-gray-500 dark:text-gray-400"
+																<span class="text-xs text-gray-400"
 																	>Primary Row:</span
 																>
 																<span class="ml-1 text-sm">{reason.primaryFileRow}</span>
 															</div>
 															<div>
-																<span class="text-xs text-gray-500 dark:text-gray-400"
+																<span class="text-xs text-gray-400"
 																	>Comparison Row:</span
 																>
 																<span class="ml-1 text-sm">{reason.comparisonFileRow}</span>
 															</div>
 															<div>
-																<span class="text-xs text-gray-500 dark:text-gray-400"
+																<span class="text-xs text-gray-400"
 																	>Primary Value:</span
 																>
 																<span class="ml-1 text-sm">{reason.primaryValue}</span>
 															</div>
 															<div>
-																<span class="text-xs text-gray-500 dark:text-gray-400"
+																<span class="text-xs text-gray-400"
 																	>Comparison Value:</span
 																>
 																<span class="ml-1 text-sm">{reason.comparisonValue}</span>
@@ -883,7 +920,7 @@
 											</div>
 										</details>
 									{:else}
-										<span class="text-gray-500 dark:text-gray-400">-</span>
+										<span class="text-gray-400">-</span>
 									{/if}
 								</td>
 							</tr>
@@ -893,25 +930,62 @@
 			{/if}
 		</div>
 		{#if isReconciliationComplete}
-			<div class="mt-6 flex justify-center space-x-4">
+			<!-- Summary Title -->
+			<div class="mt-6 mb-4 text-center">
+				<h3 class="text-xl font-semibold text-white mb-2">Reconciliation Results Summary</h3>
+				<p class="text-gray-300">
+					{totalRows.toLocaleString()} total records processed. 
+					<span class="{hasFailures ? 'text-yellow-400' : 'text-green-400'} font-medium">
+						{hasFailures ? 
+							`${(totalRows - failureCount).toLocaleString()} matched successfully, ${failureCount.toLocaleString()} failures detected.` : 
+							'All records matched successfully!'}
+					</span>
+				</p>
+			</div>
+			
+			<div class="mt-4 flex justify-center space-x-4">
 				<button
 					on:click={downloadResults}
-					class="rounded border border-green-500 bg-green-500 px-6 py-3 font-semibold text-white transition-colors duration-200 hover:bg-green-600 hover:text-white dark:border-green-600 dark:bg-green-600 dark:hover:bg-green-700"
+					class="btn-breathing rounded-lg border-2 border-green-500 bg-green-500 px-6 py-3 font-semibold text-white transition-all duration-300 transform hover:scale-105 hover:bg-green-600 hover:text-white"
 				>
 					Download Results
 				</button>
+				{#if hasFailures}
 				<button
 					on:click={analyzeFailures}
-					class="rounded border border-blue-500 bg-blue-500 px-6 py-3 font-semibold text-white transition-colors duration-200 hover:bg-blue-600 hover:text-white dark:border-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700"
+					class="btn-breathing rounded-lg border-2 border-blue-500 bg-blue-500 px-6 py-3 font-semibold text-white transition-all duration-300 transform hover:scale-105 hover:bg-blue-600 hover:text-white"
 				>
 					Analyze Failures
 				</button>
+				{/if}
 			</div>
 		{/if}
 	</div>
 </div>
+</div>
 
 <style>
+	/* Button animation */
+	@keyframes btn-breathing {
+		0% {
+			transform: scale(1);
+			box-shadow: 0 5px 15px rgba(46, 213, 115, 0.2);
+		}
+		50% {
+			transform: scale(1.03);
+			box-shadow: 0 10px 20px rgba(46, 213, 115, 0.4);
+		}
+		100% {
+			transform: scale(1);
+			box-shadow: 0 5px 15px rgba(46, 213, 115, 0.2);
+		}
+	}
+
+	.btn-breathing {
+		animation: btn-breathing 4s ease-in-out infinite;
+		box-shadow: 0 5px 15px rgba(46, 213, 115, 0.3);
+	}
+
 	/* Animation for progress bar */
 	@keyframes pulse {
 		0%,

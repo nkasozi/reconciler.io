@@ -6,6 +6,94 @@
 		ColumnPair,
 		RowMatchResult
 	} from '$lib/utils/reconciliation';
+	
+	// Function to download reconciliation results as CSV
+	function downloadResults() {
+		// Get data from store
+		const data = reconciliationStore.getSnapshot();
+		if (!data || !data.reconciliationResults) {
+			alert('No reconciliation data found');
+			return;
+		}
+		
+		// Prepare the results
+		const primaryData = data.primaryFileData;
+		if (!primaryData || !primaryData.rows) {
+			alert('Primary file data is missing');
+			return;
+		}
+
+		// Create results with status and reasons
+		const results = primaryData.rows.map(row => {
+			// Find the reconciliation result for this row
+			const idColumnName = data.reconciliationConfig?.primaryIdPair.primaryColumn;
+			if (!idColumnName) return { ...row, '__ReconciliationStatus': 'Error', '__ReconciliationReason': 'Missing configuration' };
+			
+			const id = row[idColumnName];
+			const matchResult = data.reconciliationResults.matches.find(m => m.idValues.primary === id);
+			
+			let status = 'Not Found';
+			let reason = 'No matching record in comparison file';
+			
+			if (matchResult) {
+				if (matchResult.matchScore === 100) {
+					status = 'Match';
+					reason = 'All fields match';
+				} else {
+					status = 'Partial Match';
+					
+					// Create detailed reason text
+					const mismatchedColumns = [];
+					for (const [col, result] of Object.entries(matchResult.comparisonResults)) {
+						if (!result.match) {
+							mismatchedColumns.push(`${col}: ${result.primaryValue} ≠ ${result.comparisonValue}`);
+						}
+					}
+					
+					reason = mismatchedColumns.join('; ');
+				}
+			}
+			
+			return {
+				...row,
+				'__ReconciliationStatus': status,
+				'__ReconciliationReason': reason
+			};
+		});
+		
+		// Convert to CSV
+		const headers = Object.keys(results[0]);
+		let csvContent = headers.join(',') + '\n';
+		
+		results.forEach(row => {
+			const values = headers.map(header => {
+				const val = row[header] || '';
+				// Escape values with commas or quotes
+				if (val.toString().includes(',') || val.toString().includes('"')) {
+					return `"${val.toString().replace(/"/g, '""')}"`;
+				}
+				return val;
+			});
+			csvContent += values.join(',') + '\n';
+		});
+		
+		// Create download link
+		const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+		
+		// Set download attributes
+		const fileName = `reconciled_results_${new Date().toISOString().slice(0,10)}.csv`;
+		link.setAttribute('href', url);
+		link.setAttribute('download', fileName);
+		link.style.visibility = 'hidden';
+		
+		// Trigger download
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		URL.revokeObjectURL(url);
+	}
 
 	// Record tracking state
 	let currentFailureIndex = $state(0);
@@ -182,8 +270,8 @@
 			: activeColumnPair.primaryColumn;
 
 		if (columnName === columnToCheck) {
-			// This is the highlighted cell
-			return "bg-red-100 dark:bg-red-900/20 font-medium";
+			// This is the highlighted cell with more vibrant color
+			return "bg-red-500/30 text-red-200 font-bold";
 		}
 
 		return "";
@@ -197,8 +285,26 @@
 	}
 </script>
 
+<div class="min-h-screen bg-gray-900 text-white py-8 relative">
+<!-- Desktop SVG illustrations (with lower opacity for background) -->
+<div class="hidden md:block">
+	<img
+		src="/images/details.svg"
+		alt="Details illustration"
+		class="absolute top-[60%] right-0 -translate-y-1/2 max-w-sm px-16 opacity-10 z-0"
+	/>
+</div>
+
+<div class="hidden md:block">
+	<img
+		src="/images/reconcile.svg"
+		alt="Reconcile illustration"
+		class="absolute top-[60%] left-0 -translate-y-1/2 max-w-xs px-16 opacity-10 z-0"
+	/>
+</div>
+
 <div class="container mx-auto max-w-7xl px-4 py-8">
-	<h1 class="text-foreground dark:text-dark-foreground mb-6 text-center text-3xl font-bold">
+	<h1 class="mb-6 text-center text-3xl font-bold text-white">
 		Reconciliation Failure Analysis
 	</h1>
 
@@ -207,19 +313,19 @@
 		<div class="flex items-center justify-center py-12">
 			<div class="flex flex-col items-center">
 				<div
-					class="border-primary dark:border-dark-primary h-12 w-12 animate-spin rounded-full border-4 border-t-4 border-t-transparent dark:border-t-transparent"
+					class="h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-4 border-t-transparent"
 				></div>
-				<p class="mt-4 text-gray-600 dark:text-gray-400">Loading reconciliation data...</p>
+				<p class="mt-4 text-gray-300">Loading reconciliation data...</p>
 			</div>
 		</div>
 	{:else if errorMessage}
 		<!-- Error state -->
 		<div class="mx-auto mb-6 max-w-2xl">
-			<div class="rounded-md bg-red-50 p-4 dark:bg-red-900/20">
+			<div class="rounded-md bg-red-900/30 p-4">
 				<div class="flex">
 					<div class="ml-3">
-						<h3 class="text-sm font-medium text-red-800 dark:text-red-400">Error</h3>
-						<div class="mt-2 text-sm text-red-700 dark:text-red-300">
+						<h3 class="text-sm font-medium text-red-300">Error</h3>
+						<div class="mt-2 text-sm text-red-200">
 							<p>{errorMessage}</p>
 						</div>
 					</div>
@@ -228,12 +334,12 @@
 		</div>
 	{:else}
 		<!-- Results stats -->
-		<div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
-			<div class="dark:bg-dark-background rounded-lg bg-white p-4 shadow dark:shadow-gray-800">
+		<div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+			<div class="rounded-lg bg-gray-800 p-4 shadow">
 				<div class="flex items-center">
-					<div class="flex-shrink-0 rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+					<div class="flex-shrink-0 rounded-md bg-blue-900/30 p-3">
 						<svg
-							class="h-6 w-6 text-blue-600 dark:text-blue-400"
+							class="h-6 w-6 text-blue-400"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
@@ -248,19 +354,19 @@
 						</svg>
 					</div>
 					<div class="ml-5">
-						<p class="text-sm font-medium text-gray-800 dark:text-gray-800">Total Records</p>
-						<p class="mt-1 text-xl font-semibold text-gray-800 dark:text-gray-800">
+						<p class="text-sm font-medium text-gray-300">Total Records</p>
+						<p class="mt-1 text-xl font-semibold text-white">
 							{summaryStats.totalRecords}
 						</p>
 					</div>
 				</div>
 			</div>
 
-			<div class="dark:bg-dark-background rounded-lg bg-white p-4 shadow dark:shadow-gray-800">
+			<div class="rounded-lg bg-gray-800 p-4 shadow">
 				<div class="flex items-center">
-					<div class="flex-shrink-0 rounded-md bg-green-100 p-3 dark:bg-green-900/30">
+					<div class="flex-shrink-0 rounded-md bg-green-900/30 p-3">
 						<svg
-							class="h-6 w-6 text-green-600 dark:text-green-400"
+							class="h-6 w-6 text-green-400"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
@@ -275,46 +381,19 @@
 						</svg>
 					</div>
 					<div class="ml-5">
-						<p class="text-sm font-medium text-gray-800 dark:text-gray-800">Matched</p>
-						<p class="mt-1 text-xl font-semibold text-gray-800 dark:text-gray-800">
+						<p class="text-sm font-medium text-gray-300">Matched</p>
+						<p class="mt-1 text-xl font-semibold text-white">
 							{summaryStats.matchedRecords}
 						</p>
 					</div>
 				</div>
 			</div>
 
-			<div class="dark:bg-dark-background rounded-lg bg-white p-4 shadow dark:shadow-gray-800">
+			<div class="rounded-lg bg-gray-800 p-4 shadow">
 				<div class="flex items-center">
-					<div class="flex-shrink-0 rounded-md bg-yellow-100 p-3 dark:bg-yellow-900/30">
+					<div class="flex-shrink-0 rounded-md bg-red-900/30 p-3">
 						<svg
-							class="h-6 w-6 text-yellow-600 dark:text-yellow-400"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							xmlns="http://www.w3.org/2000/svg"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-							></path>
-						</svg>
-					</div>
-					<div class="ml-5">
-						<p class="text-sm font-medium text-gray-800 dark:text-gray-800">Partial Matches</p>
-						<p class="mt-1 text-xl font-semibold text-gray-800 dark:text-gray-800">
-							{summaryStats.partialMatchRecords}
-						</p>
-					</div>
-				</div>
-			</div>
-
-			<div class="dark:bg-dark-background rounded-lg bg-white p-4 shadow dark:shadow-gray-800">
-				<div class="flex items-center">
-					<div class="flex-shrink-0 rounded-md bg-red-100 p-3 dark:bg-red-900/30">
-						<svg
-							class="h-6 w-6 text-red-600 dark:text-red-400"
+							class="h-6 w-6 text-red-400"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
@@ -329,9 +408,9 @@
 						</svg>
 					</div>
 					<div class="ml-5">
-						<p class="text-sm font-medium text-gray-800 dark:text-gray-800">Unmatched</p>
-						<p class="mt-1 text-xl font-semibold text-gray-800 dark:text-gray-800">
-							{summaryStats.unmatchedRecords}
+						<p class="text-sm font-medium text-gray-300">Failures</p>
+						<p class="mt-1 text-xl font-semibold text-white">
+							{summaryStats.partialMatchRecords + summaryStats.unmatchedRecords}
 						</p>
 					</div>
 				</div>
@@ -377,12 +456,12 @@
 					</div>
 
 					<div>
-						<!-- Back to progress button -->
+						<!-- Download results button -->
 						<button 
-							on:click={() => goto('/reconciliation-progress')}
-							class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors dark:bg-blue-600 dark:hover:bg-blue-700"
+							on:click={downloadResults}
+							class="btn-breathing rounded-lg border-2 border-green-500 bg-green-500 px-4 py-2 font-semibold text-white transition-all duration-300 transform hover:scale-105 hover:bg-green-600"
 						>
-							Back to Reconciliation Progress
+							Download Results
 						</button>
 					</div>
 				</div>
@@ -471,10 +550,10 @@
 				<p class="mt-2 text-green-600 dark:text-green-400">All records matched successfully!</p>
 				<div class="mt-4">
 					<button 
-						on:click={() => goto('/reconciliation-progress')}
-						class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors dark:bg-blue-600 dark:hover:bg-blue-700"
+						on:click={downloadResults}
+						class="btn-breathing rounded-lg border-2 border-green-500 bg-green-500 px-4 py-2 font-semibold text-white transition-all duration-300 transform hover:scale-105 hover:bg-green-600"
 					>
-						Back to Reconciliation Progress
+						Download Results
 					</button>
 				</div>
 			</div>
@@ -568,8 +647,30 @@
 		</div>
 	{/if}
 </div>
+</div>
 
 <style>
+	/* Button animation */
+	@keyframes btn-breathing {
+		0% {
+			transform: scale(1);
+			box-shadow: 0 5px 15px rgba(46, 213, 115, 0.2);
+		}
+		50% {
+			transform: scale(1.03);
+			box-shadow: 0 10px 20px rgba(46, 213, 115, 0.4);
+		}
+		100% {
+			transform: scale(1);
+			box-shadow: 0 5px 15px rgba(46, 213, 115, 0.2);
+		}
+	}
+
+	.btn-breathing {
+		animation: btn-breathing 4s ease-in-out infinite;
+		box-shadow: 0 5px 15px rgba(46, 213, 115, 0.3);
+	}
+	
 	/* Add smooth scrolling to tables */
 	#primary-table, #comparison-table {
 		scroll-behavior: smooth;

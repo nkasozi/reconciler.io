@@ -7,13 +7,29 @@
   <meta name="description" content="Powerful features for seamless data reconciliation across all your systems." />
 </svelte:head>
 
-<div class="bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800 py-16">
+<div class="min-h-screen bg-gray-900 text-white py-16 relative">
+  <!-- Desktop SVG illustrations -->
+  <div class="hidden md:block">
+    <img
+      src="/images/details.svg"
+      alt="Details illustration"
+      class="absolute top-1/2 right-0 -translate-y-1/2 max-w-sm px-16 opacity-20"
+    />
+  </div>
+
+  <div class="hidden md:block">
+    <img
+      src="/images/reconcile.svg"
+      alt="Reconcile illustration"
+      class="absolute top-1/2 left-0 -translate-y-1/2 max-w-xs px-16 opacity-20"
+    />
+  </div>
   <div class="container mx-auto px-4">
     <div class="text-center mb-16">
-      <h1 class="text-4xl md:text-5xl font-bold mb-4 text-gray-900 dark:text-white">
-        Powerful Features for <span class="text-blue-600 dark:text-blue-400">Modern Data Reconciliation</span>
+      <h1 class="text-4xl md:text-5xl font-bold mb-4 text-white">
+        Powerful Features for <span class="text-blue-400">Modern Data Reconciliation</span>
       </h1>
-      <p class="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
+      <p class="text-xl text-gray-300 max-w-3xl mx-auto">
         From intelligent column mapping to detailed discrepancy analysis, our tool empowers you to reconcile data with confidence.
       </p>
     </div>
