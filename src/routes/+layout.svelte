@@ -40,7 +40,7 @@
 </script>
 
 <!-- Main layout with navigation -->
-<div class="h-screen bg-gray-900 text-white">
+<div class="min-h-screen bg-gray-900 text-white overflow-x-hidden">
 	<!-- Navigation -->
 	<nav class="mx-auto w-full max-w-xl pt-8 md:max-w-2xl lg:max-w-4xl xl:max-w-5xl">
 		<div class="container px-8 py-2 lg:px-0">
