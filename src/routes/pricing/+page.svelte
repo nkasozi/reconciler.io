@@ -59,7 +59,7 @@
 	/>
 </svelte:head>
 
-<div class="bg-gradient-to-b from-blue-50 to-white py-16 dark:from-gray-900 dark:to-gray-800">
+<div class="bg-blue-50 py-16 dark:bg-gray-900">
 	<div class="container mx-auto px-4">
 		<!-- Upgrade notice -->
 		{#if upgradeNotice}
@@ -583,19 +583,19 @@
 					<thead>
 						<tr class="bg-gray-50 dark:bg-gray-700">
 							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300"
+								class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300"
 								>Feature</th
 							>
 							<th
-								class="px-6 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300"
+								class="px-6 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300"
 								>Free</th
 							>
 							<th
-								class="px-6 py-3 text-center text-xs font-medium tracking-wider text-blue-600 uppercase dark:text-blue-400"
+								class="px-6 py-3 text-center text-xs font-medium uppercase tracking-wider text-blue-600 dark:text-blue-400"
 								>Pro</th
 							>
 							<th
-								class="px-6 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase dark:text-gray-300"
+								class="px-6 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-300"
 								>Enterprise</th
 							>
 						</tr>

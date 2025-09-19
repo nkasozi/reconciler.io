@@ -317,9 +317,9 @@
 </script>
 
 <div class="min-h-screen bg-gray-900 text-white dark:bg-gray-900">
-	<div class="container mx-auto pt-16 pb-2 text-center">
+	<div class="container mx-auto pb-2 pt-16 text-center">
 		<h1
-			class="mb-8 px-8 text-2xl leading-tight font-semibold text-white sm:text-3xl md:text-5xl lg:px-0 lg:text-5xl xl:text-5xl"
+			class="mb-8 px-8 text-2xl font-semibold leading-tight text-white sm:text-3xl md:text-5xl lg:px-0 lg:text-5xl xl:text-5xl"
 		>
 			<span class="font-extrabold text-green-500">Reconciliation</span> has <br /> never been so
 			<span class="animated-text font-extrabold text-blue-600">{currentText}</span>
@@ -345,7 +345,7 @@
 								</p>
 							</div>
 							<button
-								class="focus:ring-opacity-50 flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600 focus:ring-2 focus:ring-red-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-red-900 dark:hover:text-red-400"
+								class="flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-red-900 dark:hover:text-red-400"
 								aria-label="Remove file"
 								title="Remove file"
 								on:click={() => removeFile('primary')}
@@ -408,7 +408,7 @@
 						class="preview-container overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800"
 					>
 						<div
-							class="border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-medium tracking-wider text-gray-600 uppercase dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300"
+							class="border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-medium uppercase tracking-wider text-gray-600 dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300"
 						>
 							File Preview (First 20 rows)
 						</div>
@@ -418,7 +418,7 @@
 									<tr class="bg-gray-50 dark:bg-gray-700">
 										{#each primaryFileData.parsedData.columns as column}
 											<th
-												class="min-w-[150px] border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold tracking-wider whitespace-nowrap text-gray-600 uppercase dark:border-gray-700 dark:text-gray-300"
+												class="min-w-[150px] whitespace-nowrap border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:border-gray-700 dark:text-gray-300"
 											>
 												{column}
 											</th>
@@ -434,7 +434,7 @@
 										>
 											{#each primaryFileData.parsedData.columns as column}
 												<td
-													class="max-w-[300px] min-w-[150px] overflow-hidden px-4 py-2 text-sm text-ellipsis whitespace-nowrap text-gray-600 dark:text-gray-300"
+													class="min-w-[150px] max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-2 text-sm text-gray-600 dark:text-gray-300"
 												>
 													{row[column] || ''}
 												</td>
@@ -468,7 +468,7 @@
 								</p>
 							</div>
 							<button
-								class="focus:ring-opacity-50 flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600 focus:ring-2 focus:ring-red-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-red-900 dark:hover:text-red-400"
+								class="flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-red-900 dark:hover:text-red-400"
 								aria-label="Remove file"
 								title="Remove file"
 								on:click={() => removeFile('comparison')}
@@ -531,7 +531,7 @@
 						class="preview-container overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800"
 					>
 						<div
-							class="border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-medium tracking-wider text-gray-600 uppercase dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300"
+							class="border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-medium uppercase tracking-wider text-gray-600 dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300"
 						>
 							File Preview (First 20 rows)
 						</div>
@@ -541,7 +541,7 @@
 									<tr class="bg-gray-50 dark:bg-gray-700">
 										{#each comparisonFileData.parsedData.columns as column}
 											<th
-												class="min-w-[150px] border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold tracking-wider whitespace-nowrap text-gray-600 uppercase dark:border-gray-700 dark:text-gray-300"
+												class="min-w-[150px] whitespace-nowrap border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:border-gray-700 dark:text-gray-300"
 											>
 												{column}
 											</th>
@@ -557,7 +557,7 @@
 										>
 											{#each comparisonFileData.parsedData.columns as column}
 												<td
-													class="max-w-[300px] min-w-[150px] overflow-hidden px-4 py-2 text-sm text-ellipsis whitespace-nowrap text-gray-600 dark:text-gray-300"
+													class="min-w-[150px] max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-2 text-sm text-gray-600 dark:text-gray-300"
 												>
 													{row[column] || ''}
 												</td>
@@ -676,21 +676,17 @@
 	@keyframes btn-breathing {
 		0% {
 			transform: scale(1);
-			box-shadow: 0 5px 15px rgba(46, 213, 115, 0.2);
 		}
 		50% {
 			transform: scale(1.03);
-			box-shadow: 0 10px 20px rgba(46, 213, 115, 0.4);
 		}
 		100% {
 			transform: scale(1);
-			box-shadow: 0 5px 15px rgba(46, 213, 115, 0.2);
 		}
 	}
 
 	.btn-breathing {
 		animation: btn-breathing 4s ease-in-out infinite;
-		box-shadow: 0 5px 15px rgba(46, 213, 115, 0.3);
 	}
 
 	/* Upload area styling */

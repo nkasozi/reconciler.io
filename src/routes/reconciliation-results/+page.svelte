@@ -299,7 +299,7 @@
 		<img
 			src="/images/details.svg"
 			alt="Details illustration"
-			class="absolute top-[60%] right-0 z-0 max-w-sm -translate-y-1/2 px-16 opacity-10"
+			class="absolute right-0 top-[60%] z-0 max-w-sm -translate-y-1/2 px-16 opacity-10"
 		/>
 	</div>
 
@@ -307,7 +307,7 @@
 		<img
 			src="/images/reconcile.svg"
 			alt="Reconcile illustration"
-			class="absolute top-[60%] left-0 z-0 max-w-xs -translate-y-1/2 px-16 opacity-10"
+			class="absolute left-0 top-[60%] z-0 max-w-xs -translate-y-1/2 px-16 opacity-10"
 		/>
 	</div>
 
@@ -520,23 +520,23 @@
 										<thead class="bg-gray-50 dark:bg-gray-800">
 											<tr>
 												<th
-													class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase dark:text-gray-400"
+													class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"
 													>Primary Column</th
 												>
 												<th
-													class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase dark:text-gray-400"
+													class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"
 													>Primary Value</th
 												>
 												<th
-													class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase dark:text-gray-400"
+													class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"
 													>Comparison Column</th
 												>
 												<th
-													class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase dark:text-gray-400"
+													class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"
 													>Comparison Value</th
 												>
 												<th
-													class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase dark:text-gray-400"
+													class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"
 													>Match</th
 												>
 											</tr>
@@ -631,7 +631,7 @@
 									<tr>
 										{#each Object.keys(primaryData[0]) as column}
 											<th
-												class="px-3 py-3 text-left text-xs font-medium tracking-wider whitespace-nowrap text-gray-500 uppercase dark:text-gray-400"
+												class="whitespace-nowrap px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
 											>
 												{column}
 											</th>
@@ -647,12 +647,12 @@
 											id="primary-table-row-{rowId}"
 											class="{i % 2 === 0
 												? 'bg-white dark:bg-gray-900'
-												: 'bg-gray-50 dark:bg-gray-800'} 
+												: 'bg-gray-50 dark:bg-gray-800'}
 										{isActiveRow(rowId) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}"
 										>
 											{#each Object.entries(row) as [column, value]}
 												<td
-													class="px-3 py-2 text-sm whitespace-nowrap text-gray-500 dark:text-gray-400 {getCellClass(
+													class="whitespace-nowrap px-3 py-2 text-sm text-gray-500 dark:text-gray-400 {getCellClass(
 														rowId,
 														column
 													)}"
@@ -688,7 +688,7 @@
 									<tr>
 										{#each Object.keys(comparisonData[0]) as column}
 											<th
-												class="px-3 py-3 text-left text-xs font-medium tracking-wider whitespace-nowrap text-gray-500 uppercase dark:text-gray-400"
+												class="whitespace-nowrap px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
 											>
 												{column}
 											</th>
@@ -704,12 +704,12 @@
 											id="comparison-table-row-{rowId}"
 											class="{i % 2 === 0
 												? 'bg-white dark:bg-gray-900'
-												: 'bg-gray-50 dark:bg-gray-800'} 
+												: 'bg-gray-50 dark:bg-gray-800'}
 										{isActiveRow(rowId, true) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}"
 										>
 											{#each Object.entries(row) as [column, value]}
 												<td
-													class="px-3 py-2 text-sm whitespace-nowrap text-gray-500 dark:text-gray-400 {getCellClass(
+													class="whitespace-nowrap px-3 py-2 text-sm text-gray-500 dark:text-gray-400 {getCellClass(
 														rowId,
 														column,
 														true
@@ -739,21 +739,17 @@
 	@keyframes btn-breathing {
 		0% {
 			transform: scale(1);
-			box-shadow: 0 5px 15px rgba(46, 213, 115, 0.2);
 		}
 		50% {
 			transform: scale(1.03);
-			box-shadow: 0 10px 20px rgba(46, 213, 115, 0.4);
 		}
 		100% {
 			transform: scale(1);
-			box-shadow: 0 5px 15px rgba(46, 213, 115, 0.2);
 		}
 	}
 
 	.btn-breathing {
 		animation: btn-breathing 4s ease-in-out infinite;
-		box-shadow: 0 5px 15px rgba(46, 213, 115, 0.3);
 	}
 
 	/* Add smooth scrolling to tables */

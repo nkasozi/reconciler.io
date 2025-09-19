@@ -777,7 +777,7 @@
 		<img
 			src="/images/details.svg"
 			alt="Details illustration"
-			class="absolute top-[60%] right-0 z-0 max-w-sm -translate-y-1/2 px-16 opacity-10"
+			class="absolute right-0 top-[60%] z-0 max-w-sm -translate-y-1/2 px-16 opacity-10"
 		/>
 	</div>
 
@@ -785,7 +785,7 @@
 		<img
 			src="/images/reconcile.svg"
 			alt="Reconcile illustration"
-			class="absolute top-[60%] left-0 z-0 max-w-xs -translate-y-1/2 px-16 opacity-10"
+			class="absolute left-0 top-[60%] z-0 max-w-xs -translate-y-1/2 px-16 opacity-10"
 		/>
 	</div>
 
@@ -861,22 +861,22 @@
 						<thead class="bg-gray-700">
 							<tr>
 								<th
-									class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-300 uppercase"
+									class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
 								>
 									Primary ID
 								</th>
 								<th
-									class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-300 uppercase"
+									class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
 								>
 									Comparison ID
 								</th>
 								<th
-									class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-300 uppercase"
+									class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
 								>
 									Status
 								</th>
 								<th
-									class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-300 uppercase"
+									class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
 								>
 									Reason
 								</th>
@@ -885,13 +885,13 @@
 						<tbody class="divide-y divide-gray-700 bg-gray-800">
 							{#each matchingLogs as log, index (index)}
 								<tr class="hover:bg-gray-700">
-									<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-200">
+									<td class="whitespace-nowrap px-6 py-4 text-sm text-gray-200">
 										{log.primaryId}
 									</td>
-									<td class="px-6 py-4 text-sm whitespace-nowrap text-gray-200">
+									<td class="whitespace-nowrap px-6 py-4 text-sm text-gray-200">
 										{log.comparisonId}
 									</td>
-									<td class="px-6 py-4 text-sm whitespace-nowrap">
+									<td class="whitespace-nowrap px-6 py-4 text-sm">
 										{#if log.matched}
 											<span
 												class="rounded-full bg-green-900 px-2 py-1 text-xs font-semibold text-green-200"
@@ -953,7 +953,7 @@
 			</div>
 			{#if isReconciliationComplete}
 				<!-- Summary Title -->
-				<div class="mt-6 mb-4 text-center">
+				<div class="mb-4 mt-6 text-center">
 					<h3 class="mb-2 text-xl font-semibold text-white">Reconciliation Results Summary</h3>
 					<p class="text-gray-300">
 						{totalRows.toLocaleString()} total records processed.
@@ -991,21 +991,17 @@
 	@keyframes btn-breathing {
 		0% {
 			transform: scale(1);
-			box-shadow: 0 5px 15px rgba(46, 213, 115, 0.2);
 		}
 		50% {
 			transform: scale(1.03);
-			box-shadow: 0 10px 20px rgba(46, 213, 115, 0.4);
 		}
 		100% {
 			transform: scale(1);
-			box-shadow: 0 5px 15px rgba(46, 213, 115, 0.2);
 		}
 	}
 
 	.btn-breathing {
 		animation: btn-breathing 4s ease-in-out infinite;
-		box-shadow: 0 5px 15px rgba(46, 213, 115, 0.3);
 	}
 
 	/* Animation for progress bar */

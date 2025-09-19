@@ -44,10 +44,10 @@
 </script>
 
 <div class="min-h-screen bg-gray-900 text-white dark:bg-gray-900">
-	<div class="container mx-auto pt-24 pb-2 text-center">
+	<div class="container mx-auto pb-2 pt-24 text-center">
 		<div class="flex min-h-[80vh] flex-col items-center justify-start pt-28">
 			<h1
-				class="mb-12 px-8 text-3xl leading-tight font-semibold text-white sm:text-4xl md:text-6xl lg:px-0 lg:text-6xl xl:text-7xl"
+				class="mb-12 px-8 text-3xl font-semibold leading-tight text-white sm:text-4xl md:text-6xl lg:px-0 lg:text-6xl xl:text-7xl"
 			>
 				<span class="font-extrabold text-green-500">Reconciliation</span> has <br /> never been so
 				<span class="animated-text font-extrabold">{currentText}</span>
@@ -55,9 +55,11 @@
 
 			<div class="error fraud mb-16 px-8 text-white sm:leading-loose lg:px-0">
 				<span
-					class="mr-4 text-xl leading-tight font-semibold sm:text-2xl md:text-2xl lg:text-2xl xl:text-2xl"
+					class="mr-4 text-xl font-semibold leading-tight sm:text-2xl md:text-2xl lg:text-2xl xl:text-2xl"
 				>
-					Detect Errors, Prevent Fraud, Confirm Balances.
+					Detect Errors, Prevent Fraud, Find Discrepancies. <br />
+					Lets handle your Reconciliation with Confidence.<br />
+					Dont Guess but Be 100% sure your Financial Transactions are Accurate. <br />
 				</span>
 			</div>
 
@@ -75,7 +77,7 @@
 			<img
 				src="/images/details.svg"
 				alt="Details illustration"
-				class="absolute top-[60%] right-0 z-0 max-w-sm -translate-y-1/2 px-16 opacity-30"
+				class="absolute right-0 top-[60%] z-0 max-w-sm -translate-y-1/2 px-16 opacity-30"
 			/>
 		</div>
 
@@ -83,7 +85,7 @@
 			<img
 				src="/images/reconcile.svg"
 				alt="Reconcile illustration"
-				class="absolute top-[60%] left-0 z-0 max-w-xs -translate-y-1/2 px-16 opacity-30"
+				class="absolute left-0 top-[60%] z-0 max-w-xs -translate-y-1/2 px-16 opacity-30"
 			/>
 		</div>
 
@@ -102,21 +104,17 @@
 	@keyframes btn-bottom-animation {
 		0% {
 			transform: translateY(-8px) scale(1);
-			box-shadow: 0 10px 25px rgba(46, 213, 115, 0.2);
 		}
 		50% {
 			transform: translateY(8px) scale(1.05);
-			box-shadow: 0 15px 30px rgba(46, 213, 115, 0.4);
 		}
 		100% {
 			transform: translateY(-8px) scale(1);
-			box-shadow: 0 10px 25px rgba(46, 213, 115, 0.2);
 		}
 	}
 
 	.btn-bottom-animation {
 		animation: btn-bottom-animation 4s ease-in-out infinite;
-		box-shadow: 0 10px 25px rgba(46, 213, 115, 0.3);
 	}
 
 	.animated-text {
@@ -124,7 +122,6 @@
 		min-width: 140px;
 		position: relative;
 		color: #63b3ed;
-		text-shadow: 0 0 15px rgba(99, 179, 237, 0.5);
 	}
 
 	.animated-text::after {

@@ -10,7 +10,7 @@
 	/>
 </svelte:head>
 
-<div class="bg-gradient-to-b from-blue-50 to-white py-16 dark:from-gray-900 dark:to-gray-800">
+<div class="bg-blue-50 py-16 dark:bg-gray-900">
 	<div class="container mx-auto px-4">
 		<!-- Hero Section -->
 		<div class="mb-16 text-center">
@@ -166,7 +166,7 @@
 			<div class="relative">
 				<!-- Progress Line -->
 				<div
-					class="absolute top-0 bottom-0 left-1/2 z-0 hidden w-1 -translate-x-1/2 transform bg-blue-200 md:block dark:bg-blue-900/50"
+					class="absolute bottom-0 left-1/2 top-0 z-0 hidden w-1 -translate-x-1/2 transform bg-blue-200 md:block dark:bg-blue-900/50"
 				></div>
 
 				<!-- Step 1 -->
@@ -520,7 +520,7 @@
 			<div class="grid grid-cols-1 gap-8 md:grid-cols-2">
 				<!-- Testimonial 1 -->
 				<div class="relative rounded-lg bg-white p-8 shadow-lg dark:bg-gray-800">
-					<div class="absolute top-4 left-4 text-6xl text-blue-200 dark:text-blue-900/30">"</div>
+					<div class="absolute left-4 top-4 text-6xl text-blue-200 dark:text-blue-900/30">"</div>
 					<div class="relative z-10">
 						<p class="z-10 mb-6 text-gray-600 dark:text-gray-300">
 							Reconcile has transformed how we handle our financial data matching. What used to take
@@ -543,7 +543,7 @@
 
 				<!-- Testimonial 2 -->
 				<div class="relative rounded-lg bg-white p-8 shadow-lg dark:bg-gray-800">
-					<div class="absolute top-4 left-4 text-6xl text-blue-200 dark:text-blue-900/30">"</div>
+					<div class="absolute left-4 top-4 text-6xl text-blue-200 dark:text-blue-900/30">"</div>
 					<div class="relative z-10">
 						<p class="mb-6 text-gray-600 dark:text-gray-300">
 							Managing inventory across multiple warehouses used to be a nightmare. Reconcile's
@@ -570,7 +570,7 @@
 
 		<!-- CTA Section -->
 		<div
-			class="mx-auto mb-10 max-w-4xl rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 p-10 text-center shadow-xl dark:from-blue-700 dark:to-indigo-700"
+			class="mx-auto mb-10 max-w-4xl rounded-xl bg-blue-600 p-10 text-center shadow-xl dark:bg-blue-700"
 		>
 			<h2 class="mb-4 text-3xl font-bold text-white">
 				Ready to Transform Your Reconciliation Process?

@@ -17,23 +17,11 @@ body {
 	text-align: center;
 }
 .error span {
-	background: linear-gradient(to left, #03ca0dfb 10%, rgb(2, 88, 248) 50%, rgb(228, 94, 77) 80%);
-	background-size: auto auto;
-	background-clip: border-box;
-	background-size: 200% auto;
-	color: rgb(243, 240, 240);
-	background-clip: text;
-	-webkit-background-clip: text;
-	-webkit-text-fill-color: transparent;
-	animation: textclip 8s linear infinite;
+	color: #2563eb;
 	display: inline-block;
 }
 
-@keyframes textclip {
-	to {
-		background-position: 200% center;
-	}
-}
+/* Removed animation as no longer needed for gradient effect */
 
 /* Backgrounds */
 .right_bottom_circle {
@@ -136,7 +124,6 @@ body {
 }
 
 .btn-bottom-animation:hover {
-	box-shadow: 0px 10px 10px rgba(21, 87, 5, 0.685);
 	transform: translateY(-2px);
 }
 

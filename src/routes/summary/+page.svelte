@@ -87,7 +87,7 @@
 		<img
 			src="/images/details.svg"
 			alt="Details illustration"
-			class="absolute top-1/2 right-0 max-w-sm -translate-y-1/2 px-16 opacity-30"
+			class="absolute right-0 top-1/2 max-w-sm -translate-y-1/2 px-16 opacity-30"
 		/>
 	</div>
 
@@ -95,7 +95,7 @@
 		<img
 			src="/images/reconcile.svg"
 			alt="Reconcile illustration"
-			class="absolute top-1/2 left-0 max-w-xs -translate-y-1/2 px-16 opacity-30"
+			class="absolute left-0 top-1/2 max-w-xs -translate-y-1/2 px-16 opacity-30"
 		/>
 	</div>
 	<div class="container mx-auto max-w-3xl px-4">
@@ -206,7 +206,7 @@
 		</div>
 
 		<!-- Contact information form -->
-		<div class="container mx-auto pt-8 pb-2 text-center">
+		<div class="container mx-auto pb-2 pt-8 text-center">
 			<div class="mb-8 rounded-lg bg-gray-800 p-6 shadow shadow-gray-800">
 				<h2 class="mb-4 text-xl font-semibold text-white">Contact Information</h2>
 
@@ -268,7 +268,7 @@
 						<div class="flex justify-center">
 							<button
 								type="submit"
-								class="btn-breathing focus:ring-opacity-50 transform rounded-lg border-2 border-green-500 bg-green-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 focus:ring-2 focus:ring-green-400 focus:outline-none"
+								class="btn-breathing transform rounded-lg border-2 border-green-500 bg-green-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-50"
 								disabled={!isFormValid}
 								class:opacity-50={!isFormValid}
 								class:cursor-not-allowed={!isFormValid}
@@ -288,20 +288,16 @@
 	@keyframes btn-breathing {
 		0% {
 			transform: scale(1);
-			box-shadow: 0 5px 15px rgba(46, 213, 115, 0.2);
 		}
 		50% {
 			transform: scale(1.03);
-			box-shadow: 0 10px 20px rgba(46, 213, 115, 0.4);
 		}
 		100% {
 			transform: scale(1);
-			box-shadow: 0 5px 15px rgba(46, 213, 115, 0.2);
 		}
 	}
 
 	.btn-breathing {
 		animation: btn-breathing 4s ease-in-out infinite;
-		box-shadow: 0 5px 15px rgba(46, 213, 115, 0.3);
 	}
 </style>
