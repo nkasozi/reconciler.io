@@ -57,14 +57,19 @@
 				<span
 					class="mr-4 text-xl font-semibold leading-tight sm:text-2xl md:text-2xl lg:text-2xl xl:text-2xl"
 				>
-					<span class="text-blue-400">Detect Errors</span>,
-					<span class="text-green-400">Prevent Fraud</span>,
-					<span class="text-blue-400">Find Discrepancies</span>. <br />
-					Let's handle your <span class="font-bold text-blue-400">Reconciliation</span> with
+					<span class="italic text-blue-400">Detect Errors</span>,
+					<span class="italic text-green-400">Prevent Fraud</span>,
+					<span class="italic text-blue-400">Find Discrepancies</span>. <br />
+					<div class="my-2"></div>
+					<span>Let's handle your</span>
+					<span class="font-bold text-blue-400">Reconciliation</span>
+					<span class="italic">with</span>
 					<span class="font-bold text-green-400">Confidence</span>.<br />
-					<span class="text-blue-400">Don't Guess</span> but Be
+					<div class="my-2"></div>
+					<span class="italic text-blue-400">Don't Guess</span> <span class="italic">but Be</span>
 					<span class="font-extrabold text-green-400">100% sure</span>
-					your <span class="text-blue-400">Financial Transactions</span> are
+					<span class="italic">your</span> <span class="text-blue-400">Financial Transactions</span>
+					<span class="italic">are</span>
 					<span class="font-bold text-green-500">Accurate</span>. <br />
 				</span>
 			</div>
