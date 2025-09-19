@@ -59,10 +59,10 @@
 				>
 					<span class="text-blue-400">Detect Errors</span>,
 					<span class="text-green-400">Prevent Fraud</span>,
-					<span class="text-blue-300">Find Discrepancies</span>. <br />
+					<span class="text-blue-400">Find Discrepancies</span>. <br />
 					Let's handle your <span class="font-bold text-blue-400">Reconciliation</span> with
 					<span class="font-bold text-green-400">Confidence</span>.<br />
-					Don't <span class="text-blue-300">Guess</span> but Be
+					<span class="text-blue-400">Don't Guess</span> but Be
 					<span class="font-extrabold text-green-400">100% sure</span>
 					your <span class="text-blue-400">Financial Transactions</span> are
 					<span class="font-bold text-green-500">Accurate</span>. <br />
