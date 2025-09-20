@@ -3,7 +3,6 @@
 	import { parseFile, type ParsedFileData, RowLimitExceededError } from '$lib/utils/fileParser';
 	import { reconciliationStore } from '$lib/stores/reconciliationStore';
 	import { goto } from '$app/navigation';
-	import ColumnMappingModal from '$lib/components/ColumnMappingModal.svelte';
 	import type { ColumnPair } from '$lib/utils/reconciliation';
 
 	// File data state
@@ -257,8 +256,20 @@
 		reconciliationStore.reset();
 	}
 
-	// Column mapping modal
-	let showMappingModal = $state(false);
+	// Auto-detection: redirect when both files are uploaded
+	$effect(() => {
+		if (
+			primaryFileData.isUploaded &&
+			comparisonFileData.isUploaded &&
+			primaryFileData.parsedData &&
+			comparisonFileData.parsedData
+		) {
+			// Automatically redirect to column mapping
+			setTimeout(() => {
+				openMappingModal();
+			}, 500); // Small delay to show both files are loaded
+		}
+	});
 
 	function openMappingModal() {
 		// Only proceed if both files are uploaded and parsed
@@ -268,7 +279,7 @@
 			primaryFileData.parsedData &&
 			comparisonFileData.parsedData
 		) {
-			console.log('Opening column mapping modal');
+			console.log('Redirecting to column mapping page');
 
 			try {
 				// Force a refresh of the store data
@@ -283,36 +294,15 @@
 					reconciliationStore.setComparisonFileData(comparisonFileData.parsedData);
 				}
 
-				// Show the mapping modal
-				showMappingModal = true;
+				// Navigate to column mapping page
+				goto('/column-selection');
 			} catch (error) {
 				console.error('Error preparing for column mapping:', error);
 				errorMessage = 'Error preparing for column mapping. Please try again.';
 			}
 		} else {
-			console.warn('Cannot proceed - files not properly uploaded', {
-				primaryUploaded: primaryFileData.isUploaded,
-				primaryHasData: !!primaryFileData.parsedData,
-				comparisonUploaded: comparisonFileData.isUploaded,
-				comparisonHasData: !!comparisonFileData.parsedData
-			});
+			console.warn('Cannot open mapping modal - files not ready');
 		}
-	}
-
-	// Handle column mapping completion
-	function handleColumnMapping(event: CustomEvent) {
-		const { primaryIdPair, comparisonPairs } = event.detail;
-
-		console.log('Column mapping complete:', { primaryIdPair, comparisonPairs });
-
-		// Store the mapping configuration
-		reconciliationStore.setConfig({
-			primaryIdPair,
-			comparisonPairs
-		});
-
-		// Navigate to the summary page instead of directly to results
-		goto('/summary');
 	}
 </script>
 
@@ -348,7 +338,7 @@
 								class="flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-red-900 dark:hover:text-red-400"
 								aria-label="Remove file"
 								title="Remove file"
-								on:click={() => removeFile('primary')}
+								onclick={() => removeFile('primary')}
 							>
 								<svg
 									xmlns="http://www.w3.org/2000/svg"
@@ -376,9 +366,20 @@
 						class="upload-area"
 						class:highlight={false}
 						class:uploading={primaryFileData.isUploading}
-						on:dragover|preventDefault={handleDragOver}
-						on:dragleave|preventDefault={handleDragLeave}
-						on:drop|preventDefault={(e) => handleDrop(e, 'primary')}
+						role="button"
+						tabindex="0"
+						ondragover={(e) => {
+							e.preventDefault();
+							handleDragOver(e);
+						}}
+						ondragleave={(e) => {
+							e.preventDefault();
+							handleDragLeave(e);
+						}}
+						ondrop={(e) => {
+							e.preventDefault();
+							handleDrop(e, 'primary');
+						}}
 					>
 						{#if !primaryFileData.isUploading}
 							<!-- Normal upload state -->
@@ -386,7 +387,7 @@
 								type="file"
 								class="drop-here"
 								accept=".xlsx,.xls,.pdf,.doc,.docx,.csv,.rtf,.txt"
-								on:change={handlePrimaryFileUpload}
+								onchange={handlePrimaryFileUpload}
 							/>
 							<div class="upload-message">
 								Drag &amp; Drop <br /> an Excel (.xlsx/.xls) or CSV file here
@@ -471,7 +472,7 @@
 								class="flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-red-900 dark:hover:text-red-400"
 								aria-label="Remove file"
 								title="Remove file"
-								on:click={() => removeFile('comparison')}
+								onclick={() => removeFile('comparison')}
 							>
 								<svg
 									xmlns="http://www.w3.org/2000/svg"
@@ -499,9 +500,20 @@
 						class="upload-area"
 						class:highlight={false}
 						class:uploading={comparisonFileData.isUploading}
-						on:dragover|preventDefault={handleDragOver}
-						on:dragleave|preventDefault={handleDragLeave}
-						on:drop|preventDefault={(e) => handleDrop(e, 'comparison')}
+						role="button"
+						tabindex="0"
+						ondragover={(e) => {
+							e.preventDefault();
+							handleDragOver(e);
+						}}
+						ondragleave={(e) => {
+							e.preventDefault();
+							handleDragLeave(e);
+						}}
+						ondrop={(e) => {
+							e.preventDefault();
+							handleDrop(e, 'comparison');
+						}}
 					>
 						{#if !comparisonFileData.isUploading}
 							<!-- Normal upload state -->
@@ -509,7 +521,7 @@
 								type="file"
 								class="drop-here"
 								accept=".xlsx,.xls,.pdf,.doc,.docx,.csv,.rtf,.txt"
-								on:change={handleComparisonFileUpload}
+								onchange={handleComparisonFileUpload}
 							/>
 							<div class="upload-message">
 								Drag &amp; Drop <br /> another Excel (.xlsx/.xls) or CSV file here
@@ -639,7 +651,7 @@
 		<!-- Map Columns Button -->
 		<div class="mb-16 flex justify-center">
 			<button
-				on:click={openMappingModal}
+				onclick={openMappingModal}
 				disabled={!primaryFileData.isUploaded ||
 					!comparisonFileData.isUploaded ||
 					!primaryFileData.parsedData ||
@@ -657,17 +669,6 @@
 				Map Columns
 			</button>
 		</div>
-
-		<!-- Column Mapping Modal -->
-		{#if primaryFileData.parsedData && comparisonFileData.parsedData}
-			<ColumnMappingModal
-				primaryFile={primaryFileData.parsedData}
-				comparisonFile={comparisonFileData.parsedData}
-				show={showMappingModal}
-				on:close={() => (showMappingModal = false)}
-				on:mapping={handleColumnMapping}
-			/>
-		{/if}
 	</div>
 </div>
 
