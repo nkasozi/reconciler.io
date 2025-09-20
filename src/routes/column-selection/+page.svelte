@@ -28,6 +28,11 @@
 	let primaryIdPairValid = $state(false);
 	let formValid = $state(false);
 
+	// Configuration options state
+	let reverseReconciliation = $state(false);
+	let caseSensitive = $state(true);
+	let ignoreBlankValues = $state(true);
+
 	onMount(() => {
 		// Get file data from the store
 		const state = get(reconciliationStore);
@@ -204,7 +209,10 @@
 		// Create reconciliation config
 		const reconciliationConfig: ReconciliationConfig = {
 			primaryIdPair,
-			comparisonPairs: completeComparisonPairs
+			comparisonPairs: completeComparisonPairs,
+			reverseReconciliation,
+			caseSensitive,
+			ignoreBlankValues
 		};
 
 		// Save the configuration to the store
@@ -294,7 +302,7 @@
 			<div
 				class="mb-6 rounded-md border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900"
 			>
-				<div class="flex items-center">
+				<div class="flex items-center justify-center">
 					<div class="mr-3 flex-shrink-0">
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -309,7 +317,7 @@
 							/>
 						</svg>
 					</div>
-					<div>
+					<div class="text-center">
 						<p class="text-sm font-medium text-blue-800 dark:text-blue-200">
 							{#if selectedPrimaryColumn || selectedComparisonColumn}
 								Currently selecting: {selectedPrimaryColumn || selectedComparisonColumn}
@@ -551,6 +559,83 @@
 							{/each}
 						</div>
 					{/if}
+				</div>
+			</div>
+
+			<!-- Reconciliation Configuration Options -->
+			<div
+				class="mb-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+			>
+				<h3 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
+					Reconciliation Options
+				</h3>
+				<p class="mb-4 text-sm text-gray-600 dark:text-gray-400">
+					Configure how the reconciliation process should be performed.
+				</p>
+
+				<div class="space-y-4">
+					<!-- Reverse Reconciliation -->
+					<div class="flex items-start">
+						<div class="flex h-5 items-center">
+							<input
+								id="reverse-reconciliation"
+								type="checkbox"
+								bind:checked={reverseReconciliation}
+								class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:ring-offset-gray-800 dark:focus:ring-blue-600"
+							/>
+						</div>
+						<div class="ml-3 text-sm">
+							<label
+								for="reverse-reconciliation"
+								class="font-medium text-gray-700 dark:text-gray-300"
+							>
+								Also do reverse reconciliation
+							</label>
+							<p class="text-gray-500 dark:text-gray-400">
+								Check comparison file records against primary file records as well
+							</p>
+						</div>
+					</div>
+
+					<!-- Case Sensitivity -->
+					<div class="flex items-start">
+						<div class="flex h-5 items-center">
+							<input
+								id="case-sensitive"
+								type="checkbox"
+								bind:checked={caseSensitive}
+								class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:ring-offset-gray-800 dark:focus:ring-blue-600"
+							/>
+						</div>
+						<div class="ml-3 text-sm">
+							<label for="case-sensitive" class="font-medium text-gray-700 dark:text-gray-300">
+								Consider case sensitivity
+							</label>
+							<p class="text-gray-500 dark:text-gray-400">
+								Match text values with exact case (ABC ≠ abc)
+							</p>
+						</div>
+					</div>
+
+					<!-- Ignore Blank Values -->
+					<div class="flex items-start">
+						<div class="flex h-5 items-center">
+							<input
+								id="ignore-blank-values"
+								type="checkbox"
+								bind:checked={ignoreBlankValues}
+								class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:ring-offset-gray-800 dark:focus:ring-blue-600"
+							/>
+						</div>
+						<div class="ml-3 text-sm">
+							<label for="ignore-blank-values" class="font-medium text-gray-700 dark:text-gray-300">
+								Ignore blank values
+							</label>
+							<p class="text-gray-500 dark:text-gray-400">
+								Skip comparison when either value is empty or null
+							</p>
+						</div>
+					</div>
 				</div>
 			</div>
 

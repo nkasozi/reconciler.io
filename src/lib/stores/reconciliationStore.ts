@@ -78,5 +78,19 @@ export const reconciliationStore = {
 	// Set contact information
 	setContactInfo: (info: ContactInfo) => {
 		update((state) => ({ ...state, contactInfo: info }));
+	},
+
+	// Set reconciliation options
+	setReconciliationOptions: (options: {
+		reverseReconciliation?: boolean;
+		caseSensitive?: boolean;
+		ignoreBlankValues?: boolean;
+	}) => {
+		update((state) => ({
+			...state,
+			reconciliationConfig: state.reconciliationConfig
+				? { ...state.reconciliationConfig, ...options }
+				: null
+		}));
 	}
 };

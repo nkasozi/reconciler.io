@@ -11,6 +11,10 @@ export type ReconciliationConfig = {
 	primaryIdPair: ColumnPair;
 	comparisonPairs: ColumnPair[];
 	contactEmail?: string;
+	// Reconciliation options
+	reverseReconciliation: boolean;
+	caseSensitive: boolean;
+	ignoreBlankValues: boolean;
 };
 
 // Define the result of a comparison between two values
@@ -158,9 +162,8 @@ export function reconcileData(
 		matchedRows: matches.length,
 		unmatchedPrimaryRows: unmatchedPrimary.length,
 		unmatchedComparisonRows: unmatchedComparison.length,
-		matchPercentage: primaryData.rows.length > 0 
-			? Math.round((matches.length / primaryData.rows.length) * 100)
-			: 0 // Handle division by zero for empty datasets
+		matchPercentage:
+			primaryData.rows.length > 0 ? Math.round((matches.length / primaryData.rows.length) * 100) : 0 // Handle division by zero for empty datasets
 	};
 
 	return {
