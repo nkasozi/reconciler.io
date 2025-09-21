@@ -61,9 +61,33 @@ export function reconcileData(
 	comparisonData: ParsedFileData,
 	config: ReconciliationConfig
 ): ReconciliationResult {
+	// Handle reverse reconciliation by swapping files and flipping column mappings
+	let actualPrimaryData = primaryData;
+	let actualComparisonData = comparisonData;
+	let actualConfig = config;
+
+	if (config.reverseReconciliation) {
+		// Swap the files
+		actualPrimaryData = comparisonData;
+		actualComparisonData = primaryData;
+
+		// Flip the column mappings
+		actualConfig = {
+			...config,
+			primaryIdPair: {
+				primaryColumn: config.primaryIdPair.comparisonColumn,
+				comparisonColumn: config.primaryIdPair.primaryColumn
+			},
+			comparisonPairs: config.comparisonPairs.map((pair) => ({
+				primaryColumn: pair.comparisonColumn,
+				comparisonColumn: pair.primaryColumn
+			}))
+		};
+	}
+
 	// Extract columns for matching
-	const primaryIdColumn = config.primaryIdPair.primaryColumn;
-	const comparisonIdColumn = config.primaryIdPair.comparisonColumn;
+	const primaryIdColumn = actualConfig.primaryIdPair.primaryColumn;
+	const comparisonIdColumn = actualConfig.primaryIdPair.comparisonColumn;
 
 	if (!primaryIdColumn || !comparisonIdColumn) {
 		throw new Error('ID columns must be specified for reconciliation');
@@ -74,18 +98,24 @@ export function reconcileData(
 	const comparisonRowsMap = new Map<string, Record<string, string>>();
 
 	// Index the primary rows by ID
-	for (const row of primaryData.rows) {
+	for (const row of actualPrimaryData.rows) {
 		const idValue = row[primaryIdColumn];
 		if (idValue) {
-			primaryRowsMap.set(idValue.toString().trim().toLowerCase(), row);
+			const keyValue = actualConfig.caseSensitive
+				? idValue.toString().trim()
+				: idValue.toString().trim().toLowerCase();
+			primaryRowsMap.set(keyValue, row);
 		}
 	}
 
 	// Index the comparison rows by ID
-	for (const row of comparisonData.rows) {
+	for (const row of actualComparisonData.rows) {
 		const idValue = row[comparisonIdColumn];
 		if (idValue) {
-			comparisonRowsMap.set(idValue.toString().trim().toLowerCase(), row);
+			const keyValue = actualConfig.caseSensitive
+				? idValue.toString().trim()
+				: idValue.toString().trim().toLowerCase();
+			comparisonRowsMap.set(keyValue, row);
 		}
 	}
 
@@ -104,13 +134,18 @@ export function reconcileData(
 			let matchCount = 0;
 
 			// Compare all the mapped column pairs
-			for (const pair of config.comparisonPairs) {
+			for (const pair of actualConfig.comparisonPairs) {
 				if (pair.primaryColumn && pair.comparisonColumn) {
 					const primaryValue = primaryRow[pair.primaryColumn];
 					const comparisonValue = comparisonRow[pair.comparisonColumn];
 
-					// Compare the values
-					const isMatch = compareValues(primaryValue, comparisonValue);
+					// Compare the values using the configuration options
+					const isMatch = compareValues(
+						primaryValue,
+						comparisonValue,
+						actualConfig.caseSensitive,
+						actualConfig.ignoreBlankValues
+					);
 
 					comparisonResults[pair.primaryColumn] = {
 						primaryValue,
@@ -127,8 +162,8 @@ export function reconcileData(
 
 			// Calculate match score - percentage of matching columns
 			const matchScore =
-				config.comparisonPairs.length > 0
-					? Math.round((matchCount / config.comparisonPairs.length) * 100)
+				actualConfig.comparisonPairs.length > 0
+					? Math.round((matchCount / actualConfig.comparisonPairs.length) * 100)
 					: 100; // If no comparison columns, then it's a 100% match by ID
 
 			matches.push({
@@ -157,20 +192,22 @@ export function reconcileData(
 
 	// Calculate summary statistics
 	const summary = {
-		totalPrimaryRows: primaryData.rows.length,
-		totalComparisonRows: comparisonData.rows.length,
+		totalPrimaryRows: actualPrimaryData.rows.length,
+		totalComparisonRows: actualComparisonData.rows.length,
 		matchedRows: matches.length,
 		unmatchedPrimaryRows: unmatchedPrimary.length,
 		unmatchedComparisonRows: unmatchedComparison.length,
 		matchPercentage:
-			primaryData.rows.length > 0 ? Math.round((matches.length / primaryData.rows.length) * 100) : 0 // Handle division by zero for empty datasets
+			actualPrimaryData.rows.length > 0
+				? Math.round((matches.length / actualPrimaryData.rows.length) * 100)
+				: 0 // Handle division by zero for empty datasets
 	};
 
 	return {
 		matches,
 		unmatchedPrimary,
 		unmatchedComparison,
-		config,
+		config: actualConfig, // Return the actual config used (might be flipped for reverse reconciliation)
 		summary
 	};
 }
@@ -178,14 +215,31 @@ export function reconcileData(
 /**
  * Compare two values and determine if they match
  */
-function compareValues(value1: string | undefined, value2: string | undefined): boolean {
+function compareValues(
+	value1: string | undefined,
+	value2: string | undefined,
+	caseSensitive: boolean = false,
+	ignoreBlankValues: boolean = true
+): boolean {
 	// Handle undefined or empty values
-	if (!value1 && !value2) return true;
-	if (!value1 || !value2) return false;
+	if (ignoreBlankValues) {
+		// If ignoring blank values, treat empty/null values as matches
+		if ((!value1 || value1.trim() === '') && (!value2 || value2.trim() === '')) return true;
+		if (!value1 || value1.trim() === '') return false;
+		if (!value2 || value2.trim() === '') return false;
+	} else {
+		// If not ignoring blank values, null/undefined comparison
+		if (!value1 && !value2) return true;
+		if (!value1 || !value2) return false;
+	}
 
-	// Normalize strings for comparison
-	const normalizedValue1 = value1.toString().trim().toLowerCase();
-	const normalizedValue2 = value2.toString().trim().toLowerCase();
+	// Normalize strings for comparison based on case sensitivity
+	const normalizedValue1 = caseSensitive
+		? value1.toString().trim()
+		: value1.toString().trim().toLowerCase();
+	const normalizedValue2 = caseSensitive
+		? value2.toString().trim()
+		: value2.toString().trim().toLowerCase();
 
 	return normalizedValue1 === normalizedValue2;
 }

@@ -22,6 +22,27 @@
 	let hasFailures = $state(false); // Track if there are any failures
 	let failureCount = $state(0); // Count of failures
 
+	// Reverse reconciliation state variables
+	let reverseProcessedRows = $state(0);
+	let reverseTotalRows = $state(0);
+	let reverseProgressPercentage = $derived(
+		reverseTotalRows
+			? Math.min(100, Math.round((reverseProcessedRows / reverseTotalRows) * 100))
+			: 0
+	);
+	let isReverseReconciliationComplete = $state(false);
+	let reverseMatchingLogs = $state<MatchLog[]>([]);
+	let reverseMatchingSpeed = $state(0); // rows per second
+	let reverseEstimatedTimeLeft = $state('');
+	let reverseStartTime = $state(0);
+	let reverseLastLogTimestamp = $state(0);
+	let reverseStuckDetectionTimeout: number | null = null;
+	let reverseHasFailures = $state(false); // Track if there are any failures
+	let reverseFailureCount = $state(0); // Count of failures
+
+	// Check if reverse reconciliation is enabled
+	let isReverseReconciliationEnabled = $state(false);
+
 	// Primary ID and comparison columns
 	let primaryIdPair = $state<ColumnPair>({
 		primaryColumn: null,
@@ -59,6 +80,15 @@
 		reasons: any[];
 	} | null> = [];
 
+	// For reverse reconciliation chunked processing
+	let reverseChunks: Record<string, string>[][] = [];
+	let reverseCompletedChunks = $state(0);
+	let reverseReconciliationResults: Array<{
+		row: Record<string, string>;
+		matched: boolean;
+		reasons: any[];
+	} | null> = [];
+
 	onMount(() => {
 		const unsubscribe = reconciliationStore.subscribe((state) => {
 			if (!state.primaryFileData || !state.comparisonFileData || !state.reconciliationConfig) {
@@ -79,6 +109,9 @@
 			primaryIdPair = state.reconciliationConfig.primaryIdPair;
 			comparisonPairs = state.reconciliationConfig.comparisonPairs;
 
+			// Check if reverse reconciliation is enabled
+			isReverseReconciliationEnabled = state.reconciliationConfig.reverseReconciliation === true;
+
 			// Create lookup map for comparison data
 			if (state.comparisonFileData && primaryIdPair.comparisonColumn) {
 				const comparisonIdColumn = primaryIdPair.comparisonColumn;
@@ -95,7 +128,17 @@
 		// Start the reconciliation process
 		startReconciliation();
 
-		return unsubscribe;
+		// Check if reverse reconciliation is enabled and start it too
+		const unsubscribeStore = reconciliationStore.subscribe((state) => {
+			if (state.reconciliationConfig?.reverseReconciliation) {
+				startReverseReconciliation();
+			}
+		});
+
+		return () => {
+			unsubscribe();
+			unsubscribeStore();
+		};
 	});
 
 	onDestroy(() => {
@@ -109,37 +152,68 @@
 	});
 
 	// Check if the process might be stuck
-	function checkForStuckProcess() {
+	function checkForStuckProcess(type: 'normal' | 'reverse' = 'normal') {
 		const currentTime = Date.now();
-		// If no log entries for 3 seconds and process is still running, add a diagnostic entry
-		if (
-			currentTime - lastLogTimestamp > 3000 &&
-			processedRows < totalRows &&
-			!isReconciliationComplete
-		) {
-			matchingLogs.unshift({
-				timestamp: currentTime,
-				primaryId: 'SYSTEM',
-				comparisonId: 'DIAGNOSTIC',
-				matched: false,
-				reasons: [
-					{
-						primaryFileRow: 'System Log',
-						comparisonFileRow: 'Diagnostic Log',
-						primaryFileColumn: 'Process Status',
-						comparisonFileColumn: 'Diagnostic',
-						primaryValue: `Processed ${processedRows} of ${totalRows} rows (${progressPercentage}%)`,
-						comparisonValue: 'Processing continues but no new matches to display'
-					}
-				]
-			});
-			// Update the logs reactively
-			matchingLogs = [...matchingLogs];
-			lastLogTimestamp = currentTime;
-		}
 
-		// Continue checking every 3 seconds
-		stuckDetectionTimeout = setTimeout(checkForStuckProcess, 3000);
+		if (type === 'reverse') {
+			// Check reverse reconciliation for stuck process
+			if (
+				currentTime - reverseLastLogTimestamp > 3000 &&
+				reverseProcessedRows < reverseTotalRows &&
+				!isReverseReconciliationComplete
+			) {
+				reverseMatchingLogs.unshift({
+					timestamp: currentTime,
+					primaryId: 'REVERSE-SYSTEM',
+					comparisonId: 'DIAGNOSTIC',
+					matched: false,
+					reasons: [
+						{
+							primaryFileRow: 'Reverse System Log',
+							comparisonFileRow: 'Diagnostic Log',
+							primaryFileColumn: 'Reverse Process Status',
+							comparisonFileColumn: 'Diagnostic',
+							primaryValue: `Processed ${reverseProcessedRows} of ${reverseTotalRows} rows (${reverseProgressPercentage}%)`,
+							comparisonValue: 'Reverse processing continues but no new matches to display'
+						}
+					]
+				});
+				// Update the logs reactively
+				reverseMatchingLogs = [...reverseMatchingLogs];
+				reverseLastLogTimestamp = currentTime;
+			}
+			// Continue checking every 3 seconds for reverse
+			reverseStuckDetectionTimeout = setTimeout(() => checkForStuckProcess('reverse'), 3000);
+		} else {
+			// Check normal reconciliation for stuck process
+			if (
+				currentTime - lastLogTimestamp > 3000 &&
+				processedRows < totalRows &&
+				!isReconciliationComplete
+			) {
+				matchingLogs.unshift({
+					timestamp: currentTime,
+					primaryId: 'SYSTEM',
+					comparisonId: 'DIAGNOSTIC',
+					matched: false,
+					reasons: [
+						{
+							primaryFileRow: 'System Log',
+							comparisonFileRow: 'Diagnostic Log',
+							primaryFileColumn: 'Process Status',
+							comparisonFileColumn: 'Diagnostic',
+							primaryValue: `Processed ${processedRows} of ${totalRows} rows (${progressPercentage}%)`,
+							comparisonValue: 'Processing continues but no new matches to display'
+						}
+					]
+				});
+				// Update the logs reactively
+				matchingLogs = [...matchingLogs];
+				lastLogTimestamp = currentTime;
+			}
+			// Continue checking every 3 seconds
+			stuckDetectionTimeout = setTimeout(checkForStuckProcess, 3000);
+		}
 	}
 
 	function startReconciliation() {
@@ -494,6 +568,299 @@
 		return failureCount;
 	}
 
+	// Start reverse reconciliation (comparison file as primary)
+	function startReverseReconciliation() {
+		// We need to get the current store state
+		let storeState: any = null;
+		const unsubscribe = reconciliationStore.subscribe((state) => {
+			storeState = state;
+		});
+		unsubscribe();
+
+		if (
+			!storeState.primaryFileData ||
+			!storeState.comparisonFileData ||
+			!storeState.reconciliationConfig
+		) {
+			console.error('Missing required data for reverse reconciliation');
+			return;
+		}
+
+		// Reset the reverse state
+		reverseProcessedRows = 0;
+		reverseMatchingLogs = [];
+		isReverseReconciliationComplete = false;
+		reverseStartTime = Date.now();
+		reverseLastLogTimestamp = reverseStartTime;
+
+		// For reverse reconciliation, swap the files
+		const reversePrimaryRows = storeState.comparisonFileData.rows;
+		reverseTotalRows = reversePrimaryRows.length;
+
+		// Create reverse lookup map (primary file becomes comparison)
+		const reversePrimaryIdColumn = storeState.reconciliationConfig.primaryIdPair.primaryColumn;
+		const reverseComparisonMap = new Map<string, Record<string, string>>();
+
+		if (reversePrimaryIdColumn) {
+			storeState.primaryFileData.rows.forEach((row) => {
+				const id = row[reversePrimaryIdColumn];
+				if (id) {
+					reverseComparisonMap.set(id, row);
+				}
+			});
+		}
+
+		// Start stuck detection for reverse
+		if (reverseStuckDetectionTimeout) {
+			clearTimeout(reverseStuckDetectionTimeout);
+		}
+		reverseStuckDetectionTimeout = setTimeout(() => checkForStuckProcess('reverse'), 3000);
+
+		// Add a starting log entry for reverse
+		reverseMatchingLogs = [
+			{
+				timestamp: Date.now(),
+				primaryId: 'REVERSE-SYSTEM',
+				comparisonId: 'INFO',
+				matched: true,
+				reasons: [
+					{
+						primaryFileRow: 'Reverse System Log',
+						comparisonFileRow: 'Info Log',
+						primaryFileColumn: 'Reverse Reconciliation Started',
+						comparisonFileColumn: 'Configuration',
+						primaryValue: `Processing ${reverseTotalRows} rows in reverse`,
+						comparisonValue: `Comparison ID: ${storeState.reconciliationConfig.primaryIdPair.comparisonColumn}, Primary ID: ${storeState.reconciliationConfig.primaryIdPair.primaryColumn}`
+					}
+				]
+			}
+		];
+		reverseLastLogTimestamp = Date.now();
+
+		// Use the same chunk processing approach
+		const CHUNK_SIZE = 50;
+
+		// Divide reverse data into chunks
+		reverseChunks = [];
+		for (let i = 0; i < reversePrimaryRows.length; i += CHUNK_SIZE) {
+			reverseChunks.push(reversePrimaryRows.slice(i, i + CHUNK_SIZE));
+		}
+
+		// Reset reverse progress tracking
+		reverseCompletedChunks = 0;
+		reverseReconciliationResults = new Array(reversePrimaryRows.length);
+
+		// Process reverse chunks
+		const processNextReverseChunks = () => {
+			const chunkIndex = reverseCompletedChunks;
+			if (chunkIndex >= reverseChunks.length) {
+				finishReverseReconciliation();
+				return;
+			}
+
+			const startIndex = chunkIndex * CHUNK_SIZE;
+			const chunk = reverseChunks[chunkIndex];
+
+			// Process the reverse chunk (similar to normal processing but with swapped files)
+			const { results, logs } = processReverseChunk(
+				chunk,
+				startIndex,
+				reverseComparisonMap,
+				storeState.reconciliationConfig
+			);
+
+			// Update UI with reverse logs
+			const newLogs = logs.map((log, i) => ({
+				timestamp: Date.now() + i + Math.random(),
+				primaryId: log.primaryId,
+				comparisonId: log.comparisonId,
+				matched: log.matched,
+				reasons: log.reasons
+			}));
+
+			if (newLogs.length > 0) {
+				reverseMatchingLogs = [...newLogs, ...reverseMatchingLogs];
+				if (reverseMatchingLogs.length > 100) {
+					reverseMatchingLogs = reverseMatchingLogs.slice(0, 100);
+				}
+			}
+
+			// Store reverse results
+			results.forEach((result, i) => {
+				reverseReconciliationResults[startIndex + i] = result;
+			});
+
+			// Update reverse progress
+			reverseCompletedChunks++;
+			reverseProcessedRows = Math.min(reverseCompletedChunks * CHUNK_SIZE, reverseTotalRows);
+
+			// Calculate reverse matching speed
+			const elapsedSeconds = (Date.now() - reverseStartTime) / 1000;
+			if (elapsedSeconds > 0.1) {
+				reverseMatchingSpeed = Math.round(reverseProcessedRows / elapsedSeconds);
+				const remainingRows = reverseTotalRows - reverseProcessedRows;
+				if (reverseMatchingSpeed > 0) {
+					const secondsLeft = remainingRows / reverseMatchingSpeed;
+					reverseEstimatedTimeLeft = formatTime(secondsLeft);
+				} else {
+					reverseEstimatedTimeLeft = reverseProcessedRows > 0 ? 'calculating...' : 'starting...';
+				}
+			} else {
+				reverseEstimatedTimeLeft = 'starting reverse reconciliation...';
+			}
+
+			// Add reverse progress log if needed
+			if (Date.now() - reverseLastLogTimestamp > 1000) {
+				const progressLog = {
+					timestamp: Date.now() + Math.random(),
+					primaryId: 'REVERSE-PROGRESS',
+					comparisonId: 'UPDATE',
+					matched: true,
+					reasons: [
+						{
+							primaryFileRow: 'Reverse Progress Log',
+							comparisonFileRow: 'Update Log',
+							primaryFileColumn: 'Processing',
+							comparisonFileColumn: 'Status',
+							primaryValue: `${reverseProcessedRows} of ${reverseTotalRows} rows (Reverse Chunk ${reverseCompletedChunks}/${reverseChunks.length})`,
+							comparisonValue: `${reverseProgressPercentage}% complete`
+						}
+					]
+				};
+				reverseMatchingLogs = [progressLog, ...reverseMatchingLogs];
+				reverseLastLogTimestamp = Date.now();
+			}
+
+			// Process the next reverse chunk
+			setTimeout(processNextReverseChunks, 50); // Slightly offset from normal processing
+		};
+
+		// Function to complete reverse reconciliation
+		function finishReverseReconciliation() {
+			isReverseReconciliationComplete = true;
+
+			// Check reverse failures
+			reverseHasFailures = false;
+			reverseFailureCount = 0;
+			for (const result of reverseReconciliationResults) {
+				if (result && !result.matched) {
+					reverseHasFailures = true;
+					reverseFailureCount++;
+				}
+			}
+
+			// Add reverse completion log
+			const completionLog = {
+				timestamp: Date.now() + Math.random(),
+				primaryId: 'REVERSE-COMPLETE',
+				comparisonId: 'COMPLETE',
+				matched: true,
+				reasons: [
+					{
+						primaryFileRow: 'Reverse Complete Log',
+						comparisonFileRow: 'Complete Log',
+						primaryFileColumn: 'Reverse Reconciliation Complete',
+						comparisonFileColumn: 'Summary',
+						primaryValue: `Processed ${reverseTotalRows} rows in ${formatTime((Date.now() - reverseStartTime) / 1000)}`,
+						comparisonValue: reverseHasFailures
+							? 'Some reverse mismatches found. You can download the reverse results.'
+							: 'All reverse records match! Click "Download Reverse Results" to download.'
+					}
+				]
+			};
+
+			reverseMatchingLogs = [completionLog, ...reverseMatchingLogs];
+			reverseLastLogTimestamp = Date.now();
+
+			if (reverseStuckDetectionTimeout) {
+				clearTimeout(reverseStuckDetectionTimeout);
+			}
+		}
+
+		// Start reverse processing
+		processNextReverseChunks();
+	}
+
+	// Process reverse chunk function
+	function processReverseChunk(chunk, startIndex, reverseComparisonMap, config) {
+		const results = [];
+		const logs = [];
+
+		chunk.forEach((primaryRow, index) => {
+			const currentIndex = startIndex + index;
+			const reverseComparisonIdColumn = config.primaryIdPair.comparisonColumn;
+
+			if (!reverseComparisonIdColumn) {
+				console.error('Reverse comparison ID column is not defined');
+				return;
+			}
+
+			const primaryId = primaryRow[reverseComparisonIdColumn];
+			const comparisonRow = reverseComparisonMap.get(primaryId);
+			const idMatched = !!comparisonRow;
+
+			const reasons = [];
+
+			if (!idMatched) {
+				reasons.push({
+					primaryFileRow: `Reverse Row ${currentIndex + 1}`,
+					comparisonFileRow: '(Not found)',
+					primaryFileColumn: reverseComparisonIdColumn,
+					comparisonFileColumn: config.primaryIdPair.primaryColumn,
+					primaryValue: primaryId || '(empty)',
+					comparisonValue: '(No matching record found in reverse)'
+				});
+			} else if (config.comparisonPairs.length > 0) {
+				// Check each mapped column pair for differences (with swapped columns)
+				config.comparisonPairs.forEach((pair) => {
+					if (pair.primaryColumn && pair.comparisonColumn) {
+						// Swap the columns for reverse reconciliation
+						const primaryValue = primaryRow[pair.comparisonColumn];
+						const comparisonValue = comparisonRow[pair.primaryColumn];
+
+						const normalizedPrimaryValue = (primaryValue || '').toString().trim().toLowerCase();
+						const normalizedComparisonValue = (comparisonValue || '')
+							.toString()
+							.trim()
+							.toLowerCase();
+
+						if (normalizedPrimaryValue !== normalizedComparisonValue) {
+							reasons.push({
+								primaryFileRow: `Reverse Row ${currentIndex + 1}`,
+								comparisonFileRow: `Original Row ${Array.from(reverseComparisonMap.keys()).findIndex((id) => id === primaryId) + 1}`,
+								primaryFileColumn: pair.comparisonColumn, // Swapped
+								comparisonFileColumn: pair.primaryColumn, // Swapped
+								primaryValue: primaryValue || '(empty)',
+								comparisonValue: comparisonValue || '(empty)'
+							});
+						}
+					}
+				});
+			}
+
+			results.push({
+				row: primaryRow,
+				matched: idMatched && reasons.length === 0,
+				reasons
+			});
+
+			const shouldLog = reasons.length > 0 || currentIndex % 10 === 0;
+			if (shouldLog) {
+				logs.push({
+					rowIndex: currentIndex,
+					primaryId: primaryId || `Reverse Row ${currentIndex + 1}`,
+					comparisonId: idMatched
+						? comparisonRow[config.primaryIdPair.primaryColumn] || '(ID found but empty)'
+						: '(Not found)',
+					matched: idMatched && reasons.length === 0,
+					reasons
+				});
+			}
+		});
+
+		return { results, logs };
+	}
+
 	function formatTime(seconds: number): string {
 		// Handle invalid or very small values
 		if (!isFinite(seconds) || seconds <= 0) {
@@ -626,8 +993,8 @@
 			}
 		});
 
-		// Navigate to the analysis page
-		goto('/reconciliation-results');
+		// Navigate to the analysis page in a new tab
+		window.open('/reconciliation-results', '_blank');
 	}
 
 	function downloadResults() {
@@ -769,6 +1136,149 @@
 
 		return csv;
 	}
+
+	// Download reverse reconciliation results
+	function downloadReverseResults() {
+		console.log(
+			'Download reverse results clicked, reverseCompletedChunks:',
+			reverseCompletedChunks,
+			'total reverse chunks:',
+			reverseChunks?.length
+		);
+
+		// If the reverse reconciliation is not fully complete, warn the user
+		if (reverseChunks && reverseCompletedChunks < reverseChunks.length) {
+			alert(
+				`Reverse reconciliation is only ${Math.round((reverseCompletedChunks / reverseChunks.length) * 100)}% complete. Results will be partial.`
+			);
+		}
+
+		// Prepare the reverse results file
+		const results = prepareReverseResultsFile();
+		console.log('Prepared reverse results:', results.length, 'rows');
+
+		// Convert to CSV
+		const csvContent = convertToCSV(results);
+		console.log('Reverse CSV content length:', csvContent.length);
+
+		// Create a download link
+		const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+
+		// Set download attributes
+		const fileName = `reverse_reconciled_${comparisonFileName.replace(/\.[^/.]+$/, '')}_${new Date().toISOString().slice(0, 10)}.csv`;
+		link.setAttribute('href', url);
+		link.setAttribute('download', fileName);
+		link.style.visibility = 'hidden';
+
+		// Trigger download
+		document.body.appendChild(link);
+		console.log('Triggering download of', fileName);
+		link.click();
+		document.body.removeChild(link);
+
+		// Clean up URL object
+		setTimeout(() => {
+			URL.revokeObjectURL(url);
+			console.log('Reverse URL object released');
+		}, 100);
+	}
+
+	function prepareReverseResultsFile() {
+		console.log('Preparing reverse results file, total rows:', reverseTotalRows);
+
+		const results = [];
+		// Get the current store state
+		let storeState: any = null;
+		const unsubscribe = reconciliationStore.subscribe((state) => {
+			storeState = state;
+		});
+		unsubscribe();
+
+		const reverseRows = storeState.comparisonFileData?.rows || [];
+
+		// Process each row from the comparison file (which is primary in reverse)
+		for (let index = 0; index < reverseRows.length; index++) {
+			const originalRow = reverseRows[index];
+			const result = reverseReconciliationResults[index];
+
+			if (!result) {
+				// If this row hasn't been processed yet
+				console.log(`Reverse row ${index} hasn't been processed yet`);
+				results.push({
+					...originalRow,
+					__ReverseReconciliationStatus: 'Not Processed',
+					__ReverseReconciliationReason: 'Row has not been processed yet'
+				});
+				continue;
+			}
+
+			const { row, matched, reasons } = result;
+
+			// Create status and reason text for reverse
+			let status = matched
+				? 'Match'
+				: reasons.length > 0 &&
+					  reasons[0].comparisonValue !== '(No matching record found in reverse)'
+					? 'Partial Match'
+					: 'Not Found';
+
+			// Format the reason text for reverse
+			let reasonText = matched
+				? `Comparison File (${result.reasons && result.reasons[0] ? result.reasons[0].primaryFileRow : 'Row'}) and Primary File match perfectly for all mapped columns in reverse direction`
+				: '';
+			if (!matched) {
+				if (reasons.length === 0) {
+					reasonText = 'Unknown reason';
+				} else if (reasons[0].comparisonValue === '(No matching record found in reverse)') {
+					reasonText = `Comparison File (${reasons[0].primaryFileRow}) ID column "${reasons[0].primaryFileColumn}" with value "${reasons[0].primaryValue}" has no matching record in primary file`;
+				} else {
+					// Create a detailed formatted string of all differences for reverse
+					reasonText = reasons
+						.map(
+							(reason) =>
+								`Comparison File (${reason.primaryFileRow}) column "${reason.primaryFileColumn}" value "${reason.primaryValue}" ≠ Primary File (${reason.comparisonFileRow}) column "${reason.comparisonFileColumn}" value "${reason.comparisonValue}"`
+						)
+						.join('; ');
+				}
+			}
+
+			// Create a new row with all existing fields plus status and reason
+			results.push({
+				...row,
+				__ReverseReconciliationStatus: status,
+				__ReverseReconciliationReason: reasonText
+			});
+		}
+
+		console.log('Finished preparing reverse results, total:', results.length);
+		return results;
+	}
+
+	// Analyze reverse reconciliation failures
+	function analyzeReverseFailures() {
+		console.log('Analyze reverse failures clicked');
+
+		// If the reverse reconciliation is not fully complete, warn the user
+		if (reverseChunks && reverseCompletedChunks < reverseChunks.length) {
+			alert(
+				`Reverse reconciliation is only ${Math.round((reverseCompletedChunks / reverseChunks.length) * 100)}% complete. Analysis will be partial.`
+			);
+		}
+
+		// For reverse analysis, we could either:
+		// 1. Create a dedicated reverse results page, or
+		// 2. Open the regular results page in a new tab with reverse data
+		// For now, let's open a new tab with information about reverse analysis
+		const analysisUrl = '/reconciliation-results?mode=reverse';
+		window.open(analysisUrl, '_blank');
+
+		// Also show an alert to explain what would happen
+		alert(
+			'Opening reverse reconciliation analysis in a new tab. This would show detailed comparison of mismatched records from the reverse perspective (Comparison → Primary).'
+		);
+	}
 </script>
 
 <div class="relative min-h-screen bg-gray-900 py-8 text-white">
@@ -812,7 +1322,9 @@
 		</div>
 
 		<!-- Progress section -->
-		<div class="mb-6 rounded-lg bg-gray-800 p-6 shadow-md shadow-gray-800">
+		<div
+			class="mb-6 rounded-lg border-l-4 border-blue-500 bg-gray-800 p-6 shadow-md shadow-gray-800"
+		>
 			<div class="mb-4 flex items-center justify-between">
 				<h2 class="text-xl font-semibold text-white">Reconciliation Progress</h2>
 				<span class="text-lg font-bold text-blue-400">{progressPercentage}%</span>
@@ -849,8 +1361,55 @@
 			</div>
 		</div>
 
+		<!-- Reverse Progress section (if enabled) -->
+		{#if isReverseReconciliationEnabled}
+			<div
+				class="mb-6 rounded-lg border-l-4 border-orange-500 bg-gray-800 p-6 shadow-md shadow-gray-800"
+			>
+				<div class="mb-4 flex items-center justify-between">
+					<h2 class="text-xl font-semibold text-white">
+						🔄 Reverse Reconciliation Progress
+						<span class="block text-sm text-orange-400">Comparison → Primary</span>
+					</h2>
+					<span class="text-lg font-bold text-orange-400">{reverseProgressPercentage}%</span>
+				</div>
+
+				<!-- Reverse Progress bar -->
+				<div class="mb-4 h-5 overflow-hidden rounded-full bg-gray-700">
+					<div
+						class="h-full rounded-full bg-orange-500 transition-all duration-500 ease-out"
+						style="width: {reverseProgressPercentage}%"
+					></div>
+				</div>
+
+				<!-- Reverse Progress details -->
+				<div class="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+					<div class="text-center">
+						<p class="text-sm text-white">Processed</p>
+						<p class="text-xl font-semibold text-gray-300">
+							{reverseProcessedRows.toLocaleString()} / {reverseTotalRows.toLocaleString()}
+						</p>
+					</div>
+
+					<div class="text-center">
+						<p class="text-sm text-white">Speed</p>
+						<p class="text-xl font-semibold text-gray-300">
+							{reverseMatchingSpeed} rows/sec
+						</p>
+					</div>
+
+					<div class="text-center">
+						<p class="text-sm text-white">Estimated time remaining</p>
+						<p class="text-xl font-semibold text-gray-300">{reverseEstimatedTimeLeft}</p>
+					</div>
+				</div>
+			</div>
+		{/if}
+
 		<!-- Real-time logs section -->
-		<div class="rounded-lg bg-gray-800 p-6 shadow-md shadow-gray-800">
+		<div
+			class="mb-6 rounded-lg border-l-4 border-blue-500 bg-gray-800 p-6 shadow-md shadow-gray-800"
+		>
 			<h2 class="mb-4 text-xl font-semibold text-white">Matching Log</h2>
 
 			<div class="max-h-96 overflow-y-auto">
@@ -967,14 +1526,14 @@
 
 				<div class="mt-4 flex justify-center space-x-4">
 					<button
-						on:click={downloadResults}
+						onclick={downloadResults}
 						class="btn-breathing transform rounded-lg border-2 border-green-500 bg-green-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 hover:text-white"
 					>
 						Download Results
 					</button>
 					{#if hasFailures}
 						<button
-							on:click={analyzeFailures}
+							onclick={analyzeFailures}
 							class="btn-breathing transform rounded-lg border-2 border-blue-500 bg-blue-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-blue-600 hover:text-white"
 						>
 							Analyze Failures
@@ -983,6 +1542,150 @@
 				</div>
 			{/if}
 		</div>
+
+		<!-- Reverse Real-time logs section (if enabled) -->
+		{#if isReverseReconciliationEnabled}
+			<div
+				class="rounded-lg border-l-4 border-orange-500 bg-gray-800 p-6 shadow-md shadow-gray-800"
+			>
+				<h2 class="mb-4 text-xl font-semibold text-white">
+					🔄 Reverse Matching Log
+					<span class="block text-sm text-orange-400">Comparison → Primary</span>
+				</h2>
+
+				<div class="max-h-96 overflow-y-auto">
+					{#if reverseMatchingLogs.length === 0}
+						<p class="py-4 text-center text-gray-400">Reverse reconciliation process starting...</p>
+					{:else}
+						<table class="min-w-full divide-y divide-gray-700">
+							<thead class="bg-gray-700">
+								<tr>
+									<th
+										class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
+									>
+										Primary ID (Reverse)
+									</th>
+									<th
+										class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
+									>
+										Comparison ID (Reverse)
+									</th>
+									<th
+										class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
+									>
+										Status
+									</th>
+									<th
+										class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
+									>
+										Reason
+									</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-gray-700 bg-gray-800">
+								{#each reverseMatchingLogs as log, index (index)}
+									<tr class="hover:bg-gray-700">
+										<td class="whitespace-nowrap px-6 py-4 text-sm text-orange-200">
+											{log.primaryId}
+										</td>
+										<td class="whitespace-nowrap px-6 py-4 text-sm text-orange-200">
+											{log.comparisonId}
+										</td>
+										<td class="whitespace-nowrap px-6 py-4 text-sm">
+											{#if log.matched}
+												<span
+													class="rounded-full bg-green-900 px-2 py-1 text-xs font-semibold text-green-200"
+												>
+													Matched
+												</span>
+											{:else}
+												<span
+													class="rounded-full bg-red-900 px-2 py-1 text-xs font-semibold text-red-200"
+												>
+													Differences
+												</span>
+											{/if}
+										</td>
+										<td class="px-6 py-4 text-sm text-orange-200">
+											{#if log.reasons.length > 0}
+												<details>
+													<summary class="cursor-pointer text-orange-400">
+														{log.reasons.length}
+														{log.reasons.length === 1 ? 'reason' : 'reasons'}
+													</summary>
+													<div class="mt-2">
+														{#each log.reasons as reason}
+															<div class="mb-1 rounded bg-gray-700 p-2">
+																<p class="font-semibold text-orange-300">
+																	{reason.primaryFileColumn} / {reason.comparisonFileColumn}
+																</p>
+																<div class="mt-1 grid grid-cols-1 gap-2">
+																	<div>
+																		<span class="text-xs text-gray-400">Primary Row:</span>
+																		<span class="ml-1 text-sm">{reason.primaryFileRow}</span>
+																	</div>
+																	<div>
+																		<span class="text-xs text-gray-400">Comparison Row:</span>
+																		<span class="ml-1 text-sm">{reason.comparisonFileRow}</span>
+																	</div>
+																	<div>
+																		<span class="text-xs text-gray-400">Primary Value:</span>
+																		<span class="ml-1 text-sm">{reason.primaryValue}</span>
+																	</div>
+																	<div>
+																		<span class="text-xs text-gray-400">Comparison Value:</span>
+																		<span class="ml-1 text-sm">{reason.comparisonValue}</span>
+																	</div>
+																</div>
+															</div>
+														{/each}
+													</div>
+												</details>
+											{:else}
+												<span class="text-gray-400">-</span>
+											{/if}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					{/if}
+				</div>
+				{#if isReverseReconciliationComplete}
+					<!-- Reverse Summary Title -->
+					<div class="mb-4 mt-6 text-center">
+						<h3 class="mb-2 text-xl font-semibold text-white">
+							🔄 Reverse Reconciliation Results Summary
+						</h3>
+						<p class="text-gray-300">
+							{reverseTotalRows.toLocaleString()} total records processed in reverse direction.
+							<span class="{reverseHasFailures ? 'text-yellow-400' : 'text-green-400'} font-medium">
+								{reverseHasFailures
+									? `${(reverseTotalRows - reverseFailureCount).toLocaleString()} matched successfully, ${reverseFailureCount.toLocaleString()} failures detected.`
+									: 'All reverse records matched successfully!'}
+							</span>
+						</p>
+					</div>
+
+					<div class="mt-4 flex justify-center space-x-4">
+						<button
+							onclick={downloadReverseResults}
+							class="btn-breathing transform rounded-lg border-2 border-orange-500 bg-orange-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-orange-600 hover:text-white"
+						>
+							Download Reverse Results
+						</button>
+						{#if reverseHasFailures}
+							<button
+								onclick={analyzeReverseFailures}
+								class="btn-breathing transform rounded-lg border-2 border-blue-500 bg-blue-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-blue-600 hover:text-white"
+							>
+								Analyze Reverse Failures
+							</button>
+						{/if}
+					</div>
+				{/if}
+			</div>
+		{/if}
 	</div>
 </div>
 
@@ -1013,9 +1716,5 @@
 		50% {
 			opacity: 0.5;
 		}
-	}
-
-	.pulse {
-		animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 	}
 </style>

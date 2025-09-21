@@ -113,14 +113,43 @@
 			<div class="mb-8 rounded-lg bg-gray-800 p-6 shadow shadow-gray-800">
 				<h2 class="mb-4 text-xl font-semibold text-white">Files</h2>
 
+				{#if reverseReconciliation}
+					<div
+						class="mb-4 rounded-md border border-orange-500 bg-orange-50 p-3 dark:border-orange-400 dark:bg-orange-900/20"
+					>
+						<div class="flex items-center">
+							<svg
+								class="h-4 w-4 text-orange-500 dark:text-orange-400"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+								></path>
+							</svg>
+							<span class="ml-2 text-sm font-medium text-orange-700 dark:text-orange-300">
+								Reverse reconciliation enabled - files will be swapped during processing
+							</span>
+						</div>
+					</div>
+				{/if}
+
 				<div class="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
 					<div class="rounded-md bg-gray-700 p-4">
-						<h3 class="mb-2 font-medium text-white">Primary File</h3>
+						<h3 class="mb-2 font-medium text-white">
+							Primary File {reverseReconciliation ? '(will become Comparison)' : ''}
+						</h3>
 						<p class="text-sm text-gray-300">{primaryFileName}</p>
 					</div>
 
 					<div class="rounded-md bg-gray-700 p-4">
-						<h3 class="mb-2 font-medium text-white">Comparison File</h3>
+						<h3 class="mb-2 font-medium text-white">
+							Comparison File {reverseReconciliation ? '(will become Primary)' : ''}
+						</h3>
 						<p class="text-sm text-gray-300">{comparisonFileName}</p>
 					</div>
 				</div>
