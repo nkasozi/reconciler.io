@@ -51,7 +51,7 @@ export async function extractTablesFromPDF(file: File): Promise<PDFExtractionRes
 
 		// Add the extracted tables to our results
 		tables.push(...combinedTables);
-		
+
 		// If no tables found, create a fallback
 		if (tables.length === 0) {
 			tables.push({
@@ -110,38 +110,62 @@ async function extractTextFromPDFArrayBuffer(arrayBuffer: ArrayBuffer): Promise<
 function combineRelatedTables(tables: PDFTableData[]): PDFTableData[] {
 	if (tables.length <= 1) return tables;
 
+	// For financial/transaction data, combine all tables with similar structure
 	const combined: PDFTableData[] = [];
-	let currentCombined: PDFTableData | null = null;
+	let mainTable: PDFTableData | null = null;
 
 	for (const table of tables) {
-		if (!currentCombined) {
-			currentCombined = { ...table };
+		if (!mainTable) {
+			// Start with the first table
+			mainTable = { ...table };
 		} else {
-			// Check if this table should be combined with the current one
-			const shouldCombine = 
-				table.headers.length === currentCombined.headers.length &&
-				table.rows.length > 0 &&
-				currentCombined.rows.length < 50; // Don't create overly large tables
+			// For financial data, combine if:
+			// 1. Similar number of columns (within 1-2 columns)
+			// 2. Not too large already
+			const columnDiff = Math.abs(table.headers.length - mainTable.headers.length);
+			const shouldCombine =
+				columnDiff <= 2 && // Allow slight column variation
+				mainTable.rows.length < 100; // Don't create overly large tables
 
 			if (shouldCombine) {
-				// Combine the rows
-				currentCombined.rows.push(...table.rows);
-				currentCombined.rawText += '\n' + table.rawText;
-				currentCombined.confidence = Math.min(currentCombined.confidence, table.confidence);
+				// Combine the rows - pad shorter rows if needed
+				const maxColumns = Math.max(table.headers.length, mainTable.headers.length);
+
+				// Update headers to accommodate more columns if needed
+				if (table.headers.length > mainTable.headers.length) {
+					// Extend main table headers
+					for (let i = mainTable.headers.length; i < maxColumns; i++) {
+						mainTable.headers.push(`Column ${i + 1}`);
+					}
+				}
+
+				// Add table rows, padding if necessary
+				for (const row of table.rows) {
+					const paddedRow = [...row];
+					while (paddedRow.length < maxColumns) {
+						paddedRow.push('');
+					}
+					mainTable.rows.push(paddedRow);
+				}
+
+				mainTable.rawText += '\n' + table.rawText;
+				mainTable.confidence = Math.min(mainTable.confidence, table.confidence);
 			} else {
 				// Save the current combined table and start a new one
-				combined.push(currentCombined);
-				currentCombined = { ...table };
+				if (mainTable.rows.length > 0) {
+					combined.push(mainTable);
+				}
+				mainTable = { ...table };
 			}
 		}
 	}
 
 	// Don't forget the last table
-	if (currentCombined) {
-		combined.push(currentCombined);
+	if (mainTable && mainTable.rows.length > 0) {
+		combined.push(mainTable);
 	}
 
-	return combined;
+	return combined.length > 0 ? combined : tables;
 }
 
 /**
@@ -152,6 +176,13 @@ function extractTablesFromText(text: string): PDFTableData[] {
 		.split('\n')
 		.map((line) => line.trim())
 		.filter((line) => line.length > 0);
+
+	console.log(`\n📄 Processing ${lines.length} lines from PDF text`);
+	console.log(`First 5 lines:`);
+	lines.slice(0, 5).forEach((line, i) => {
+		console.log(`  ${i + 1}: "${line}"`);
+	});
+
 	const tables: PDFTableData[] = [];
 
 	// Look for common table patterns
@@ -179,11 +210,11 @@ function extractTablesFromText(text: string): PDFTableData[] {
  * Detect potential table structures in text lines
  */
 function detectTableStructures(lines: string[]): string[][] {
-	console.log('Detecting table structures in', lines.length, 'lines');
-
 	const tables: string[][] = [];
 	let currentTable: string[] = [];
 	let consecutiveTableLines = 0;
+
+	let nonTableLineCount = 0;
 
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
@@ -194,9 +225,9 @@ function detectTableStructures(lines: string[]): string[][] {
 		if (isTableLike) {
 			currentTable.push(line);
 			consecutiveTableLines++;
+			nonTableLineCount = 0; // Reset non-table line counter
 		} else {
 			// Allow for occasional non-table lines (like empty lines or separators)
-			// Only break the table if we have 2+ non-table lines in a row
 			if (line.trim().length === 0 || line.match(/^[-=_\s|+]+$/)) {
 				// Skip empty lines or separator lines, but don't break the table
 				if (currentTable.length > 0) {
@@ -204,12 +235,19 @@ function detectTableStructures(lines: string[]): string[][] {
 					continue;
 				}
 			} else {
-				// Non-table content - save current table if it's significant
-				if (consecutiveTableLines >= 2) {
-					tables.push([...currentTable]);
+				nonTableLineCount++;
+
+				// Only break the table after several non-table lines
+				// This prevents breaking on occasional formatting lines
+				if (nonTableLineCount >= 3) {
+					// Non-table content - save current table if it's significant
+					if (consecutiveTableLines >= 2) {
+						tables.push([...currentTable]);
+					}
+					currentTable = [];
+					consecutiveTableLines = 0;
+					nonTableLineCount = 0;
 				}
-				currentTable = [];
-				consecutiveTableLines = 0;
 			}
 		}
 	}
@@ -229,17 +267,10 @@ function detectTableStructures(lines: string[]): string[][] {
 				(line.includes('  ') || line.includes('\t') || line.includes('|')) // Has some separation
 		);
 
-		console.log('Potential table lines found:', potentialTable.length);
-
 		if (potentialTable.length >= 3) {
 			tables.push(potentialTable);
 		}
 	}
-
-	console.log('Final tables detected:', tables.length);
-	tables.forEach((table, i) => {
-		console.log(`Table ${i + 1}: ${table.length} lines`);
-	});
 
 	return tables;
 }
@@ -248,11 +279,13 @@ function detectTableStructures(lines: string[]): string[][] {
  * Check if a line looks like it could be part of a table
  */
 function isTableRow(line: string): boolean {
-	// Common table separators
-	const separators = ['\t', '|', ',', '  ', ';'];
+	// Common table separators - include single space to catch headers and data
+	const separators = ['\t', '|', '  ', ' ', ';'];
 
 	// Count separators
 	let separatorCount = 0;
+	let detectedSeparator = '';
+
 	for (const sep of separators) {
 		const count = (
 			line.match(
@@ -261,32 +294,80 @@ function isTableRow(line: string): boolean {
 		).length;
 		if (count >= 2) {
 			// At least 2 separators = 3 columns
-			separatorCount = Math.max(separatorCount, count);
+			if (count > separatorCount) {
+				separatorCount = count;
+				detectedSeparator = sep === '  ' ? 'double-space' : sep === ' ' ? 'single-space' : sep;
+			}
 		}
 	}
 
-	return separatorCount >= 2;
+	const isTable = separatorCount >= 2;
+	if (isTable) {
+		console.log(
+			`✓ Table row detected: "${line.substring(0, 50)}..." | Separator: "${detectedSeparator}" | Count: ${separatorCount}`
+		);
+	} else {
+		// Also log lines that look like they might be table data or headers but aren't detected
+		if (line.length > 10 && (line.includes(' ') || /\d/.test(line))) {
+			console.log(`✗ Not detected as table: "${line.substring(0, 50)}..."`);
+		}
+	}
+
+	return isTable;
+}
+
+/**
+ * Smart parsing for financial data lines that preserves number formatting
+ */
+function parseFinancialDataLine(line: string): string[] {
+	// For financial data, we want to split on multiple spaces but preserve comma-formatted numbers
+	// Use regex to match tokens (including comma-formatted numbers)
+	const tokens = line.match(/\S+/g) || [];
+
+	// Filter out empty tokens and return
+	return tokens.filter((token) => token.trim().length > 0);
 }
 
 /**
  * Parse table lines into structured data
  */
 function parseTableLines(lines: string[]): PDFTableData | null {
-	console.log('Parsing table lines:', lines.length);
 	if (lines.length < 2) return null;
 
+	console.log(`\n🔍 Parsing ${lines.length} table lines:`);
+	lines.slice(0, 3).forEach((line, i) => {
+		console.log(`   ${i + 1}: "${line}"`);
+	});
+
 	// Try different separators to find the best one
-	const separators = [/\s{3,}/, '\t', '|', ',', /\s{2,}/, ';'];
-	let bestSeparator: string | RegExp = /\s{3,}/;
+	// Note: Prioritize space patterns and avoid commas in numbers
+	const separators = [
+		/\s+/, // Any whitespace (most flexible)
+		/\s{2,}/, // 2+ spaces
+		/\s{3,}/, // 3+ spaces
+		'\t', // Tab
+		'|', // Pipe
+		';' // Semicolon (avoid comma to prevent splitting numbers)
+	];
+	let bestSeparator: string | RegExp = /\s+/;
 	let maxColumns = 0;
 	let bestColumnConsistency = 0;
 
 	// Find the separator that gives the most consistent column count
 	for (const sep of separators) {
-		const allParsedLines = lines.map((line) => {
-			const parts = typeof sep === 'string' ? line.split(sep) : line.split(sep);
-			return parts.map((part) => part.trim()).filter((part) => part.length > 0);
-		});
+		let allParsedLines;
+
+		if (typeof sep === 'string') {
+			allParsedLines = lines.map((line) => {
+				const parts = line.split(sep);
+				return parts.map((part) => part.trim()).filter((part) => part.length > 0);
+			});
+		} else {
+			// For regex separators, use smarter splitting for financial data
+			allParsedLines = lines.map((line) => {
+				return parseFinancialDataLine(line);
+			});
+		}
 
 		// Calculate consistency - how many lines have the same number of columns
 		const columnCounts = allParsedLines.map((parts) => parts.length);
@@ -294,6 +375,17 @@ function parseTableLines(lines: string[]): PDFTableData | null {
 		const consistency =
 			columnCounts.filter((count) => count === maxCount).length / columnCounts.length;
 		const avgColumns = columnCounts.reduce((a, b) => a + b, 0) / columnCounts.length;
+
+		// Debug output for separator testing
+		const separatorName = typeof sep === 'string' ? sep : sep.toString();
+		console.log(
+			`  📊 Testing separator "${separatorName}": avgCols=${avgColumns.toFixed(1)}, consistency=${(consistency * 100).toFixed(0)}%, maxCount=${maxCount}`
+		);
+
+		// Show sample parsing with this separator
+		if (allParsedLines.length > 0) {
+			console.log(`     Sample: [${allParsedLines[0].slice(0, 3).join(' | ')}]`);
+		}
 
 		if (
 			avgColumns >= 2 &&
@@ -306,7 +398,16 @@ function parseTableLines(lines: string[]): PDFTableData | null {
 		}
 	}
 
-	if (maxColumns < 2) return null;
+	const bestSeparatorName =
+		typeof bestSeparator === 'string' ? bestSeparator : bestSeparator.toString();
+	console.log(
+		`  🏆 Winner: "${bestSeparatorName}" with ${maxColumns.toFixed(1)} avg columns, ${(bestColumnConsistency * 100).toFixed(0)}% consistency`
+	);
+
+	if (maxColumns < 2) {
+		console.log(`  ❌ No good separator found (max columns: ${maxColumns})`);
+		return null;
+	}
 
 	// Parse using the best separator
 	const allRows: string[][] = [];
@@ -314,32 +415,28 @@ function parseTableLines(lines: string[]): PDFTableData | null {
 
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
-		const parts =
-			typeof bestSeparator === 'string' ? line.split(bestSeparator) : line.split(bestSeparator);
-		const cleanParts = parts.map((part) => part.trim()).filter((part) => part.length > 0);
+		let cleanParts: string[];
+
+		if (typeof bestSeparator === 'string') {
+			const parts = line.split(bestSeparator);
+			cleanParts = parts.map((part) => part.trim()).filter((part) => part.length > 0);
+		} else {
+			// Use smart financial parsing for regex separators
+			cleanParts = parseFinancialDataLine(line);
+		}
 
 		if (cleanParts.length >= 2) {
 			allRows.push(cleanParts);
 		}
 	}
 
-	// Smart header detection - look for first row that might be headers
+	// Simple approach: Use first row as headers, let user decide later
 	let headerRowIndex = 0;
 
-	// Try to detect headers by looking for:
-	// 1. First row with text that looks like column names (no numbers, reasonable length)
-	// 2. Or just use the first row if no clear headers found
+	console.log(`  � Using row 0 as headers (${allRows.length} total rows)`);
 	for (let i = 0; i < Math.min(3, allRows.length); i++) {
 		const row = allRows[i];
-		const looksLikeHeaders = row.every((cell) => {
-			// Headers typically don't start with numbers and aren't too long
-			return !/^\d/.test(cell) && cell.length < 50 && cell.length > 1;
-		});
-
-		if (looksLikeHeaders) {
-			headerRowIndex = i;
-			break;
-		}
+		console.log(`     Row ${i}: [${row.slice(0, 5).join(' | ')}]`);
 	}
 
 	if (allRows.length === 0) return null;
@@ -347,9 +444,11 @@ function parseTableLines(lines: string[]): PDFTableData | null {
 	headers = allRows[headerRowIndex] || [];
 	const dataRows = allRows.slice(headerRowIndex + 1);
 
-	console.log('Headers found:', headers);
-	console.log('Data rows:', dataRows.length);
-	console.log('Sample data rows:', dataRows.slice(0, 3));
+	console.log(`  📋 Final result: ${headers.length} headers, ${dataRows.length} data rows`);
+	console.log(`     Headers: [${headers.slice(0, 3).join(' | ')}]`);
+	if (dataRows.length > 0) {
+		console.log(`     First row: [${dataRows[0].slice(0, 3).join(' | ')}]`);
+	}
 
 	// If we didn't find good headers, create generic ones
 	if (headers.length === 0 && allRows.length > 0) {
