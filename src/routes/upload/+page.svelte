@@ -4,6 +4,9 @@
 	import { reconciliationStore } from '$lib/stores/reconciliationStore';
 	import { goto } from '$app/navigation';
 	import type { ColumnPair } from '$lib/utils/reconciliation';
+	import DocumentScanner from '$lib/components/DocumentScanner.svelte';
+	import ImagePreview from '$lib/components/ImagePreview.svelte';
+	import ScanQualityFeedback from '$lib/components/ScanQualityFeedback.svelte';
 
 	// File data state
 	type FileData = {
@@ -31,6 +34,13 @@
 	});
 
 	let errorMessage = $state<string | null>(null);
+
+	// Scanning state
+	let showPrimaryScanner = $state(false);
+	let showComparisonScanner = $state(false);
+	let primaryScanPreview = $state<{ file: File; scanResult?: any } | null>(null);
+	let comparisonScanPreview = $state<{ file: File; scanResult?: any } | null>(null);
+	let isProcessingScan = $state(false);
 
 	// Typewriter effect state
 	let currentText = $state('');
@@ -233,6 +243,112 @@
 		}
 	}
 
+	// Scanning functions
+	function startScanning(type: 'primary' | 'comparison') {
+		errorMessage = null;
+		if (type === 'primary') {
+			showPrimaryScanner = true;
+		} else {
+			showComparisonScanner = true;
+		}
+	}
+
+	function handleScanCapture(event: CustomEvent<{ file: File }>, type: 'primary' | 'comparison') {
+		const { file } = event.detail;
+
+		if (type === 'primary') {
+			primaryScanPreview = { file };
+			showPrimaryScanner = false;
+		} else {
+			comparisonScanPreview = { file };
+			showComparisonScanner = false;
+		}
+	}
+
+	function handleScanError(event: CustomEvent<{ message: string }>) {
+		errorMessage = event.detail.message;
+	}
+
+	function closeScanners() {
+		console.log('closeScanners function called');
+		console.log(
+			'Before - showPrimaryScanner:',
+			showPrimaryScanner,
+			'showComparisonScanner:',
+			showComparisonScanner
+		);
+		showPrimaryScanner = false;
+		showComparisonScanner = false;
+		console.log(
+			'After - showPrimaryScanner:',
+			showPrimaryScanner,
+			'showComparisonScanner:',
+			showComparisonScanner
+		);
+	}
+
+	function handleScanRetake(type: 'primary' | 'comparison') {
+		if (type === 'primary') {
+			primaryScanPreview = null;
+			showPrimaryScanner = true;
+		} else {
+			comparisonScanPreview = null;
+			showComparisonScanner = true;
+		}
+	}
+
+	function handleScanReject(type: 'primary' | 'comparison') {
+		if (type === 'primary') {
+			primaryScanPreview = null;
+		} else {
+			comparisonScanPreview = null;
+		}
+	}
+
+	async function handleScanProcess(
+		event: CustomEvent<{ file: File }>,
+		type: 'primary' | 'comparison'
+	) {
+		const { file } = event.detail;
+		isProcessingScan = true;
+
+		try {
+			// First scan the document to get scan results
+			const { scanDocument } = await import('$lib/utils/documentScanner');
+			const scanResult = await scanDocument(file, {
+				useOCR: true,
+				extractTables: true,
+				preprocessImage: true
+			});
+
+			// Update preview with scan results
+			if (type === 'primary') {
+				if (primaryScanPreview) {
+					primaryScanPreview.scanResult = scanResult;
+				}
+			} else {
+				if (comparisonScanPreview) {
+					comparisonScanPreview.scanResult = scanResult;
+				}
+			}
+
+			// Process the file as normal
+			await processFile(file, type);
+
+			// Clear preview after successful processing
+			if (type === 'primary') {
+				primaryScanPreview = null;
+			} else {
+				comparisonScanPreview = null;
+			}
+		} catch (error) {
+			console.error('Error processing scanned document:', error);
+			errorMessage = error instanceof Error ? error.message : 'Failed to process scanned document';
+		} finally {
+			isProcessingScan = false;
+		}
+	}
+
 	function removeFile(type: 'primary' | 'comparison') {
 		if (type === 'primary') {
 			primaryFileData = {
@@ -361,48 +477,105 @@
 
 				<!-- Upload Area or Preview -->
 				{#if !primaryFileData.isUploaded}
-					<!-- Upload Area -->
-					<div
-						class="upload-area"
-						class:highlight={false}
-						class:uploading={primaryFileData.isUploading}
-						role="button"
-						tabindex="0"
-						ondragover={(e) => {
-							e.preventDefault();
-							handleDragOver(e);
-						}}
-						ondragleave={(e) => {
-							e.preventDefault();
-							handleDragLeave(e);
-						}}
-						ondrop={(e) => {
-							e.preventDefault();
-							handleDrop(e, 'primary');
-						}}
-					>
-						{#if !primaryFileData.isUploading}
-							<!-- Normal upload state -->
-							<input
-								type="file"
-								class="drop-here"
-								accept=".xlsx,.xls,.pdf,.doc,.docx,.csv,.rtf,.txt"
-								onchange={handlePrimaryFileUpload}
+					{#if primaryScanPreview}
+						<!-- Scan Preview -->
+						<div class="space-y-4">
+							<ImagePreview
+								file={primaryScanPreview.file}
+								scanResult={primaryScanPreview.scanResult}
+								on:retake={() => handleScanRetake('primary')}
+								on:process={(e) => handleScanProcess(e, 'primary')}
+								on:reject={() => handleScanReject('primary')}
 							/>
-							<div class="upload-message">
-								Drag &amp; Drop <br /> an Excel (.xlsx/.xls) or CSV file here
-							</div>
-						{:else}
-							<!-- Uploading state -->
-							<div class="upload-progress">
-								<div class="uploading-text">Uploading...</div>
-								<div class="progress-bar">
-									<div class="progress-fill" style="width: {primaryFileData.progress}%"></div>
+							{#if primaryScanPreview.scanResult}
+								<ScanQualityFeedback scanResult={primaryScanPreview.scanResult} />
+							{/if}
+						</div>
+					{:else}
+						<!-- Upload Area -->
+						<div
+							class="upload-area"
+							class:highlight={false}
+							class:uploading={primaryFileData.isUploading}
+							role="button"
+							tabindex="0"
+							ondragover={(e) => {
+								e.preventDefault();
+								handleDragOver(e);
+							}}
+							ondragleave={(e) => {
+								e.preventDefault();
+								handleDragLeave(e);
+							}}
+							ondrop={(e) => {
+								e.preventDefault();
+								handleDrop(e, 'primary');
+							}}
+						>
+							{#if !primaryFileData.isUploading}
+								<!-- Normal upload state -->
+								<input
+									type="file"
+									class="drop-here"
+									accept=".xlsx,.xls,.pdf,.doc,.docx,.csv,.rtf,.txt,.jpg,.jpeg,.png,.bmp,.tiff,.webp"
+									onchange={handlePrimaryFileUpload}
+								/>
+								<div class="upload-message">
+									Drag &amp; Drop <br /> an Excel (.xlsx/.xls), CSV, PDF, or image file here
 								</div>
-								<div class="progress-text">{Math.round(primaryFileData.progress)}%</div>
-							</div>
-						{/if}
-					</div>
+
+								<!-- Upload options -->
+								<div class="mt-4 flex flex-col space-y-2">
+									<button
+										type="button"
+										class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm text-white transition-colors hover:bg-blue-700"
+										onclick={() => document.querySelector('input[type=file]')?.click()}
+									>
+										📁 Choose File
+									</button>
+
+									<div class="flex items-center space-x-2 text-xs text-gray-400">
+										<hr class="flex-1" />
+										<span>or</span>
+										<hr class="flex-1" />
+									</div>
+
+									<button
+										type="button"
+										class="flex w-full items-center justify-center space-x-2 rounded-lg bg-green-600 px-4 py-2 text-sm text-white transition-colors hover:bg-green-700"
+										onclick={() => startScanning('primary')}
+									>
+										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+											/>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+											/>
+										</svg>
+										<span>📱 Scan Document</span>
+									</button>
+								</div>
+							{:else}
+								<!-- Uploading state -->
+								<div class="upload-progress">
+									<div class="uploading-text">
+										{isProcessingScan ? 'Processing scan...' : 'Uploading...'}
+									</div>
+									<div class="progress-bar">
+										<div class="progress-fill" style="width: {primaryFileData.progress}%"></div>
+									</div>
+									<div class="progress-text">{Math.round(primaryFileData.progress)}%</div>
+								</div>
+							{/if}
+						</div>
+					{/if}
 				{:else}
 					<!-- Preview Table -->
 					<div
@@ -495,48 +668,108 @@
 
 				<!-- Upload Area or Preview -->
 				{#if !comparisonFileData.isUploaded}
-					<!-- Upload Area -->
-					<div
-						class="upload-area"
-						class:highlight={false}
-						class:uploading={comparisonFileData.isUploading}
-						role="button"
-						tabindex="0"
-						ondragover={(e) => {
-							e.preventDefault();
-							handleDragOver(e);
-						}}
-						ondragleave={(e) => {
-							e.preventDefault();
-							handleDragLeave(e);
-						}}
-						ondrop={(e) => {
-							e.preventDefault();
-							handleDrop(e, 'comparison');
-						}}
-					>
-						{#if !comparisonFileData.isUploading}
-							<!-- Normal upload state -->
-							<input
-								type="file"
-								class="drop-here"
-								accept=".xlsx,.xls,.pdf,.doc,.docx,.csv,.rtf,.txt"
-								onchange={handleComparisonFileUpload}
+					{#if comparisonScanPreview}
+						<!-- Scan Preview -->
+						<div class="space-y-4">
+							<ImagePreview
+								file={comparisonScanPreview.file}
+								scanResult={comparisonScanPreview.scanResult}
+								on:retake={() => handleScanRetake('comparison')}
+								on:process={(e) => handleScanProcess(e, 'comparison')}
+								on:reject={() => handleScanReject('comparison')}
 							/>
-							<div class="upload-message">
-								Drag &amp; Drop <br /> another Excel (.xlsx/.xls) or CSV file here
-							</div>
-						{:else}
-							<!-- Uploading state -->
-							<div class="upload-progress">
-								<div class="uploading-text">Uploading...</div>
-								<div class="progress-bar">
-									<div class="progress-fill" style="width: {comparisonFileData.progress}%"></div>
+							{#if comparisonScanPreview.scanResult}
+								<ScanQualityFeedback scanResult={comparisonScanPreview.scanResult} />
+							{/if}
+						</div>
+					{:else}
+						<!-- Upload Area -->
+						<div
+							class="upload-area"
+							class:highlight={false}
+							class:uploading={comparisonFileData.isUploading}
+							role="button"
+							tabindex="0"
+							ondragover={(e) => {
+								e.preventDefault();
+								handleDragOver(e);
+							}}
+							ondragleave={(e) => {
+								e.preventDefault();
+								handleDragLeave(e);
+							}}
+							ondrop={(e) => {
+								e.preventDefault();
+								handleDrop(e, 'comparison');
+							}}
+						>
+							{#if !comparisonFileData.isUploading}
+								<!-- Normal upload state -->
+								<input
+									type="file"
+									class="drop-here"
+									accept=".xlsx,.xls,.pdf,.doc,.docx,.csv,.rtf,.txt,.jpg,.jpeg,.png,.bmp,.tiff,.webp"
+									onchange={handleComparisonFileUpload}
+								/>
+								<div class="upload-message">
+									Drag &amp; Drop <br /> another Excel (.xlsx/.xls), CSV, PDF, or image file here
 								</div>
-								<div class="progress-text">{Math.round(comparisonFileData.progress)}%</div>
-							</div>
-						{/if}
-					</div>
+
+								<!-- Upload options -->
+								<div class="mt-4 flex flex-col space-y-2">
+									<button
+										type="button"
+										class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm text-white transition-colors hover:bg-blue-700"
+										onclick={(e) =>
+											e.currentTarget.parentElement?.parentElement
+												?.querySelector('input[type=file]')
+												?.click()}
+									>
+										📁 Choose File
+									</button>
+
+									<div class="flex items-center space-x-2 text-xs text-gray-400">
+										<hr class="flex-1" />
+										<span>or</span>
+										<hr class="flex-1" />
+									</div>
+
+									<button
+										type="button"
+										class="flex w-full items-center justify-center space-x-2 rounded-lg bg-green-600 px-4 py-2 text-sm text-white transition-colors hover:bg-green-700"
+										onclick={() => startScanning('comparison')}
+									>
+										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+											/>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+											/>
+										</svg>
+										<span>📱 Scan Document</span>
+									</button>
+								</div>
+							{:else}
+								<!-- Uploading state -->
+								<div class="upload-progress">
+									<div class="uploading-text">
+										{isProcessingScan ? 'Processing scan...' : 'Uploading...'}
+									</div>
+									<div class="progress-bar">
+										<div class="progress-fill" style="width: {comparisonFileData.progress}%"></div>
+									</div>
+									<div class="progress-text">{Math.round(comparisonFileData.progress)}%</div>
+								</div>
+							{/if}
+						</div>
+					{/if}
 				{:else}
 					<!-- Preview Table -->
 					<div
@@ -670,6 +903,55 @@
 			</button>
 		</div>
 	</div>
+
+	<!-- Document Scanners -->
+	<DocumentScanner
+		isActive={showPrimaryScanner}
+		onscan={(e) => handleScanCapture(e, 'primary')}
+		onerror={handleScanError}
+		on:close={closeScanners}
+	/>
+
+	<DocumentScanner
+		isActive={showComparisonScanner}
+		onscan={(e) => handleScanCapture(e, 'comparison')}
+		onerror={handleScanError}
+		on:close={closeScanners}
+	/>
+
+	<!-- Error message display -->
+	{#if errorMessage}
+		<div
+			class="fixed bottom-4 right-4 z-50 max-w-md rounded-lg border border-red-400 bg-red-100 p-4 text-red-700 shadow-lg"
+		>
+			<div class="flex items-start space-x-2">
+				<svg class="mt-0.5 h-5 w-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+					<path
+						fill-rule="evenodd"
+						d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+						clip-rule="evenodd"
+					/>
+				</svg>
+				<div>
+					<p class="text-sm font-medium">Upload Error</p>
+					<p class="text-sm">{errorMessage}</p>
+				</div>
+				<button
+					type="button"
+					class="ml-auto text-red-400 hover:text-red-600"
+					onclick={() => (errorMessage = null)}
+				>
+					<svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+						<path
+							fill-rule="evenodd"
+							d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+							clip-rule="evenodd"
+						/>
+					</svg>
+				</button>
+			</div>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -695,14 +977,15 @@
 		position: relative;
 		display: flex;
 		flex-direction: column;
-		justify-content: center;
+		justify-content: flex-start;
 		align-items: center;
-		height: 150px;
+		min-height: 350px; /* Increased height for new buttons */
+		padding: 20px;
 		border: 2px dashed #4a5568;
 		border-radius: 8px;
 		background-color: #2d3748;
 		transition: all 0.3s ease;
-		overflow: hidden;
+		overflow: visible;
 	}
 
 	.upload-area.highlight {
@@ -715,10 +998,11 @@
 		top: 0;
 		left: 0;
 		width: 100%;
-		height: 100%;
+		height: 80px; /* Only cover the drop message area */
 		opacity: 0;
 		cursor: pointer;
-		z-index: 10;
+		z-index: 1; /* Much lower z-index to not interfere */
+		pointer-events: auto;
 	}
 
 	.upload-message {
@@ -726,6 +1010,24 @@
 		font-size: 1rem;
 		color: #e2e8f0;
 		line-height: 1.5;
+		margin-bottom: 20px;
+		position: relative;
+		z-index: 2;
+		pointer-events: none; /* Allow clicks to pass through to buttons below */
+	}
+
+	/* Ensure upload buttons are clickable */
+	.upload-area button {
+		position: relative;
+		z-index: 20; /* Higher z-index than drop area */
+		pointer-events: auto;
+	}
+
+	/* Make button container also properly positioned */
+	.upload-area .mt-4 {
+		position: relative;
+		z-index: 20;
+		width: 100%;
 	}
 
 	/* Upload progress */

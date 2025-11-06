@@ -1,3 +1,5 @@
+import { scanDocument, type DocumentScanResult } from './documentScanner';
+
 /**
  * Defines the structure for parsed file data
  */
@@ -6,6 +8,7 @@ export type ParsedFileData = {
 	rows: Record<string, string>[];
 	fileName: string;
 	fileType: string;
+	scanResult?: DocumentScanResult;
 };
 
 /**
@@ -27,6 +30,8 @@ export function getFileType(file: File): string {
 		return 'doc';
 	} else if (mimeType.includes('rtf')) {
 		return 'rtf';
+	} else if (mimeType.startsWith('image/')) {
+		return 'image';
 	}
 
 	// If MIME type is not conclusive, check by file extension
@@ -44,6 +49,8 @@ export function getFileType(file: File): string {
 		return 'doc';
 	} else if (extension === 'rtf') {
 		return 'rtf';
+	} else if (['jpg', 'jpeg', 'png', 'bmp', 'tiff', 'tif', 'webp'].includes(extension)) {
+		return 'image';
 	}
 
 	return 'unknown';
@@ -82,10 +89,13 @@ export async function parseFile(file: File): Promise<ParsedFileData> {
 		case 'excel':
 			return await parseExcel(file);
 		case 'pdf':
+			return await parsePDF(file);
+		case 'image':
+			return await parseImage(file);
 		case 'doc':
 		case 'rtf':
-			// For the prototype, we'll return placeholder data
-			// In a production app, we'd integrate with PDF/DOC/RTF parsing libraries
+			// For now, we'll return placeholder data for DOC/RTF
+			// These could be added later with additional libraries
 			return createPlaceholderData(file, fileType);
 		default:
 			throw new Error(`Unsupported file type: ${fileType}`);
@@ -301,4 +311,147 @@ async function parseExcel(file: File): Promise<ParsedFileData> {
 		// Read the file as an array buffer
 		reader.readAsArrayBuffer(file);
 	});
+}
+
+/**
+ * Parse PDF file using document scanning
+ */
+async function parsePDF(file: File): Promise<ParsedFileData> {
+	try {
+		const scanResult = await scanDocument(file, {
+			useOCR: false, // Try text extraction first
+			extractTables: true
+		});
+
+		// If we have table data, use it directly (already in the correct format)
+		if (scanResult.columns && scanResult.rows && scanResult.rows.length > 0) {
+			// Check row limit
+			if (scanResult.rows.length > MAX_FREE_TIER_ROWS) {
+				throw new RowLimitExceededError(scanResult.rows.length);
+			}
+
+			return {
+				columns: scanResult.columns,
+				rows: scanResult.rows,
+				fileName: file.name,
+				fileType: 'pdf',
+				scanResult
+			};
+		}
+
+		// If no table data, try to create columns from text
+		const textLines = scanResult.text.split('\n').filter((line) => line.trim().length > 0);
+
+		// Use first few words as column headers if available
+		const firstLine = textLines[0] || '';
+		const columns =
+			firstLine.split(/\s{2,}|\t/).length > 1 ? firstLine.split(/\s{2,}|\t/) : ['Content'];
+
+		const rows: Record<string, string>[] = [];
+
+		// If we have multiple columns, try to parse remaining lines
+		if (columns.length > 1) {
+			for (let i = 1; i < Math.min(textLines.length, MAX_FREE_TIER_ROWS + 1); i++) {
+				const values = textLines[i].split(/\s{2,}|\t/);
+				const rowData: Record<string, string> = {};
+
+				columns.forEach((column, index) => {
+					rowData[column] = index < values.length ? values[index] : '';
+				});
+
+				rows.push(rowData);
+			}
+		} else {
+			// Single column - put each line as a row
+			for (let i = 0; i < Math.min(textLines.length, MAX_FREE_TIER_ROWS); i++) {
+				rows.push({ Content: textLines[i] });
+			}
+		}
+
+		return {
+			columns,
+			rows,
+			fileName: file.name,
+			fileType: 'pdf',
+			scanResult
+		};
+	} catch (error) {
+		throw new Error(
+			`Failed to parse PDF: ${error instanceof Error ? error.message : 'Unknown error'}`
+		);
+	}
+}
+
+/**
+ * Parse image file using OCR
+ */
+async function parseImage(file: File): Promise<ParsedFileData> {
+	try {
+		const scanResult = await scanDocument(file, {
+			useOCR: true,
+			extractTables: true,
+			preprocessImage: true
+		});
+
+		// If we have table data from OCR, use it directly (already in the correct format)
+		if (scanResult.columns && scanResult.rows && scanResult.rows.length > 0) {
+			// Check row limit
+			if (scanResult.rows.length > MAX_FREE_TIER_ROWS) {
+				throw new RowLimitExceededError(scanResult.rows.length);
+			}
+
+			return {
+				columns: scanResult.columns,
+				rows: scanResult.rows,
+				fileName: file.name,
+				fileType: 'image',
+				scanResult
+			};
+		}
+
+		// If no table structure detected, create a simple text-based structure
+		const textLines = scanResult.text.split('\n').filter((line) => line.trim().length > 0);
+
+		// Try to detect if first line looks like headers
+		const firstLine = textLines[0] || '';
+		const possibleColumns = firstLine.split(/\s{2,}|\t/);
+
+		const columns =
+			possibleColumns.length > 1 && possibleColumns.every((col) => col.length < 50)
+				? possibleColumns
+				: ['Extracted Text'];
+
+		const rows: Record<string, string>[] = [];
+
+		if (columns.length > 1) {
+			// Multi-column format
+			for (let i = 1; i < Math.min(textLines.length, MAX_FREE_TIER_ROWS + 1); i++) {
+				const values = textLines[i].split(/\s{2,}|\t/);
+				const rowData: Record<string, string> = {};
+
+				columns.forEach((column, index) => {
+					rowData[column] = index < values.length ? values[index] : '';
+				});
+
+				rows.push(rowData);
+			}
+		} else {
+			// Single column - each line is a row
+			for (let i = 0; i < Math.min(textLines.length, MAX_FREE_TIER_ROWS); i++) {
+				rows.push({ 'Extracted Text': textLines[i] });
+			}
+		}
+
+		return {
+			columns,
+			rows,
+			fileName: file.name,
+			fileType: 'image',
+			scanResult
+		};
+	} catch (error) {
+		throw new Error(
+			`Failed to parse image: ${error instanceof Error ? error.message : 'Unknown error'}`
+		);
+	}
 }
