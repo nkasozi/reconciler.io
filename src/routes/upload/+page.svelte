@@ -7,6 +7,7 @@
 	import DocumentScanner from '$lib/components/DocumentScanner.svelte';
 	import ImagePreview from '$lib/components/ImagePreview.svelte';
 	import ScanQualityFeedback from '$lib/components/ScanQualityFeedback.svelte';
+	import FileDataEditor from '$lib/components/FileDataEditor.svelte';
 
 	// File data state
 	type FileData = {
@@ -41,6 +42,10 @@
 	let primaryScanPreview = $state<{ file: File; scanResult?: any } | null>(null);
 	let comparisonScanPreview = $state<{ file: File; scanResult?: any } | null>(null);
 	let isProcessingScan = $state(false);
+
+	// Editor state
+	let showPrimaryEditor = $state(false);
+	let showComparisonEditor = $state(false);
 
 	// Typewriter effect state
 	let currentText = $state('');
@@ -358,6 +363,7 @@
 				progress: 0,
 				parsedData: null
 			};
+			showPrimaryEditor = false;
 		} else {
 			comparisonFileData = {
 				file: null,
@@ -366,10 +372,37 @@
 				progress: 0,
 				parsedData: null
 			};
+			showComparisonEditor = false;
 		}
 
 		// Update store if needed
 		reconciliationStore.reset();
+	}
+
+	function handleEditData(type: 'primary' | 'comparison') {
+		if (type === 'primary') {
+			showPrimaryEditor = true;
+		} else {
+			showComparisonEditor = true;
+		}
+	}
+
+	function handleSaveEditedData(editedData: ParsedFileData, type: 'primary' | 'comparison') {
+		if (type === 'primary') {
+			primaryFileData.parsedData = editedData;
+			showPrimaryEditor = false;
+		} else {
+			comparisonFileData.parsedData = editedData;
+			showComparisonEditor = false;
+		}
+	}
+
+	function handleCancelEdit(type: 'primary' | 'comparison') {
+		if (type === 'primary') {
+			showPrimaryEditor = false;
+		} else {
+			showComparisonEditor = false;
+		}
 	}
 
 	// Auto-detection: redirect when both files are uploaded
@@ -577,48 +610,68 @@
 						</div>
 					{/if}
 				{:else}
-					<!-- Preview Table -->
-					<div
-						class="preview-container overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800"
-					>
+					<!-- File Data Editor -->
+					{#if showPrimaryEditor && primaryFileData.parsedData}
+						<FileDataEditor
+							data={primaryFileData.parsedData}
+							fileName={primaryFileData.file?.name || 'Primary File'}
+							onSave={(editedData) => handleSaveEditedData(editedData, 'primary')}
+							onCancel={() => handleCancelEdit('primary')}
+						/>
+					{:else}
+						<!-- Preview Table with Edit Button -->
 						<div
-							class="border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-medium uppercase tracking-wider text-gray-600 dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300"
+							class="preview-container overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800"
 						>
-							File Preview (First 20 rows)
-						</div>
-						<div class="preview-table-wrapper max-h-[400px] overflow-auto">
-							<table class="w-auto">
-								<thead class="sticky top-0 z-10">
-									<tr class="bg-gray-50 dark:bg-gray-700">
-										{#each primaryFileData.parsedData.columns as column}
-											<th
-												class="min-w-[150px] whitespace-nowrap border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:border-gray-700 dark:text-gray-300"
-											>
-												{column}
-											</th>
-										{/each}
-									</tr>
-								</thead>
-								<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-									{#each primaryFileData.parsedData.rows.slice(0, 20) as row, i}
-										<tr
-											class={i % 2 === 0
-												? 'bg-white dark:bg-gray-800'
-												: 'bg-gray-50 dark:bg-gray-700'}
-										>
+							<div
+								class="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-700"
+							>
+								<div
+									class="text-xs font-medium uppercase tracking-wider text-gray-600 dark:text-gray-300"
+								>
+									File Preview (First 20 rows)
+								</div>
+								<button
+									class="rounded border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-600 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/40"
+									onclick={() => handleEditData('primary')}
+								>
+									Edit Data
+								</button>
+							</div>
+							<div class="preview-table-wrapper max-h-[400px] overflow-auto">
+								<table class="w-auto">
+									<thead class="sticky top-0 z-10">
+										<tr class="bg-gray-50 dark:bg-gray-700">
 											{#each primaryFileData.parsedData.columns as column}
-												<td
-													class="min-w-[150px] max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-2 text-sm text-gray-600 dark:text-gray-300"
+												<th
+													class="min-w-[150px] whitespace-nowrap border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:border-gray-700 dark:text-gray-300"
 												>
-													{row[column] || ''}
-												</td>
+													{column}
+												</th>
 											{/each}
 										</tr>
-									{/each}
-								</tbody>
-							</table>
+									</thead>
+									<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+										{#each primaryFileData.parsedData.rows.slice(0, 20) as row, i}
+											<tr
+												class={i % 2 === 0
+													? 'bg-white dark:bg-gray-800'
+													: 'bg-gray-50 dark:bg-gray-700'}
+											>
+												{#each primaryFileData.parsedData.columns as column}
+													<td
+														class="min-w-[150px] max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-2 text-sm text-gray-600 dark:text-gray-300"
+													>
+														{row[column] || ''}
+													</td>
+												{/each}
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
 						</div>
-					</div>
+					{/if}
 				{/if}
 			</div>
 
@@ -771,48 +824,68 @@
 						</div>
 					{/if}
 				{:else}
-					<!-- Preview Table -->
-					<div
-						class="preview-container overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800"
-					>
+					<!-- File Data Editor -->
+					{#if showComparisonEditor && comparisonFileData.parsedData}
+						<FileDataEditor
+							data={comparisonFileData.parsedData}
+							fileName={comparisonFileData.file?.name || 'Comparison File'}
+							onSave={(editedData) => handleSaveEditedData(editedData, 'comparison')}
+							onCancel={() => handleCancelEdit('comparison')}
+						/>
+					{:else}
+						<!-- Preview Table with Edit Button -->
 						<div
-							class="border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-medium uppercase tracking-wider text-gray-600 dark:border-gray-700 dark:bg-gray-700 dark:text-gray-300"
+							class="preview-container overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800"
 						>
-							File Preview (First 20 rows)
-						</div>
-						<div class="preview-table-wrapper max-h-[400px] overflow-auto">
-							<table class="w-auto">
-								<thead class="sticky top-0 z-10">
-									<tr class="bg-gray-50 dark:bg-gray-700">
-										{#each comparisonFileData.parsedData.columns as column}
-											<th
-												class="min-w-[150px] whitespace-nowrap border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:border-gray-700 dark:text-gray-300"
-											>
-												{column}
-											</th>
-										{/each}
-									</tr>
-								</thead>
-								<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-									{#each comparisonFileData.parsedData.rows.slice(0, 20) as row, i}
-										<tr
-											class={i % 2 === 0
-												? 'bg-white dark:bg-gray-800'
-												: 'bg-gray-50 dark:bg-gray-700'}
-										>
+							<div
+								class="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-700"
+							>
+								<div
+									class="text-xs font-medium uppercase tracking-wider text-gray-600 dark:text-gray-300"
+								>
+									File Preview (First 20 rows)
+								</div>
+								<button
+									class="rounded border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-600 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/40"
+									onclick={() => handleEditData('comparison')}
+								>
+									Edit Data
+								</button>
+							</div>
+							<div class="preview-table-wrapper max-h-[400px] overflow-auto">
+								<table class="w-auto">
+									<thead class="sticky top-0 z-10">
+										<tr class="bg-gray-50 dark:bg-gray-700">
 											{#each comparisonFileData.parsedData.columns as column}
-												<td
-													class="min-w-[150px] max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-2 text-sm text-gray-600 dark:text-gray-300"
+												<th
+													class="min-w-[150px] whitespace-nowrap border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:border-gray-700 dark:text-gray-300"
 												>
-													{row[column] || ''}
-												</td>
+													{column}
+												</th>
 											{/each}
 										</tr>
-									{/each}
-								</tbody>
-							</table>
+									</thead>
+									<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+										{#each comparisonFileData.parsedData.rows.slice(0, 20) as row, i}
+											<tr
+												class={i % 2 === 0
+													? 'bg-white dark:bg-gray-800'
+													: 'bg-gray-50 dark:bg-gray-700'}
+											>
+												{#each comparisonFileData.parsedData.columns as column}
+													<td
+														class="min-w-[150px] max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-2 text-sm text-gray-600 dark:text-gray-300"
+													>
+														{row[column] || ''}
+													</td>
+												{/each}
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
 						</div>
-					</div>
+					{/if}
 				{/if}
 			</div>
 		</div>
