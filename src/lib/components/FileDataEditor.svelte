@@ -22,6 +22,10 @@
 	let editingColumnIndex = $state<number | null>(null);
 	let newColumnName = $state('');
 
+	// Column deletion confirmation
+	let showDeleteColumnDialog = $state(false);
+	let deletingColumnIndex = $state<number | null>(null);
+
 	// Sync internal state with props changes
 	$effect(() => {
 		editingData = JSON.parse(JSON.stringify(data));
@@ -137,6 +141,44 @@
 		showColumnNameDialog = false;
 		editingColumnIndex = null;
 		newColumnName = '';
+	}
+
+	function deleteColumn(columnIndex: number) {
+		deletingColumnIndex = columnIndex;
+		showDeleteColumnDialog = true;
+	}
+
+	function confirmDeleteColumn() {
+		if (deletingColumnIndex === null) return;
+
+		const columnToDelete = editingData.columns[deletingColumnIndex];
+
+		// Remove the column from columns array
+		const newColumns = editingData.columns.filter((_, index) => index !== deletingColumnIndex);
+
+		// Remove the column data from all rows
+		const newRows = editingData.rows.map((row) => {
+			const newRow: Record<string, string> = {};
+			newColumns.forEach((colName) => {
+				if (row[colName] !== undefined) {
+					newRow[colName] = row[colName];
+				}
+			});
+			return newRow;
+		});
+
+		editingData = {
+			...editingData,
+			columns: newColumns,
+			rows: newRows
+		};
+
+		closeDeleteColumnDialog();
+	}
+
+	function closeDeleteColumnDialog() {
+		showDeleteColumnDialog = false;
+		deletingColumnIndex = null;
 	}
 
 	function startCombineWithNext(columnIndex: number) {
@@ -332,6 +374,44 @@
 		</div>
 	{/if}
 
+	<!-- Column deletion confirmation dialog -->
+	{#if showDeleteColumnDialog && deletingColumnIndex !== null}
+		<div
+			class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+			onclick={closeDeleteColumnDialog}
+		>
+			<div
+				class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800"
+				onclick={(e) => e.stopPropagation()}
+			>
+				<div class="mb-4">
+					<h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Delete Column</h3>
+					<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+						Are you sure you want to delete the column "{editingData.columns[deletingColumnIndex]}"?
+						This action cannot be undone.
+					</p>
+				</div>
+
+				<div class="flex justify-end space-x-3">
+					<button
+						type="button"
+						class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+						onclick={closeDeleteColumnDialog}
+					>
+						Cancel
+					</button>
+					<button
+						type="button"
+						class="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+						onclick={confirmDeleteColumn}
+					>
+						Delete Column
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
+
 	<div class="overflow-x-auto">
 		<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
 			<thead class="bg-gray-50 dark:bg-gray-800">
@@ -375,6 +455,22 @@
 										/>
 									</svg>
 								</button>
+								<!-- Delete column icon (only show if more than 1 column) -->
+								{#if editingData.columns.length > 1}
+									<button
+										class="text-red-500 opacity-50 hover:opacity-100"
+										onclick={() => deleteColumn(columnIndex)}
+										title="Delete this column"
+									>
+										<svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+											<path
+												fill-rule="evenodd"
+												d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+												clip-rule="evenodd"
+											/>
+										</svg>
+									</button>
+								{/if}
 								{#if columnIndex < editingData.columns.length - 1}
 									<button
 										class="opacity-50 hover:opacity-100"
