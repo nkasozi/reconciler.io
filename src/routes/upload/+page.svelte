@@ -554,7 +554,7 @@
 									onchange={handlePrimaryFileUpload}
 								/>
 								<div class="upload-message">
-									Drag &amp; Drop <br /> an Excel (.xlsx/.xls), CSV, PDF, or image file here
+									Drag &amp; Drop <br /> Primary Excel, CSV, PDF, or image file here
 								</div>
 
 								<!-- Upload options -->
@@ -765,7 +765,7 @@
 									onchange={handleComparisonFileUpload}
 								/>
 								<div class="upload-message">
-									Drag &amp; Drop <br /> another Excel (.xlsx/.xls), CSV, PDF, or image file here
+									Drag &amp; Drop <br /> Comparison Excel, CSV, PDF, or image file here
 								</div>
 
 								<!-- Upload options -->
@@ -980,16 +980,16 @@
 	<!-- Document Scanners -->
 	<DocumentScanner
 		isActive={showPrimaryScanner}
-		onscan={(e) => handleScanCapture(e, 'primary')}
+		onscan={(e: any) => handleScanCapture(e, 'primary')}
 		onerror={handleScanError}
-		on:close={closeScanners}
+		onclose={closeScanners}
 	/>
 
 	<DocumentScanner
 		isActive={showComparisonScanner}
-		onscan={(e) => handleScanCapture(e, 'comparison')}
+		onscan={(e: any) => handleScanCapture(e, 'comparison')}
 		onerror={handleScanError}
-		on:close={closeScanners}
+		onclose={closeScanners}
 	/>
 
 	<!-- Error message display -->

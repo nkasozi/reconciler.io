@@ -26,6 +26,9 @@
 	let showDeleteColumnDialog = $state(false);
 	let deletingColumnIndex = $state<number | null>(null);
 
+	// Header row deletion confirmation
+	let showDeleteHeaderDialog = $state(false);
+
 	// Sync internal state with props changes
 	$effect(() => {
 		editingData = JSON.parse(JSON.stringify(data));
@@ -84,15 +87,18 @@
 	}
 
 	function deleteHeaderRow() {
-		console.log('=== DELETE HEADER ROW START ===');
-		console.log('Current columns (header):', editingData.columns);
-		console.log('Current rows count:', editingData.rows.length);
-		console.log('First few rows:', editingData.rows.slice(0, 3));
-
 		if (editingData.rows.length === 0) {
 			console.log('No data rows left, cannot delete header');
 			return;
 		}
+		showDeleteHeaderDialog = true;
+	}
+
+	function confirmDeleteHeader() {
+		console.log('=== DELETE HEADER ROW START ===');
+		console.log('Current columns (header):', editingData.columns);
+		console.log('Current rows count:', editingData.rows.length);
+		console.log('First few rows:', editingData.rows.slice(0, 3));
 
 		// The header row is in editingData.columns
 		// The first DATA row should become the new header
@@ -122,6 +128,12 @@
 		console.log('New columns (header):', editingData.columns);
 		console.log('New rows count:', editingData.rows.length);
 		console.log('=== DELETE HEADER ROW END ===');
+
+		closeDeleteHeaderDialog();
+	}
+
+	function closeDeleteHeaderDialog() {
+		showDeleteHeaderDialog = false;
 	}
 
 	function editColumnName(columnIndex: number) {
@@ -406,6 +418,63 @@
 						onclick={confirmDeleteColumn}
 					>
 						Delete Column
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Header row deletion confirmation dialog -->
+	{#if showDeleteHeaderDialog}
+		<div
+			class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+			onclick={closeDeleteHeaderDialog}
+		>
+			<div
+				class="w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800"
+				onclick={(e) => e.stopPropagation()}
+			>
+				<div class="mb-4">
+					<h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">Delete Header Row</h3>
+					<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+						Are you sure you want to delete the current header row? The first data row will become
+						the new header.
+					</p>
+					<div class="mt-3 rounded-md bg-yellow-50 p-3 dark:bg-yellow-900/20">
+						<div class="flex">
+							<svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+								<path
+									fill-rule="evenodd"
+									d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+									clip-rule="evenodd"
+								/>
+							</svg>
+							<div class="ml-3">
+								<p class="text-sm text-yellow-700 dark:text-yellow-300">
+									Current header: "{editingData.columns.join('", "')}"
+									{#if editingData.rows.length > 0}
+										<br />Will be replaced with: "{Object.values(editingData.rows[0]).join('", "')}"
+									{/if}
+								</p>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="flex justify-end space-x-3">
+					<button
+						type="button"
+						class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+						onclick={closeDeleteHeaderDialog}
+					>
+						Cancel
+					</button>
+					<button
+						type="button"
+						class="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+						onclick={confirmDeleteHeader}
+					>
+						Delete Header
 					</button>
 				</div>
 			</div>
