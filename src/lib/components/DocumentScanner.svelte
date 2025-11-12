@@ -17,15 +17,23 @@
 		onclose
 	}: DocumentScannerProps = $props();
 
+	// Debug log component initialization
+	console.log('=== DOCUMENT SCANNER INITIALIZED ===');
+	console.log('isActive:', isActive);
+	console.log('onscan callback:', !!onscan);
+	console.log('onerror callback:', !!onerror);
+	console.log('onclose callback:', !!onclose);
+
 	const dispatch = createEventDispatcher<{
 		scan: { file: File };
 		error: { message: string };
 		close: void;
 	}>();
 
-	let videoElement: HTMLVideoElement = $state()!;
-	let canvasElement: HTMLCanvasElement = $state()!;
-	let fileInputElement: HTMLInputElement = $state()!;
+	// DOM element references - these are managed by Svelte bindings
+	let videoElement: HTMLVideoElement;
+	let canvasElement: HTMLCanvasElement;
+	let fileInputElement: HTMLInputElement;
 	let stream: MediaStream | null = $state(null);
 	let isCapturing = $state(false);
 	let isCameraReady = $state(false);
@@ -33,18 +41,24 @@
 	let scanMode: 'selection' | 'camera' | 'upload' = $state('selection');
 	let uploadedFile: File | null = $state(null);
 	let uploadedImageUrl: string | null = $state(null);
+	let wasActiveLastTime = $state(false);
 
-	// Camera constraints
+	// Camera constraints - more flexible to avoid permission issues
 	const videoConstraints = {
 		video: {
-			width: { ideal: 1920 },
-			height: { ideal: 1080 },
-			facingMode: 'environment' // Use rear camera on mobile
+			width: { ideal: 1920, min: 640 },
+			height: { ideal: 1080, min: 480 },
+			facingMode: { ideal: 'environment', exact: undefined } // Prefer rear camera but don't require it
 		}
 	};
 
 	onMount(() => {
+		console.log('=== DOCUMENT SCANNER MOUNTED ===');
+		console.log('Initial isActive:', isActive);
+		console.log('Initial scanMode:', scanMode);
+
 		return () => {
+			console.log('=== DOCUMENT SCANNER UNMOUNTING ===');
 			if (stream) {
 				stopCamera();
 			}
@@ -54,15 +68,68 @@
 	async function startCamera() {
 		try {
 			errorMessage = '';
-			stream = await navigator.mediaDevices.getUserMedia(videoConstraints);
+
+			// Wait a bit to ensure video element is bound
+			if (!videoElement) {
+				await new Promise((resolve) => setTimeout(resolve, 100));
+			}
+
+			if (!videoElement) {
+				throw new Error('Video element not available');
+			}
+
+			// Try with preferred constraints first
+			try {
+				stream = await navigator.mediaDevices.getUserMedia(videoConstraints);
+			} catch (constraintError) {
+				console.warn(
+					'Failed with preferred constraints, trying basic constraints:',
+					constraintError
+				);
+				// Fallback to basic constraints
+				const basicConstraints = { video: true };
+				stream = await navigator.mediaDevices.getUserMedia(basicConstraints);
+			}
+
 			videoElement.srcObject = stream;
 
 			videoElement.onloadedmetadata = () => {
 				videoElement.play();
 				isCameraReady = true;
 			};
+
+			// Also handle play() promise rejection
+			videoElement.addEventListener('canplay', () => {
+				videoElement.play().catch((playError) => {
+					console.warn('Video play failed:', playError);
+					// Try again after a short delay
+					setTimeout(() => {
+						videoElement.play().catch(() => {
+							console.error('Video play failed after retry');
+						});
+					}, 100);
+				});
+			});
 		} catch (error) {
-			errorMessage = 'Failed to access camera. Please ensure camera permissions are granted.';
+			console.error('Camera error:', error);
+
+			// More specific error messages
+			let userMessage = 'Failed to access camera. ';
+			if (error instanceof DOMException) {
+				if (error.name === 'NotAllowedError') {
+					userMessage += 'Please grant camera permissions and try again.';
+				} else if (error.name === 'NotFoundError') {
+					userMessage += 'No camera found on this device.';
+				} else if (error.name === 'NotReadableError') {
+					userMessage += 'Camera is already in use by another application.';
+				} else {
+					userMessage += 'Please ensure camera permissions are granted and try again.';
+				}
+			} else {
+				userMessage += 'Please ensure camera permissions are granted and try again.';
+			}
+
+			errorMessage = userMessage;
 			const errorEvent = new CustomEvent('error', { detail: { message: errorMessage } });
 			if (onerror) onerror(errorEvent);
 			dispatch('error', { message: errorMessage });
@@ -133,12 +200,20 @@
 	}
 
 	function selectCameraMode() {
+		console.log('=== SELECT CAMERA MODE CLICKED ===');
+		console.log('Current scanMode:', scanMode);
 		scanMode = 'camera';
-		startCamera();
+		console.log('New scanMode:', scanMode);
+		console.log('videoElement available:', !!videoElement);
+		console.log('stream available:', !!stream);
+		// Camera will start via $effect when scanMode changes and video element is ready
 	}
 
 	function selectUploadMode() {
+		console.log('=== SELECT UPLOAD MODE CLICKED ===');
+		console.log('Current scanMode:', scanMode);
 		scanMode = 'upload';
+		console.log('New scanMode:', scanMode);
 		stopCamera(); // Make sure camera is stopped if it was running
 	}
 
@@ -205,25 +280,58 @@
 		}
 	}
 
-	// Reset to selection mode when component becomes active
+	// Reset to selection mode when component first becomes active (not on every change)
 	$effect(() => {
-		if (isActive) {
-			if (scanMode !== 'selection') {
-				scanMode = 'selection';
-			}
+		console.log('=== RESET EFFECT ===');
+		console.log('isActive:', isActive, 'wasActiveLastTime:', wasActiveLastTime);
+		console.log('scanMode:', scanMode);
+
+		// Only reset when transitioning from inactive to active
+		if (isActive && !wasActiveLastTime) {
+			console.log('Component just became active - resetting to selection mode');
+			scanMode = 'selection';
+			resetUpload();
 		}
+
+		wasActiveLastTime = isActive;
 	});
 
 	// Stop camera when component becomes inactive
 	$effect(() => {
+		console.log('=== STOP CAMERA EFFECT ===');
+		console.log('isActive:', isActive);
+		console.log('stream:', !!stream);
 		if (!isActive && stream) {
 			console.log('Stopping camera...');
 			stopCamera();
 		}
 	});
+
+	// Start camera when switching to camera mode and video element is ready
+	$effect(() => {
+		console.log('=== START CAMERA EFFECT ===');
+		console.log('scanMode:', scanMode);
+		console.log('videoElement available:', !!videoElement);
+		console.log('stream exists:', !!stream);
+
+		if (scanMode === 'camera' && videoElement && !stream) {
+			console.log('Starting camera due to mode change...');
+			startCamera();
+		} else {
+			console.log('Not starting camera - conditions not met');
+		}
+	});
+
+	// Track isActive prop changes
+	$effect(() => {
+		console.log('=== ISACTIVE CHANGED ===');
+		console.log('isActive:', isActive);
+		console.log('Current scanMode:', scanMode);
+	});
 </script>
 
 {#if isActive}
+	{@const _ = console.log('=== DOCUMENT SCANNER RENDERING ===', { isActive, scanMode })}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
 		<div class="mx-4 max-h-screen w-full max-w-4xl overflow-hidden rounded-lg bg-white p-6">
 			<div class="mb-4 flex items-center justify-between">

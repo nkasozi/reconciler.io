@@ -250,23 +250,40 @@
 
 	// Scanning functions
 	function startScanning(type: 'primary' | 'comparison') {
+		console.log('=== START SCANNING CALLED ===');
+		console.log('type:', type);
+		console.log('Current showPrimaryScanner:', showPrimaryScanner);
+		console.log('Current showComparisonScanner:', showComparisonScanner);
+
 		errorMessage = null;
 		if (type === 'primary') {
 			showPrimaryScanner = true;
+			console.log('Set showPrimaryScanner to true');
 		} else {
 			showComparisonScanner = true;
+			console.log('Set showComparisonScanner to true');
 		}
+
+		console.log('New showPrimaryScanner:', showPrimaryScanner);
+		console.log('New showComparisonScanner:', showComparisonScanner);
 	}
 
 	function handleScanCapture(event: CustomEvent<{ file: File }>, type: 'primary' | 'comparison') {
+		console.log('=== HANDLE SCAN CAPTURE ===');
+		console.log('type:', type);
+		console.log('event:', event);
+		console.log('file:', event.detail.file);
+
 		const { file } = event.detail;
 
 		if (type === 'primary') {
 			primaryScanPreview = { file };
 			showPrimaryScanner = false;
+			console.log('Primary scan captured, showPrimaryScanner set to false');
 		} else {
 			comparisonScanPreview = { file };
 			showComparisonScanner = false;
+			console.log('Comparison scan captured, showComparisonScanner set to false');
 		}
 	}
 
