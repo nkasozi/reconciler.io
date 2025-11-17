@@ -320,7 +320,8 @@ async function parsePDF(file: File): Promise<ParsedFileData> {
 	try {
 		const scanResult = await scanDocument(file, {
 			useOCR: false, // Try text extraction first
-			extractTables: true
+			extractTables: true,
+			useGoogleDocumentAI: true // Enable Google Document AI for better PDF processing
 		});
 
 		// If we have table data, use it directly (already in the correct format)
@@ -390,7 +391,8 @@ async function parseImage(file: File): Promise<ParsedFileData> {
 		const scanResult = await scanDocument(file, {
 			useOCR: true,
 			extractTables: true,
-			preprocessImage: true
+			preprocessImage: true,
+			useGoogleDocumentAI: true // Enable Google Document AI for superior image OCR
 		});
 
 		// If we have table data from OCR, use it directly (already in the correct format)

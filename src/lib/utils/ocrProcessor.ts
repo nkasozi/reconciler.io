@@ -1,4 +1,11 @@
-// OCR processing focused on tabular data extraction
+// OCR processing with Google Document AI and Tesseract.js fallback
+
+import {
+	createGoogleDocumentAIProcessor,
+	type GoogleDocumentAIConfig,
+	type GoogleDocumentAIResult
+} from './googleDocumentAI.js';
+import { getGoogleDocumentAIConfig } from './googleDocumentAIConfig.js';
 
 export interface OCRTableData {
 	headers: string[];
@@ -16,10 +23,12 @@ export interface OCRExtractionResult {
 export interface OCROptions {
 	language?: string;
 	preserveInterwordSpaces?: boolean;
+	useGoogleDocumentAI?: boolean;
+	googleApiKey?: string; // API key for Google Document AI
 }
 
 /**
- * Extract tabular data from an image using OCR
+ * Extract tabular data from an image using Google Document AI (primary) or Tesseract.js (fallback)
  */
 export async function extractTablesFromImage(
 	imageSource: File | HTMLCanvasElement | string,
@@ -29,15 +38,74 @@ export async function extractTablesFromImage(
 		throw new Error('OCR processing is only available in browser environment');
 	}
 
+	// Convert input to File if needed
+	let file: File;
+	if (imageSource instanceof File) {
+		file = imageSource;
+	} else if (imageSource instanceof HTMLCanvasElement) {
+		file = await canvasToFile(imageSource);
+	} else if (typeof imageSource === 'string') {
+		throw new Error('URL-based image processing not yet implemented');
+	} else {
+		throw new Error('Unsupported image source type');
+	}
+
+	// Try Google Document AI via backend first (no API key needed - handled server-side)
+	if (options.useGoogleDocumentAI !== false) {
+		try {
+			console.log('Starting Google Document AI processing via backend...');
+
+			// Import the backend client
+			const { processDocumentWithBackend, convertToOCRResult } = await import(
+				'./documentAIClient.js'
+			);
+
+			// Process via backend (Vercel function in production, SvelteKit API in development)
+			const backendResult = await processDocumentWithBackend(file);
+
+			if (backendResult.success) {
+				console.log('Google Document AI completed successfully via backend');
+				console.log('Tables found:', backendResult.tables.length);
+
+				if (backendResult.isDevelopmentMock) {
+					console.log('📝 Using development mock data');
+				}
+
+				// Convert backend result to OCR format
+				const ocrResult = convertToOCRResult(backendResult);
+
+				// If no structured tables found, try parsing text
+				if (ocrResult.tables.length === 0 && backendResult.text.trim()) {
+					console.log('No structured tables found, parsing text for table patterns...');
+					const parsedTables = extractTablesFromOCRText(
+						backendResult.text,
+						backendResult.confidence * 100
+					);
+					ocrResult.tables.push(...parsedTables);
+				}
+
+				return ocrResult;
+			} else {
+				console.warn('Google Document AI backend failed:', backendResult.error);
+				throw new Error(backendResult.error || 'Google Document AI backend processing failed');
+			}
+		} catch (error) {
+			console.warn('Google Document AI backend failed, falling back to Tesseract.js:', error);
+			// Fall through to Tesseract.js fallback
+		}
+	}
+
+	// Fallback to Tesseract.js
 	try {
+		console.log('Using Tesseract.js for OCR processing...');
 		const { createWorker } = await import('tesseract.js');
 		const worker = await createWorker(options.language || 'eng');
-		
+
 		// Configure for table detection
 		const parameters: any = {
 			preserve_interword_spaces: options.preserveInterwordSpaces ? '1' : '0'
 		};
-		
+
 		await worker.setParameters(parameters);
 
 		// Perform OCR
@@ -62,15 +130,37 @@ export async function extractTablesFromImage(
 }
 
 /**
+ * Convert canvas to File for Google Document AI processing
+ */
+async function canvasToFile(
+	canvas: HTMLCanvasElement,
+	filename: string = 'image.png'
+): Promise<File> {
+	return new Promise((resolve) => {
+		canvas.toBlob((blob) => {
+			if (blob) {
+				const file = new File([blob], filename, { type: 'image/png' });
+				resolve(file);
+			} else {
+				throw new Error('Failed to convert canvas to blob');
+			}
+		});
+	});
+}
+
+/**
  * Extract tabular structures from OCR text
  */
 function extractTablesFromOCRText(text: string, overallConfidence: number): OCRTableData[] {
-	const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+	const lines = text
+		.split('\n')
+		.map((line) => line.trim())
+		.filter((line) => line.length > 0);
 	const tables: OCRTableData[] = [];
-	
+
 	// Look for table patterns (similar to PDF processing but with OCR considerations)
 	const potentialTables = detectTableStructuresInOCR(lines);
-	
+
 	for (const tableLines of potentialTables) {
 		const tableData = parseOCRTableLines(tableLines, overallConfidence);
 		if (tableData && tableData.rows.length > 0) {
@@ -99,10 +189,10 @@ function detectTableStructuresInOCR(lines: string[]): string[][] {
 
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
-		
+
 		// Check if line looks like a table row (more lenient for OCR)
 		const isTableLike = isOCRTableRow(line);
-		
+
 		if (isTableLike) {
 			currentTable.push(line);
 			consecutiveTableLines++;
@@ -134,22 +224,24 @@ function isOCRTableRow(line: string): boolean {
 		/\|\s*/, // Pipes with optional spaces
 		/\t+/, // Tabs
 		/,\s*/, // Commas with optional spaces
-		/;\s*/, // Semicolons
+		/;\s*/ // Semicolons
 	];
-	
+
 	for (const sep of separators) {
 		const matches = line.match(new RegExp(sep, 'g')) || [];
-		if (matches.length >= 1) { // At least 1 separator = 2 columns
+		if (matches.length >= 1) {
+			// At least 1 separator = 2 columns
 			return true;
 		}
 	}
-	
+
 	// Also check for aligned data (common in printed tables)
 	const words = line.split(/\s+/);
-	if (words.length >= 3) { // At least 3 words could be columnar data
+	if (words.length >= 3) {
+		// At least 3 words could be columnar data
 		return true;
 	}
-	
+
 	return false;
 }
 
@@ -165,10 +257,10 @@ function parseOCRTableLines(lines: string[], baseConfidence: number): OCRTableDa
 		/\|\s*/, // Pipes
 		/,\s*/, // Commas
 		/\t+/, // Tabs
-		/;\s*/, // Semicolons
+		/;\s*/ // Semicolons
 	];
-	
-	let bestResult: { rows: string[][], headers: string[], separator: RegExp | string } | null = null;
+
+	let bestResult: { rows: string[][]; headers: string[]; separator: RegExp | string } | null = null;
 	let maxColumns = 0;
 
 	// Try each separator
@@ -186,7 +278,7 @@ function parseOCRTableLines(lines: string[], baseConfidence: number): OCRTableDa
 		headers: bestResult.headers,
 		rows: bestResult.rows,
 		rawText: lines.join('\n'),
-		confidence: Math.min(baseConfidence / 100, 0.9), // Convert to 0-1 and cap
+		confidence: Math.min(baseConfidence / 100, 0.9) // Convert to 0-1 and cap
 	};
 }
 
@@ -202,10 +294,8 @@ function tryParseLinesWithSeparator(lines: string[], separator: RegExp | string)
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
 		const parts = line.split(separator);
-		
-		const cleanParts = parts
-			.map(part => part.trim())
-			.filter(part => part.length > 0);
+
+		const cleanParts = parts.map((part) => part.trim()).filter((part) => part.length > 0);
 
 		if (cleanParts.length >= 2) {
 			if (i === 0) {
@@ -219,7 +309,7 @@ function tryParseLinesWithSeparator(lines: string[], separator: RegExp | string)
 	}
 
 	const avgColumns = validLines > 0 ? totalColumns / validLines : 0;
-	
+
 	return avgColumns >= 2 ? { rows, headers, avgColumns, separator } : null;
 }
 
@@ -234,7 +324,7 @@ function createSimpleTableFromText(lines: string[], baseConfidence: number): OCR
 	let maxWords = 0;
 
 	for (const line of lines) {
-		const words = line.split(/\s+/).filter(word => word.trim().length > 0);
+		const words = line.split(/\s+/).filter((word) => word.trim().length > 0);
 		if (words.length > 1) {
 			rows.push(words);
 			maxWords = Math.max(maxWords, words.length);
@@ -251,7 +341,7 @@ function createSimpleTableFromText(lines: string[], baseConfidence: number): OCR
 		headers,
 		rows: dataRows,
 		rawText: lines.join('\n'),
-		confidence: Math.min(baseConfidence / 100 * 0.7, 0.7), // Lower confidence for simple extraction
+		confidence: Math.min((baseConfidence / 100) * 0.7, 0.7) // Lower confidence for simple extraction
 	};
 }
 
@@ -266,11 +356,11 @@ export function preprocessImage(canvas: HTMLCanvasElement): HTMLCanvasElement {
 	// Convert to grayscale and apply contrast enhancement
 	for (let i = 0; i < data.length; i += 4) {
 		const gray = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
-		
+
 		// Apply contrast enhancement
 		const enhanced = gray > 128 ? 255 : 0;
-		
-		data[i] = enhanced;     // Red
+
+		data[i] = enhanced; // Red
 		data[i + 1] = enhanced; // Green
 		data[i + 2] = enhanced; // Blue
 		// Alpha stays the same

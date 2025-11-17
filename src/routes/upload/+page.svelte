@@ -340,7 +340,8 @@
 			const scanResult = await scanDocument(file, {
 				useOCR: true,
 				extractTables: true,
-				preprocessImage: true
+				preprocessImage: true,
+				useGoogleDocumentAI: true // Enable Google Document AI backend processing
 			});
 
 			// Update preview with scan results

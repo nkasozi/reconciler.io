@@ -17,6 +17,7 @@ export interface ScanOptions {
 	language?: string;
 	preprocessImage?: boolean;
 	extractTables?: boolean;
+	useGoogleDocumentAI?: boolean; // Use Google Document AI via backend (no API key needed)
 }
 
 /**
@@ -98,11 +99,13 @@ async function scanPDF(file: File, options: ScanOptions = {}): Promise<DocumentS
  * Scan image file using OCR and extract tabular data
  */
 async function scanImage(file: File, options: ScanOptions = {}): Promise<DocumentScanResult> {
-	const { language = 'eng' } = options;
+	const { language = 'eng', useGoogleDocumentAI = true } = options;
 
 	try {
-		const imageResult = await extractTablesFromImage(file, { language });
-
+		const imageResult = await extractTablesFromImage(file, {
+			language,
+			useGoogleDocumentAI
+		});
 		if (!imageResult.success) {
 			throw new Error(imageResult.error || 'Image OCR failed');
 		}
