@@ -44,37 +44,17 @@
 	<!-- Navigation -->
 	<nav class="mx-auto w-full max-w-xl pt-8 md:max-w-2xl lg:max-w-4xl xl:max-w-5xl">
 		<div class="container px-8 py-2 lg:px-0">
-			<nav class="relative flex items-center justify-between sm:h-10 md:justify-center">
-				<div class="flex flex-1 items-center md:absolute md:inset-y-0 md:left-0">
-					<div class="flex w-full items-center justify-between md:w-auto">
+			<!-- Desktop Navigation (lg:block) - Hidden on tablets -->
+			<nav class="relative hidden items-center justify-between sm:h-10 lg:flex lg:justify-center">
+				<div class="flex flex-1 items-center lg:absolute lg:inset-y-0 lg:left-0">
+					<div class="flex w-full items-center justify-between lg:w-auto">
 						<a href="/" title="Finance Reconciliation tool">
 							<span class="text-2xl font-extrabold tracking-tight text-blue-500">Reconciler</span>
 							<span class="text-2xl tracking-tight text-green-500">.io</span>
 						</a>
-						<div class="-mr-2 flex items-center md:hidden">
-							<!-- Mobile menu button -->
-							<button
-								type="button"
-								class="cursor-pointer px-2 text-white hover:text-red-500 focus:text-red-500 focus:outline-none"
-								aria-label="Toggle mobile menu"
-								on:click={() => {
-									console.log('Menu button clicked');
-									toggleMobileNav();
-								}}
-							>
-								<svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M4 6h16M4 12h16M4 18h16"
-									/>
-								</svg>
-							</button>
-						</div>
 					</div>
 				</div>
-				<div class="hidden md:block">
+				<div class="block">
 					<a
 						href="/"
 						class="ml-8 font-medium text-blue-500 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-blue-400 dark:hover:text-blue-300 dark:focus:text-blue-300"
@@ -97,7 +77,7 @@
 					>
 				</div>
 				<div
-					class="hidden md:absolute md:inset-y-0 md:right-0 md:flex md:items-center md:justify-end"
+					class="lg:absolute lg:inset-y-0 lg:right-0 lg:flex lg:items-center lg:justify-end"
 				>
 					<ul class="flex">
 						<li class="mb-3 block py-2 lg:mb-0 lg:px-4">
@@ -121,6 +101,89 @@
 							</a>
 						</li>
 					</ul>
+				</div>
+			</nav>
+
+			<!-- Tablet Navigation (md:flex lg:hidden) - Simplified layout for tablets -->
+			<nav class="relative hidden items-center justify-between sm:h-10 md:flex lg:hidden">
+				<div class="flex items-center">
+					<a href="/" title="Finance Reconciliation tool" class="mr-8">
+						<span class="text-xl font-extrabold tracking-tight text-blue-500">Reconciler</span>
+						<span class="text-xl tracking-tight text-green-500">.io</span>
+					</a>
+				</div>
+				<div class="flex items-center space-x-4">
+					<a
+						href="/"
+						class="text-sm font-medium text-blue-500 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-blue-400 dark:hover:text-blue-300 dark:focus:text-blue-300"
+						>Home</a
+					>
+					<a
+						href="/features"
+						class="text-sm font-medium text-blue-500 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-blue-400 dark:hover:text-blue-300 dark:focus:text-blue-300"
+						>Features</a
+					>
+					<a
+						href="/pricing"
+						class="text-sm font-medium text-blue-500 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-blue-400 dark:hover:text-blue-300 dark:focus:text-blue-300"
+						>Pricing</a
+					>
+					<a
+						href="/why-reconcile"
+						class="hidden xl:inline text-sm font-medium text-blue-500 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-blue-400 dark:hover:text-blue-300 dark:focus:text-blue-300"
+						>Why Reconcile?</a
+					>
+				</div>
+				<div class="flex items-center space-x-2">
+					<a
+						href="/login"
+						title="Login"
+						class="text-sm text-white hover:text-blue-400"
+						on:click={showComingSoon}
+					>
+						Login
+					</a>
+					<a
+						href="/signup"
+						title="Sign Up"
+						class="rounded border border-red-400 bg-red-400 px-3 py-1 text-sm font-semibold text-white hover:bg-red-600 hover:text-white"
+						on:click={showComingSoon}
+					>
+						Sign Up
+					</a>
+				</div>
+			</nav>
+
+			<!-- Mobile Navigation -->
+			<nav class="relative flex items-center justify-between sm:h-10 md:hidden">
+				<div class="flex flex-1 items-center">
+					<div class="flex w-full items-center justify-between">
+						<a href="/" title="Finance Reconciliation tool">
+							<span class="text-2xl font-extrabold tracking-tight text-blue-500">Reconciler</span>
+							<span class="text-2xl tracking-tight text-green-500">.io</span>
+						</a>
+						<div class="-mr-2 flex items-center">
+							<!-- Mobile menu button -->
+							<button
+								type="button"
+								class="cursor-pointer px-2 text-white hover:text-red-500 focus:text-red-500 focus:outline-none"
+								aria-label="Toggle mobile menu"
+								on:click={() => {
+									console.log('Menu button clicked');
+									toggleMobileNav();
+								}}
+							>
+								<svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M4 6h16M4 12h16M4 18h16"
+									/>
+								</svg>
+							</button>
+						</div>
+					</div>
 				</div>
 			</nav>
 		</div>
