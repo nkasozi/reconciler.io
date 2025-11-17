@@ -953,7 +953,7 @@
 
 		<!-- Debug State Info -->
 		<div
-			class="mx-auto mb-4 max-w-4xl rounded-md border border-gray-700 bg-gray-800 p-3 text-xs text-gray-300"
+			class="mx-auto mb-4 hidden max-w-4xl rounded-md border border-gray-700 bg-gray-800 p-3 text-xs text-gray-300"
 		>
 			<details>
 				<summary class="cursor-pointer font-semibold">Debug State Info (Click to expand)</summary>
