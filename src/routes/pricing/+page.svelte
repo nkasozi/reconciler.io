@@ -2,9 +2,9 @@
 	import { goto } from '$app/navigation';
 	import { onMount, onDestroy } from 'svelte';
 
-	let isAnnual = true;
-	let isHoveredPro = false;
-	let isHoveredEnterprise = false;
+	let isAnnual = $state(false); // Default to monthly
+	let isHoveredPro = $state(false);
+	let isHoveredEnterprise = $state(false);
 	let upgradeNotice = $state<string | null>(null);
 
 	// Check for upgrade prompt from file upload
@@ -28,7 +28,9 @@
 	});
 
 	function switchBilling() {
+		console.log('Switch billing clicked, current isAnnual:', isAnnual);
 		isAnnual = !isAnnual;
+		console.log('After toggle, isAnnual:', isAnnual);
 	}
 
 	function getPrice(monthly: number): string {
@@ -99,7 +101,7 @@
 			<!-- Billing toggle -->
 			<div class="mt-8 flex items-center justify-center">
 				<span
-					class={`text-sm ${isAnnual ? 'font-medium text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}
+					class={`text-sm ${!isAnnual ? 'font-medium text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}
 					>Monthly</span
 				>
 				<button
@@ -112,7 +114,7 @@
 					></span>
 				</button>
 				<span
-					class={`text-sm ${!isAnnual ? 'text-gray-500 dark:text-gray-400' : 'font-medium text-gray-900 dark:text-white'}`}
+					class={`text-sm ${isAnnual ? 'font-medium text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}
 				>
 					Annual <span class="ml-1 font-medium text-green-500">Save 15%</span>
 				</span>
@@ -238,7 +240,7 @@
 				<div class="border-b border-gray-200 p-6 dark:border-gray-700">
 					<h3 class="mb-2 text-xl font-bold text-gray-900 dark:text-white">Pro</h3>
 					<div class="mb-4 flex items-end gap-1">
-						<span class="text-4xl font-bold text-gray-900 dark:text-white">{getPrice(29)}</span>
+						<span class="text-4xl font-bold text-gray-900 dark:text-white">{getPrice(5)}</span>
 						<span class="pb-1 text-gray-500 dark:text-gray-400">{getPeriod()}</span>
 					</div>
 					<p class="text-sm text-gray-600 dark:text-gray-300">
@@ -407,7 +409,7 @@
 				<div class="border-b border-gray-200 p-6 dark:border-gray-700">
 					<h3 class="mb-2 text-xl font-bold text-gray-900 dark:text-white">Enterprise</h3>
 					<div class="mb-4 flex items-end gap-1">
-						<span class="text-4xl font-bold text-gray-900 dark:text-white">{getPrice(99)}</span>
+						<span class="text-4xl font-bold text-gray-900 dark:text-white">{getPrice(10)}</span>
 						<span class="pb-1 text-gray-500 dark:text-gray-400">{getPeriod()}</span>
 					</div>
 					<p class="text-sm text-gray-600 dark:text-gray-300">
