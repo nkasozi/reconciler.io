@@ -40,23 +40,17 @@
 		comparisonFile = state.comparisonFileData;
 
 		// If files are missing, redirect back to upload
-		if (!primaryFile || !comparisonFile) {
+		if (!primaryFile) {
+			console.warn('Missing Primary file data, redirecting to upload page');
 			goto('/upload');
 			return;
 		}
 
-		// Add event listeners for keyboard navigation
-		const handleKeyDown = (e: KeyboardEvent) => {
-			if (e.key === 'Escape') {
-				goBack();
-			}
-		};
-
-		window.addEventListener('keydown', handleKeyDown);
-
-		return () => {
-			window.removeEventListener('keydown', handleKeyDown);
-		};
+		if (!comparisonFile) {
+			console.warn('Missing Comparison file data, redirecting to upload page');
+			goto('/upload');
+			return;
+		}
 	});
 
 	// Validation

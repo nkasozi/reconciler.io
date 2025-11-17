@@ -29,8 +29,21 @@
 
 	onMount(() => {
 		const unsubscribe = reconciliationStore.subscribe((state) => {
-			if (!state.primaryFileData || !state.comparisonFileData || !state.reconciliationConfig) {
-				// Redirect to upload page if data is missing
+			if (!state.primaryFileData) {
+				console.log('Missing state.primaryFileData');
+				// Redirect to upload page if any required data is missing
+				goto('/upload');
+				return;
+			}
+			if (!state.comparisonFileData) {
+				console.log('Missing state.comparisonFileData');
+				// Redirect to upload page if any required data is missing
+				goto('/upload');
+				return;
+			}
+			if (!state.reconciliationConfig) {
+				console.log('Missing state.reconciliationConfig');
+				// Redirect to upload page if any required data is missing
 				goto('/upload');
 				return;
 			}

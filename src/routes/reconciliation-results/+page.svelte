@@ -129,8 +129,30 @@
 
 	onMount(async () => {
 		const unsubscribe = reconciliationStore.subscribe((state) => {
-			if (!state.primaryFileData || !state.comparisonFileData || !state.reconciliationConfig) {
-				errorMessage = 'Required data is missing. Please go back and complete the previous steps.';
+			if (!state.primaryFileData) {
+				console.log('Missing primaryFileData in reconciliation store state');
+				errorMessage =
+					'PrimaryFileData is missing. Please go back and complete the previous steps.';
+				setTimeout(() => {
+					goto('/upload');
+				}, 2000);
+				return;
+			}
+
+			if (!state.comparisonFileData) {
+				console.log('Missing comparisonFileData in reconciliation store state');
+				errorMessage =
+					'ComparisonFileData is missing. Please go back and complete the previous steps.';
+				setTimeout(() => {
+					goto('/upload');
+				}, 2000);
+				return;
+			}
+
+			if (!state.reconciliationConfig) {
+				console.log('Missing reconciliationConfig in reconciliation store state');
+				errorMessage =
+					'ReconciliationConfig is missing. Please go back and complete the previous steps.';
 				setTimeout(() => {
 					goto('/upload');
 				}, 2000);
