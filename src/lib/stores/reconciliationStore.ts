@@ -92,5 +92,15 @@ export const reconciliationStore = {
 				? { ...state.reconciliationConfig, ...options }
 				: null
 		}));
+	},
+
+	// Get current snapshot of the store state
+	getSnapshot: () => {
+		let currentState = initialState;
+		const unsubscribe = subscribe((state) => {
+			currentState = state;
+		});
+		unsubscribe();
+		return currentState;
 	}
 };

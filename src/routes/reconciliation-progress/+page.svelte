@@ -993,8 +993,8 @@
 			}
 		});
 
-		// Navigate to the analysis page in a new tab
-		window.open('/reconciliation-results', '_blank');
+		// Navigate to the analysis page in the same tab
+		goto('/reconciliation-results');
 	}
 
 	function downloadResults() {
@@ -1269,14 +1269,10 @@
 
 		// For reverse analysis, we could either:
 		// 1. Create a dedicated reverse results page, or
-		// 2. Open the regular results page in a new tab with reverse data
-		// For now, let's open a new tab with information about reverse analysis
-		const analysisUrl = '/reconciliation-results?mode=reverse';
-		window.open(analysisUrl, '_blank');
-
-		// Also show an alert to explain what would happen
+		// 2. Navigate to the regular results page with reverse data
+		// For now, let's show information about reverse analysis
 		alert(
-			'Opening reverse reconciliation analysis in a new tab. This would show detailed comparison of mismatched records from the reverse perspective (Comparison → Primary).'
+			'Reverse reconciliation analysis would show detailed comparison of mismatched records from the reverse perspective (Comparison → Primary). This feature is coming soon!'
 		);
 	}
 </script>
