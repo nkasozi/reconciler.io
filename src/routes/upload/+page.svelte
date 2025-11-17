@@ -442,9 +442,6 @@
 			};
 			showComparisonEditor = false;
 		}
-
-		// Update store if needed
-		reconciliationStore.reset();
 	}
 
 	function handleEditData(type: 'primary' | 'comparison') {
