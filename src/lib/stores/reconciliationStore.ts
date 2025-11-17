@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import type { ParsedFileData } from '../utils/fileParser';
 import type { ReconciliationConfig, ReconciliationResult } from '../utils/reconciliation';
 
@@ -29,7 +29,8 @@ const initialState = {
 };
 
 // Create the writable store
-const { subscribe, set, update } = writable(initialState);
+const store = writable(initialState);
+const { subscribe, set, update } = store;
 
 // Create the store object with helper methods
 export const reconciliationStore = {
@@ -96,11 +97,6 @@ export const reconciliationStore = {
 
 	// Get current snapshot of the store state
 	getSnapshot: () => {
-		let currentState = initialState;
-		const unsubscribe = subscribe((state) => {
-			currentState = state;
-		});
-		unsubscribe();
-		return currentState;
+		return get(store);
 	}
 };

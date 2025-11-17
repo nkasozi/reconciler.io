@@ -8,7 +8,7 @@
 	function downloadResults() {
 		// Get data from store
 		const data = reconciliationStore.getSnapshot();
-		if (!data || !data.reconciliationResults) {
+		if (!data || !data.reconciliationResult) {
 			alert('No reconciliation data found');
 			return;
 		}
@@ -32,7 +32,7 @@
 				};
 
 			const id = row[idColumnName];
-			const matchResult = data.reconciliationResults.matches.find((m) => m.idValues.primary === id);
+			const matchResult = data.reconciliationResult.matches.find((m) => m.idValues.primary === id);
 
 			let status = 'Not Found';
 			let reason = 'No matching record in comparison file';
