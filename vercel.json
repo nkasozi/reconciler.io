@@ -1,0 +1,7 @@
+{
+	"functions": {
+		"api/process-document.js": {
+			"maxDuration": 180
+		}
+	}
+}

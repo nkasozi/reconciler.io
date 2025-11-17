@@ -18,15 +18,16 @@ export interface FileValidationOptions {
  * Default validation limits based on Google Document AI constraints
  */
 export const DEFAULT_VALIDATION_LIMITS = {
-	// File size limits
+	// File size limits (PDFs have no size limit - only page count limits)
 	maxImageSizeMB: 35, // Google Document AI limit for images
-	maxPDFSizeMB: 100, // More generous for PDFs since they're processed differently
+	maxCSVSizeMB: 50, // Reasonable limit for CSV files (processed client-side)
 
-	// Page limits
+	// Page limits (PDFs only)
 	maxPDFPages: 15, // Conservative limit (Document AI supports up to 30 in imageless mode)
 
 	// Supported file types
 	allowedTypes: [
+		// Document AI processed files
 		'application/pdf',
 		'image/jpeg',
 		'image/jpg',
@@ -35,7 +36,11 @@ export const DEFAULT_VALIDATION_LIMITS = {
 		'image/bmp',
 		'image/webp',
 		'image/tiff',
-		'image/tif'
+		'image/tif',
+		// Client-side processed files
+		'text/csv',
+		'application/vnd.ms-excel', // .xls
+		'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' // .xlsx
 	]
 };
 
@@ -46,15 +51,37 @@ export async function validateFile(
 	file: File,
 	options: FileValidationOptions = {}
 ): Promise<FileValidationResult> {
+	// Determine appropriate size limit based on file type (PDFs have no size limit - only page limit)
+	const getDefaultSizeLimit = (fileType: string, fileName: string) => {
+		// PDFs don't have size limits - only page count limits
+		if (fileType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
+			return Infinity; // No size limit for PDFs
+		}
+		if (
+			fileType === 'text/csv' ||
+			fileType === 'application/vnd.ms-excel' ||
+			fileType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+			fileName.toLowerCase().endsWith('.csv') ||
+			fileName.toLowerCase().endsWith('.xls') ||
+			fileName.toLowerCase().endsWith('.xlsx')
+		) {
+			return DEFAULT_VALIDATION_LIMITS.maxCSVSizeMB;
+		}
+		return DEFAULT_VALIDATION_LIMITS.maxImageSizeMB;
+	};
+
 	const {
-		maxFileSizeMB = file.type === 'application/pdf'
-			? DEFAULT_VALIDATION_LIMITS.maxPDFSizeMB
-			: DEFAULT_VALIDATION_LIMITS.maxImageSizeMB,
+		maxFileSizeMB = getDefaultSizeLimit(file.type, file.name),
 		maxPDFPages = DEFAULT_VALIDATION_LIMITS.maxPDFPages,
 		allowedTypes = DEFAULT_VALIDATION_LIMITS.allowedTypes
 	} = options;
 
 	const warnings: string[] = [];
+
+	// Log file type for debugging
+	console.log(
+		`🔍 Validating file: ${file.name}, Type: ${file.type}, Size: ${(file.size / (1024 * 1024)).toFixed(1)}MB`
+	);
 
 	// Check file type
 	const isValidType = allowedTypes.some(
@@ -62,24 +89,48 @@ export async function validateFile(
 	);
 
 	if (!isValidType) {
+		console.error(`❌ Unsupported file type: ${file.type} for file: ${file.name}`);
 		return {
 			isValid: false,
 			error: `Unsupported file type. Please upload ${formatAllowedTypes(allowedTypes)} files.`
 		};
 	}
 
-	// Check file size
-	const fileSizeMB = file.size / (1024 * 1024);
-	if (fileSizeMB > maxFileSizeMB) {
-		return {
-			isValid: false,
-			error: `File size too large (${fileSizeMB.toFixed(1)}MB). Maximum allowed: ${maxFileSizeMB}MB.`
-		};
+	// Identify processing method
+	const isCSV =
+		file.type === 'text/csv' ||
+		file.name.toLowerCase().endsWith('.csv') ||
+		file.type === 'application/vnd.ms-excel' ||
+		file.name.toLowerCase().endsWith('.xls') ||
+		file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+		file.name.toLowerCase().endsWith('.xlsx');
+
+	if (isCSV) {
+		console.log(`📊 CSV/Excel file detected - will be processed client-side`);
+	} else if (file.type === 'application/pdf') {
+		console.log(`📄 PDF file detected - will be processed with Document AI`);
+	} else if (file.type.startsWith('image/')) {
+		console.log(`🖼️ Image file detected - will be processed with Document AI`);
 	}
 
-	// Add warning for large files
-	if (fileSizeMB > 10) {
-		warnings.push(`Large file (${fileSizeMB.toFixed(1)}MB) may take longer to process.`);
+	// Check file size (skip for PDFs - we only care about page count for PDFs)
+	const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+	if (!isPDF) {
+		const fileSizeMB = file.size / (1024 * 1024);
+		if (fileSizeMB > maxFileSizeMB) {
+			return {
+				isValid: false,
+				error: `File size too large (${fileSizeMB.toFixed(1)}MB). Maximum allowed: ${maxFileSizeMB}MB.`
+			};
+		}
+
+		// Add warning for large files (non-PDF)
+		if (fileSizeMB > 10) {
+			warnings.push(`Large file (${fileSizeMB.toFixed(1)}MB) may take longer to process.`);
+		}
+	} else {
+		console.log(`📄 PDF file - skipping size validation, will check page count only`);
 	}
 
 	// Check PDF page count if it's a PDF
