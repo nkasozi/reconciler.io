@@ -662,10 +662,12 @@
 									</button>
 								</div>
 							{:else}
-								<!-- Uploading state -->
+								<!-- Processing state -->
 								<div class="upload-progress">
-									<div class="uploading-text">
-										{isProcessingScan ? 'Processing scan...' : 'Uploading...'}
+									<div class="processing-text">
+										{isProcessingScan ? 'Processing scan...' : 'Processing...'}<span
+											class="cursor-blink">|</span
+										>
 									</div>
 									<div class="progress-bar">
 										<div class="progress-fill" style="width: {primaryFileData.progress}%"></div>
@@ -874,10 +876,12 @@
 									</button>
 								</div>
 							{:else}
-								<!-- Uploading state -->
+								<!-- Processing state -->
 								<div class="upload-progress">
-									<div class="uploading-text">
-										{isProcessingScan ? 'Processing scan...' : 'Uploading...'}
+									<div class="processing-text">
+										{isProcessingScan ? 'Processing scan...' : 'Processing...'}<span
+											class="cursor-blink">|</span
+										>
 									</div>
 									<div class="progress-bar">
 										<div class="progress-fill" style="width: {comparisonFileData.progress}%"></div>
@@ -1188,10 +1192,28 @@
 		text-align: center;
 	}
 
-	.uploading-text {
+	.processing-text {
 		margin-bottom: 10px;
 		color: #4caf50;
 		font-weight: 500;
+	}
+
+	/* Blinking cursor animation */
+	.cursor-blink {
+		animation: blink 1s infinite;
+		font-weight: bold;
+		color: #4caf50;
+	}
+
+	@keyframes blink {
+		0%,
+		50% {
+			opacity: 1;
+		}
+		51%,
+		100% {
+			opacity: 0;
+		}
 	}
 
 	.progress-bar {
