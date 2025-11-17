@@ -499,17 +499,12 @@
 			console.log('Redirecting to column mapping page');
 
 			try {
-				// Force a refresh of the store data
-				reconciliationStore.reset();
-
-				// Set the data in the store
+				// Set the data in the store (don't reset - just update)
 				console.log('Setting primary file data in store');
 				reconciliationStore.setPrimaryFileData(primaryFileData.parsedData);
 
-				if (comparisonFileData.parsedData) {
-					console.log('Setting comparison file data in store');
-					reconciliationStore.setComparisonFileData(comparisonFileData.parsedData);
-				}
+				console.log('Setting comparison file data in store');
+				reconciliationStore.setComparisonFileData(comparisonFileData.parsedData);
 
 				// Navigate to column mapping page
 				goto('/column-selection');
