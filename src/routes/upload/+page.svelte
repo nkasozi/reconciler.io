@@ -999,26 +999,58 @@
 			</details>
 		</div>
 
-		<!-- Map Columns Button -->
-		<div class="mb-16 flex justify-center">
-			<button
-				onclick={openMappingModal}
-				disabled={!primaryFileData.isUploaded ||
-					!comparisonFileData.isUploaded ||
-					!primaryFileData.parsedData ||
-					!comparisonFileData.parsedData}
-				class="btn-breathing mt-2 transform rounded-lg border-2 border-green-500 bg-green-500 px-4 py-2 text-sm font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 hover:text-white sm:px-6 sm:py-3 sm:text-base"
-				class:opacity-50={!primaryFileData.isUploaded ||
-					!comparisonFileData.isUploaded ||
-					!primaryFileData.parsedData ||
-					!comparisonFileData.parsedData}
-				class:cursor-not-allowed={!primaryFileData.isUploaded ||
-					!comparisonFileData.isUploaded ||
-					!primaryFileData.parsedData ||
-					!comparisonFileData.parsedData}
-			>
-				Map Columns
-			</button>
+		<!-- Map Columns Button - Hero CTA -->
+		<div class="mb-20 flex justify-center px-4">
+			<div class="relative">
+				<!-- Main button -->
+				<button
+					onclick={openMappingModal}
+					disabled={!primaryFileData.isUploaded ||
+						!comparisonFileData.isUploaded ||
+						!primaryFileData.parsedData ||
+						!comparisonFileData.parsedData}
+					class="hero-cta-button w-full max-w-3xl transform rounded-2xl border-4 border-green-500 bg-green-500 px-12 py-6 text-xl font-extrabold text-white shadow-2xl transition-all duration-300 hover:scale-[1.02] hover:bg-green-600 focus:outline-none focus:ring-4 focus:ring-green-400 focus:ring-opacity-50 active:scale-[0.98] sm:px-16 sm:py-8 sm:text-2xl"
+					class:opacity-40={!primaryFileData.isUploaded ||
+						!comparisonFileData.isUploaded ||
+						!primaryFileData.parsedData ||
+						!comparisonFileData.parsedData}
+					class:cursor-not-allowed={!primaryFileData.isUploaded ||
+						!comparisonFileData.isUploaded ||
+						!primaryFileData.parsedData ||
+						!comparisonFileData.parsedData}
+					class:hover:scale-100={!primaryFileData.isUploaded ||
+						!comparisonFileData.isUploaded ||
+						!primaryFileData.parsedData ||
+						!comparisonFileData.parsedData}
+				>
+					<span class="flex items-center justify-center space-x-3 sm:space-x-4">
+						<span class="tracking-wide">Next Step</span>
+						<svg
+							class="h-6 w-6 transform transition-transform duration-200 group-hover:translate-x-1 sm:h-8 sm:w-8"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="3"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<path d="M5 12h14"></path>
+							<path d="M13 5l7 7-7 7"></path>
+						</svg>
+						<span class="tracking-wide">Map Columns</span>
+					</span>
+				</button>
+
+				<!-- Helper text -->
+				<p class="mt-4 text-center text-sm text-gray-400">
+					{#if !primaryFileData.isUploaded || !comparisonFileData.isUploaded}
+						Upload both files to continue
+					{:else}
+						Ready to map your columns for reconciliation
+					{/if}
+				</p>
+			</div>
 		</div>
 	</div>
 
@@ -1073,35 +1105,31 @@
 </div>
 
 <style>
-	/* Button animation */
-	@keyframes btn-breathing {
-		0% {
-			transform: scale(1);
-		}
-		50% {
-			transform: scale(1.03);
-		}
-		100% {
-			transform: scale(1);
-		}
+	/* Hero CTA Button Styling */
+	.hero-cta-button {
+		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
 	}
 
-	.btn-breathing {
-		animation: btn-breathing 4s ease-in-out infinite;
+	.hero-cta-button:not(:disabled):hover {
+		box-shadow: 0 15px 50px rgba(0, 0, 0, 0.4);
 	}
 
-	/* Reduce animation scale on mobile */
+	.hero-cta-button:disabled {
+		box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+	}
+
+	.hero-cta-button + p {
+		transition: all 0.3s ease;
+	}
+
+	/* Reduce effects on mobile for performance */
 	@media (max-width: 640px) {
-		@keyframes btn-breathing {
-			0% {
-				transform: scale(1);
-			}
-			50% {
-				transform: scale(1.015);
-			}
-			100% {
-				transform: scale(1);
-			}
+		.hero-cta-button {
+			box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+		}
+
+		.hero-cta-button:not(:disabled):hover {
+			box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
 		}
 	}
 
