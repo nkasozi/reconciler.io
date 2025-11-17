@@ -7,6 +7,7 @@
 
 	let { children } = $props();
 	let mobileNavOpen = $state(false);
+	let showComingSoonModal = $state(false);
 
 	onMount(() => {
 		console.log('Layout component mounted');
@@ -35,7 +36,11 @@
 
 	function showComingSoon(event) {
 		event.preventDefault();
-		alert('Login and signup functionality coming soon!');
+		showComingSoonModal = true;
+	}
+
+	function closeComingSoon() {
+		showComingSoonModal = false;
 	}
 </script>
 
@@ -273,6 +278,60 @@
 
 	<!-- Main content -->
 	{@render children()}
+
+	<!-- Coming Soon Modal -->
+	{#if showComingSoonModal}
+		<div
+			class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4"
+			on:click={closeComingSoon}
+		>
+			<div class="w-full max-w-md rounded-lg bg-gray-800 p-6 shadow-2xl" on:click|stopPropagation>
+				<div class="mb-6 text-center">
+					<!-- Icon -->
+					<div
+						class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-600"
+					>
+						<svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+							/>
+						</svg>
+					</div>
+
+					<!-- Title -->
+					<h3 class="mb-2 text-xl font-bold text-white">Coming Soon!</h3>
+
+					<!-- Message -->
+					<p class="text-gray-300">
+						We're working on something exciting for you!
+						<br /><br />
+						<span class="text-blue-400">Great things are on the way.</span>
+					</p>
+				</div>
+
+				<!-- Action buttons -->
+				<div class="flex justify-center space-x-3">
+					<button
+						type="button"
+						on:click={closeComingSoon}
+						class="rounded-lg bg-gray-600 px-6 py-2 font-medium text-white transition duration-200 hover:bg-gray-700 focus:outline-none focus:ring-4 focus:ring-gray-500 focus:ring-opacity-50"
+					>
+						Got it
+					</button>
+					<button
+						type="button"
+						on:click={closeComingSoon}
+						class="rounded-lg bg-blue-600 px-6 py-2 font-medium text-white transition duration-200 hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50"
+					>
+						Continue browsing
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Decorative circles -->
 	<div class="home-page-circle-1"></div>
