@@ -1,7 +1,8 @@
 // Vercel serverless function for Google Document AI processing
 // This runs in Vercel's serverless environment
 
-const { DocumentProcessorServiceClient } = require('@google-cloud/documentai').v1;
+import { v1 as documentai } from '@google-cloud/documentai';
+const { DocumentProcessorServiceClient } = documentai;
 
 // Your Google Document AI configuration
 const CONFIG = {
@@ -37,7 +38,7 @@ try {
  * Vercel serverless function handler
  * Processes documents using Google Document AI
  */
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
 	// Enable CORS for frontend calls
 	res.setHeader('Access-Control-Allow-Origin', '*');
 	res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -169,7 +170,7 @@ module.exports = async (req, res) => {
 			details: error.stack
 		});
 	}
-};
+}
 
 /**
  * Extract text from text anchor (from Node.js example)

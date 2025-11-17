@@ -1026,7 +1026,7 @@
 					!comparisonFileData.isUploaded ||
 					!primaryFileData.parsedData ||
 					!comparisonFileData.parsedData}
-				class="btn-breathing mt-2 transform rounded-lg border-2 border-green-500 bg-green-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 hover:text-white"
+				class="btn-breathing mt-2 transform rounded-lg border-2 border-green-500 bg-green-500 px-4 py-2 text-sm font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 hover:text-white sm:px-6 sm:py-3 sm:text-base"
 				class:opacity-50={!primaryFileData.isUploaded ||
 					!comparisonFileData.isUploaded ||
 					!primaryFileData.parsedData ||
@@ -1107,6 +1107,21 @@
 
 	.btn-breathing {
 		animation: btn-breathing 4s ease-in-out infinite;
+	}
+
+	/* Reduce animation scale on mobile */
+	@media (max-width: 640px) {
+		@keyframes btn-breathing {
+			0% {
+				transform: scale(1);
+			}
+			50% {
+				transform: scale(1.015);
+			}
+			100% {
+				transform: scale(1);
+			}
+		}
 	}
 
 	/* Upload area styling */
