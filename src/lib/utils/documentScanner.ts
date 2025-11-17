@@ -5,7 +5,6 @@ export interface DocumentScanResult {
 	type: 'pdf' | 'image';
 	text: string;
 	confidence?: number;
-	// Updated to match ParsedFileData format
 	columns?: string[];
 	rows?: Record<string, string>[];
 	metadata?: any;
@@ -13,11 +12,8 @@ export interface DocumentScanResult {
 }
 
 export interface ScanOptions {
-	useOCR?: boolean;
 	language?: string;
-	preprocessImage?: boolean;
 	extractTables?: boolean;
-	useGoogleDocumentAI?: boolean; // Use Google Document AI via backend (no API key needed)
 }
 
 /**
@@ -96,18 +92,16 @@ async function scanPDF(file: File, options: ScanOptions = {}): Promise<DocumentS
 }
 
 /**
- * Scan image file using OCR and extract tabular data
+ * Scan image file using Google Document AI
  */
 async function scanImage(file: File, options: ScanOptions = {}): Promise<DocumentScanResult> {
-	const { language = 'eng', useGoogleDocumentAI = true } = options;
+	const { language = 'eng' } = options;
 
 	try {
-		const imageResult = await extractTablesFromImage(file, {
-			language,
-			useGoogleDocumentAI
-		});
+		const imageResult = await extractTablesFromImage(file, { language });
+
 		if (!imageResult.success) {
-			throw new Error(imageResult.error || 'Image OCR failed');
+			throw new Error('Unable to process image');
 		}
 
 		// If we have tables, use the first one
@@ -138,14 +132,12 @@ async function scanImage(file: File, options: ScanOptions = {}): Promise<Documen
 			rows: []
 		};
 	} catch (error) {
-		throw new Error(
-			`Image OCR failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-		);
+		throw new Error('Unable to process image');
 	}
 }
 
 /**
- * Validate scan quality and provide feedback
+ * Validate if document processing was successful
  */
 export function validateScanQuality(result: DocumentScanResult): {
 	isValid: boolean;
@@ -155,24 +147,16 @@ export function validateScanQuality(result: DocumentScanResult): {
 	const issues: string[] = [];
 	const suggestions: string[] = [];
 
-	// Check text length
+	// Check if we have meaningful content
 	if (!result.text || result.text.length < 10) {
-		issues.push('Very little text detected');
-		suggestions.push('Ensure the document is clearly visible and well-lit');
-	}
-
-	// Check confidence if available
-	if (result.confidence !== undefined && result.confidence < 0.7) {
-		issues.push('Low OCR confidence detected');
-		suggestions.push(
-			'Try improving image quality - better lighting, higher resolution, or cleaner document'
-		);
+		issues.push('Unable to process image');
+		suggestions.push('Please try with a different image or document');
 	}
 
 	// Check for table data if expected
 	if (result.rows && result.rows.length === 0) {
-		issues.push('No table structure detected');
-		suggestions.push('Ensure the document contains tabular data in a clear format');
+		issues.push('No table structure found');
+		suggestions.push('Ensure the document contains clear tabular data');
 	}
 
 	return {

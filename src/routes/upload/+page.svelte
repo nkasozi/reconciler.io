@@ -6,7 +6,7 @@
 	import type { ColumnPair } from '$lib/utils/reconciliation';
 	import DocumentScanner from '$lib/components/DocumentScanner.svelte';
 	import ImagePreview from '$lib/components/ImagePreview.svelte';
-	import ScanQualityFeedback from '$lib/components/ScanQualityFeedback.svelte';
+
 	import FileDataEditor from '$lib/components/FileDataEditor.svelte';
 
 	// File data state
@@ -538,9 +538,7 @@
 								on:process={(e) => handleScanProcess(e, 'primary')}
 								on:reject={() => handleScanReject('primary')}
 							/>
-							{#if primaryScanPreview.scanResult}
-								<ScanQualityFeedback scanResult={primaryScanPreview.scanResult} />
-							{/if}
+							{#if primaryScanPreview.scanResult}{/if}
 						</div>
 					{:else}
 						<!-- Upload Area -->
@@ -749,9 +747,7 @@
 								on:process={(e) => handleScanProcess(e, 'comparison')}
 								on:reject={() => handleScanReject('comparison')}
 							/>
-							{#if comparisonScanPreview.scanResult}
-								<ScanQualityFeedback scanResult={comparisonScanPreview.scanResult} />
-							{/if}
+							{#if comparisonScanPreview.scanResult}{/if}
 						</div>
 					{:else}
 						<!-- Upload Area -->
