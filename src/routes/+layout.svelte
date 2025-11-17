@@ -1,7 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
-	import { injectAnalytics } from '@vercel/analytics/sveltekit'
+	import { injectAnalytics } from '@vercel/analytics/sveltekit';
 
 	injectAnalytics();
 
@@ -40,7 +40,7 @@
 </script>
 
 <!-- Main layout with navigation -->
-<div class="min-h-screen bg-gray-900 text-white overflow-x-hidden">
+<div class="min-h-screen overflow-x-hidden bg-gray-900 text-white">
 	<!-- Navigation -->
 	<nav class="mx-auto w-full max-w-xl pt-8 md:max-w-2xl lg:max-w-4xl xl:max-w-5xl">
 		<div class="container px-8 py-2 lg:px-0">
@@ -76,9 +76,7 @@
 						>Why Reconcile?</a
 					>
 				</div>
-				<div
-					class="lg:absolute lg:inset-y-0 lg:right-0 lg:flex lg:items-center lg:justify-end"
-				>
+				<div class="lg:absolute lg:inset-y-0 lg:right-0 lg:flex lg:items-center lg:justify-end">
 					<ul class="flex">
 						<li class="mb-3 block py-2 lg:mb-0 lg:px-4">
 							<a
@@ -130,7 +128,7 @@
 					>
 					<a
 						href="/why-reconcile"
-						class="hidden xl:inline text-sm font-medium text-blue-500 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-blue-400 dark:hover:text-blue-300 dark:focus:text-blue-300"
+						class="hidden text-sm font-medium text-blue-500 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none xl:inline dark:text-blue-400 dark:hover:text-blue-300 dark:focus:text-blue-300"
 						>Why Reconcile?</a
 					>
 				</div>
@@ -192,7 +190,7 @@
 		{#if mobileNavOpen}
 			<div class="absolute inset-x-0 top-0 z-[9999] p-2 md:hidden">
 				<div class="origin-top-right transform rounded-lg shadow-md transition">
-					<div class="overflow-hidden rounded-lg bg-gray-800 shadow-xs">
+					<div class="shadow-xs overflow-hidden rounded-lg bg-gray-800">
 						<div class="flex items-center justify-between px-5 pt-4">
 							<div>
 								<a href="/" title="Transactions Reconciliation tool">
@@ -224,7 +222,7 @@
 								</button>
 							</div>
 						</div>
-						<div class="px-2 pt-2 pb-3">
+						<div class="px-2 pb-3 pt-2">
 							<a
 								href="/"
 								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-blue-500 transition duration-150 ease-in-out hover:bg-gray-700 hover:text-blue-300 focus:bg-gray-700 focus:text-blue-300 focus:outline-none"
