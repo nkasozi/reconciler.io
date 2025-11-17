@@ -59,16 +59,33 @@ export const POST: RequestHandler = async ({ request }) => {
 			const name = `projects/${projectId}/locations/${location}/processors/${processorId}`;
 
 			console.log('Using processor:', name);
+			console.log('Document type:', mimeType.includes('pdf') ? 'PDF' : 'Image');
+			if (mimeType.includes('pdf')) {
+				console.log('📄 Using imageless mode for PDF (supports up to 30 pages)');
+			}
 
-			// Create request - exactly matching official example structure
+			// Create request with imageless mode for PDFs to handle more pages
 			const request = {
 				name,
 				rawDocument: {
 					content: fileData, // Already base64 encoded (like encodedImage in example)
 					mimeType: mimeType
-				}
+				},
+				// Use imageless mode for PDFs to support up to 30 pages instead of 15
+				processOptions: mimeType.includes('pdf')
+					? {
+							ocrConfig: {
+								enableImageQualityScores: false,
+								enableSymbol: false,
+								premiumFeatures: {
+									enableMathOcr: false,
+									computeStyleInfo: false,
+									enableNativePdfParsing: true
+								}
+							}
+						}
+					: undefined
 			};
-
 			console.log('Calling processDocument...');
 			// Recognizes text entities in the document - exactly like official example
 			const [result] = await client.processDocument(request);

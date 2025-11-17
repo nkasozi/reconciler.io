@@ -322,3 +322,61 @@ export function isImageFile(file: File): boolean {
 		file.type.startsWith('image/') || /\.(jpg|jpeg|png|gif|bmp|webp|tiff|tif)$/i.test(file.name)
 	);
 }
+
+/**
+ * Extract tabular data from a PDF using Google Document AI backend
+ */
+export async function extractTablesFromPDF_DocumentAI(pdfFile: File): Promise<OCRExtractionResult> {
+	if (typeof window === 'undefined') {
+		return {
+			tables: [],
+			success: false,
+			error: 'Unable to process PDF'
+		};
+	}
+
+	try {
+		console.log('Processing PDF with Google Document AI...');
+
+		// Import the backend client
+		const { processDocumentWithBackend, convertToOCRResult } = await import(
+			'./documentAIClient.js'
+		);
+
+		// Process PDF via backend (Google Document AI handles PDF natively)
+		const backendResult = await processDocumentWithBackend(pdfFile);
+
+		if (backendResult.success) {
+			console.log('Google Document AI PDF processing completed successfully');
+
+			// Convert backend result to OCR format
+			const ocrResult = convertToOCRResult(backendResult);
+
+			// If no structured tables found but we have text, try parsing for table patterns
+			if (ocrResult.tables.length === 0 && backendResult.text.trim()) {
+				console.log('No structured tables found in PDF, parsing text for table patterns...');
+				const parsedTables = extractTablesFromOCRText(
+					backendResult.text,
+					backendResult.confidence * 100
+				);
+				ocrResult.tables.push(...parsedTables);
+			}
+
+			return ocrResult;
+		} else {
+			console.error('Google Document AI PDF processing failed:', backendResult.error);
+			return {
+				tables: [],
+				success: false,
+				error: 'Unable to process PDF'
+			};
+		}
+	} catch (error) {
+		console.error('PDF Document AI processing error:', error);
+		return {
+			tables: [],
+			success: false,
+			error: 'Unable to process PDF'
+		};
+	}
+}

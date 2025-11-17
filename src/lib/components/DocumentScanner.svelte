@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { createEventDispatcher, onMount } from 'svelte';
+	import { validateFile, formatFileSize } from '$lib/utils/fileValidation';
 
 	interface DocumentScannerProps {
 		isActive?: boolean;
@@ -174,6 +175,34 @@
 			const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 			const file = new File([blob], `scan-${timestamp}.jpg`, { type: 'image/jpeg' });
 
+			console.log(`📷 Camera capture created: ${file.name} (${formatFileSize(file.size)})`);
+
+			// Validate captured image
+			try {
+				console.log('🔍 Validating captured image...');
+				const validationResult = await validateFile(file, {
+					allowedTypes: supportedFormats
+				});
+
+				if (!validationResult.isValid) {
+					console.error('❌ Captured image validation failed:', validationResult.error);
+					errorMessage = validationResult.error || 'Invalid captured image';
+					const errorEvent = new CustomEvent('error', { detail: { message: errorMessage } });
+					if (onerror) onerror(errorEvent);
+					dispatch('error', { message: errorMessage });
+					return;
+				}
+
+				console.log('✅ Captured image validation passed');
+			} catch (validationError) {
+				console.error('💥 Captured image validation error:', validationError);
+				errorMessage = 'Image validation failed. Please try again.';
+				const errorEvent = new CustomEvent('error', { detail: { message: errorMessage } });
+				if (onerror) onerror(errorEvent);
+				dispatch('error', { message: errorMessage });
+				return;
+			}
+
 			const event = new CustomEvent('scan', { detail: { file } });
 			if (onscan) onscan(event);
 			dispatch('scan', { file });
@@ -225,29 +254,49 @@
 		}
 	}
 
-	function handleFileSelect(event: Event) {
+	async function handleFileSelect(event: Event) {
 		const target = event.target as HTMLInputElement;
 		const file = target.files?.[0];
 
 		if (!file) return;
 
-		// Validate file type
-		if (!supportedFormats.includes(file.type)) {
-			errorMessage = `Unsupported file format. Please upload ${supportedFormats.map((f) => f.split('/')[1].toUpperCase()).join(', ')} files.`;
+		console.log(`📁 DocumentScanner file selected: ${file.name} (${formatFileSize(file.size)})`);
+
+		let validationResult;
+		try {
+			// Use comprehensive validation
+			console.log('🔍 Starting DocumentScanner validation...');
+			validationResult = await validateFile(file, {
+				allowedTypes: supportedFormats
+			});
+
+			console.log('DocumentScanner validation result:', validationResult);
+
+			if (!validationResult.isValid) {
+				console.error('❌ DocumentScanner validation failed:', validationResult.error);
+				errorMessage = validationResult.error || 'Invalid file';
+				const errorEvent = new CustomEvent('error', { detail: { message: errorMessage } });
+				if (onerror) onerror(errorEvent);
+				dispatch('error', { message: errorMessage });
+				// Reset file input
+				target.value = '';
+				return;
+			}
+
+			console.log('✅ DocumentScanner validation passed');
+		} catch (validationError) {
+			console.error('💥 DocumentScanner validation error:', validationError);
+			errorMessage = 'File validation failed. Please try again.';
 			const errorEvent = new CustomEvent('error', { detail: { message: errorMessage } });
 			if (onerror) onerror(errorEvent);
 			dispatch('error', { message: errorMessage });
+			target.value = '';
 			return;
 		}
 
-		// Validate file size (max 10MB)
-		const maxSize = 10 * 1024 * 1024;
-		if (file.size > maxSize) {
-			errorMessage = 'File size too large. Please upload files smaller than 10MB.';
-			const errorEvent = new CustomEvent('error', { detail: { message: errorMessage } });
-			if (onerror) onerror(errorEvent);
-			dispatch('error', { message: errorMessage });
-			return;
+		// Show warnings if any (non-blocking)
+		if (validationResult.warnings && validationResult.warnings.length > 0) {
+			console.warn('File validation warnings:', validationResult.warnings);
 		}
 
 		errorMessage = '';

@@ -50,10 +50,11 @@ async function scanPDF(file: File, options: ScanOptions = {}): Promise<DocumentS
 	const { extractTables = true } = options;
 
 	try {
+		// The pdfProcessor now handles Google Document AI + fallback internally
 		const pdfResult = await extractTablesFromPDF(file);
 
 		if (!pdfResult.success) {
-			throw new Error(pdfResult.error || 'PDF extraction failed');
+			throw new Error('Unable to process PDF');
 		}
 
 		// If we have tables, use the first one (or could combine multiple)
@@ -85,9 +86,7 @@ async function scanPDF(file: File, options: ScanOptions = {}): Promise<DocumentS
 			rows: []
 		};
 	} catch (error) {
-		throw new Error(
-			`PDF scanning failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-		);
+		throw new Error('Unable to process PDF');
 	}
 }
 

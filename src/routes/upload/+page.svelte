@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { parseFile, type ParsedFileData, RowLimitExceededError } from '$lib/utils/fileParser';
+	import { validateFile, formatFileSize, getPDFPageCount } from '$lib/utils/fileValidation';
 	import { reconciliationStore } from '$lib/stores/reconciliationStore';
 	import { goto } from '$app/navigation';
 	import type { ColumnPair } from '$lib/utils/reconciliation';
@@ -58,6 +59,22 @@
 		// Reset the store when the upload page loads
 		reconciliationStore.reset();
 		typeText();
+
+		// Make PDF page count testing available in browser console
+		if (typeof window !== 'undefined') {
+			(window as any).testPDFPageCount = async (file: File) => {
+				try {
+					console.log(`🧪 Testing PDF: ${file.name} (${formatFileSize(file.size)})`);
+					const pageCount = await getPDFPageCount(file);
+					console.log(`📊 Result: ${pageCount} pages`);
+					return pageCount;
+				} catch (error) {
+					console.error('❌ Error:', error);
+					throw error;
+				}
+			};
+			console.log('🔧 Debug function available: window.testPDFPageCount(file)');
+		}
 	});
 
 	function typeText() {
@@ -135,10 +152,43 @@
 
 	// Process the uploaded file
 	async function processFile(file: File, type: 'primary' | 'comparison') {
-		console.log(`Processing ${type} file:`, file.name, file.type);
+		console.log(`Processing ${type} file:`, file.name, file.type, formatFileSize(file.size));
 
 		// Reset any previous error
 		errorMessage = null;
+
+		// Validate file before processing
+		console.log(`🔍 Validating ${type} file: ${file.name} (${formatFileSize(file.size)})`);
+
+		let validationResult;
+		try {
+			validationResult = await validateFile(file);
+			console.log(`Validation result for ${type} file:`, validationResult);
+
+			if (!validationResult.isValid) {
+				console.error(`❌ Validation failed for ${type} file:`, validationResult.error);
+				errorMessage = validationResult.error || 'Invalid file';
+				// Reset the file input
+				if (type === 'primary') {
+					primaryFileData = { ...primaryFileData, file: null };
+				} else {
+					comparisonFileData = { ...comparisonFileData, file: null };
+				}
+				return;
+			}
+
+			console.log(`✅ Validation passed for ${type} file`);
+		} catch (validationError) {
+			console.error(`💥 Validation error for ${type} file:`, validationError);
+			errorMessage = 'File validation failed. Please try again.';
+			return;
+		}
+
+		// Show warnings if any
+		if (validationResult.warnings && validationResult.warnings.length > 0) {
+			console.warn(`Validation warnings for ${type} file:`, validationResult.warnings);
+			// You could show these as non-blocking notifications if desired
+		}
 
 		// Update state to show uploading
 		if (type === 'primary') {

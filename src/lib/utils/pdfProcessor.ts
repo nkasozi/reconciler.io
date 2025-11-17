@@ -18,7 +18,7 @@ export interface PDFExtractionResult {
 }
 
 /**
- * Extract tabular data from a PDF file
+ * Extract tabular data from a PDF file using Google Document AI
  */
 export async function extractTablesFromPDF(file: File): Promise<PDFExtractionResult> {
 	if (typeof window === 'undefined') {
@@ -26,53 +26,26 @@ export async function extractTablesFromPDF(file: File): Promise<PDFExtractionRes
 	}
 
 	try {
-		// Use unpdf for text extraction and table detection
-		const { extractText, getDocumentProxy } = await import('unpdf');
+		console.log('🤖 Processing PDF with Google Document AI...');
+		const documentAIResult = await tryDocumentAIProcessing(file);
 
-		// Initialize tables array
-		const tables: PDFTableData[] = [];
-
-		// Get array buffer from file
-		const arrayBuffer = await file.arrayBuffer();
-
-		// Extract text from PDF using unpdf
-		const textResult = await extractText(arrayBuffer);
-
-		// unpdf returns { totalPages, text: string[] }
-		// Join all pages' text together
-		const fullText = textResult.text.join('\n');
-
-		// Since unpdf doesn't have direct table extraction,
-		// we'll extract text and then parse it for table structures
-		const extractedTables = extractTablesFromText(fullText);
-
-		// Combine small tables that likely belong together
-		const combinedTables = combineRelatedTables(extractedTables);
-
-		// Add the extracted tables to our results
-		tables.push(...combinedTables);
-
-		// If no tables found, create a fallback
-		if (tables.length === 0) {
-			tables.push({
-				headers: ['Content'],
-				rows: [['No table data found in PDF']],
-				rawText: 'No table data found in PDF',
-				confidence: 0.5,
-				metadata: { pages: 1 }
-			});
+		if (documentAIResult.success) {
+			console.log('✅ Google Document AI PDF processing succeeded');
+			return documentAIResult;
+		} else {
+			console.log('❌ Google Document AI failed to process PDF');
+			return {
+				tables: [],
+				success: false,
+				error: 'Failed to process document'
+			};
 		}
-
-		return {
-			tables,
-			success: true
-		};
 	} catch (error) {
-		console.error('Error extracting tables from PDF:', error);
+		console.error('Google Document AI processing error:', error);
 		return {
 			tables: [],
 			success: false,
-			error: `Failed to extract tables from PDF: ${error instanceof Error ? error.message : 'Unknown error'}`
+			error: 'Failed to process document'
 		};
 	}
 }
@@ -596,5 +569,70 @@ export async function renderPDFPageToCanvas(
 		throw new Error(
 			`Failed to render PDF page: ${error instanceof Error ? error.message : 'Unknown error'}`
 		);
+	}
+}
+
+/**
+ * Try processing PDF with Google Document AI
+ */
+async function tryDocumentAIProcessing(file: File): Promise<PDFExtractionResult> {
+	try {
+		// Import the backend client
+		const { processDocumentWithBackend } = await import('./documentAIClient.js');
+
+		// Process PDF via Google Document AI backend
+		const backendResult = await processDocumentWithBackend(file);
+
+		if (backendResult.success) {
+			console.log('Google Document AI PDF processing completed successfully');
+
+			// Convert backend result to PDF format
+			const tables: PDFTableData[] = backendResult.tables.map((table) => ({
+				headers: table.headers,
+				rows: table.rows,
+				rawText: backendResult.text,
+				confidence: table.confidence,
+				metadata: {
+					title: `Google Document AI Table`,
+					pages: backendResult.pages,
+					source: 'Google Document AI'
+				}
+			}));
+
+			// If no structured tables but we have text, try parsing
+			if (tables.length === 0 && backendResult.text.trim()) {
+				console.log('No structured tables from Document AI, parsing text...');
+				const parsedTables = extractTablesFromText(backendResult.text);
+
+				// Convert parsed tables to PDFTableData format
+				const convertedTables: PDFTableData[] = parsedTables.map((table) => ({
+					...table,
+					metadata: {
+						...table.metadata,
+						source: 'Google Document AI + Text parsing'
+					}
+				}));
+
+				tables.push(...convertedTables);
+			}
+
+			return {
+				tables,
+				success: true
+			};
+		} else {
+			return {
+				tables: [],
+				success: false,
+				error: backendResult.error || 'Document AI processing failed'
+			};
+		}
+	} catch (error) {
+		console.error('Document AI processing error:', error);
+		return {
+			tables: [],
+			success: false,
+			error: `Document AI processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+		};
 	}
 }

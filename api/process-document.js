@@ -85,14 +85,32 @@ module.exports = async (req, res) => {
 
 		console.log('Using processor:', name);
 		console.log('MIME type:', mimeType);
+		console.log('Document type:', mimeType.includes('pdf') ? 'PDF' : 'Image');
+		if (mimeType.includes('pdf')) {
+			console.log('📄 Using imageless mode for PDF (supports up to 30 pages)');
+		}
 
-		// Create the request
+		// Create the request with imageless mode for PDFs
 		const request = {
 			name,
 			rawDocument: {
 				content: fileData, // Base64 encoded content
 				mimeType: mimeType
-			}
+			},
+			// Use imageless mode for PDFs to support up to 30 pages instead of 15
+			processOptions: mimeType.includes('pdf')
+				? {
+						ocrConfig: {
+							enableImageQualityScores: false,
+							enableSymbol: false,
+							premiumFeatures: {
+								enableMathOcr: false,
+								computeStyleInfo: false,
+								enableNativePdfParsing: true
+							}
+						}
+					}
+				: undefined
 		};
 
 		// Process the document
