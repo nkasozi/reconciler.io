@@ -470,21 +470,6 @@
 		}
 	}
 
-	// Auto-detection: redirect when both files are uploaded
-	$effect(() => {
-		if (
-			primaryFileData.isUploaded &&
-			comparisonFileData.isUploaded &&
-			primaryFileData.parsedData &&
-			comparisonFileData.parsedData
-		) {
-			// Automatically redirect to column mapping
-			setTimeout(() => {
-				openMappingModal();
-			}, 500); // Small delay to show both files are loaded
-		}
-	});
-
 	function openMappingModal() {
 		// Only proceed if both files are uploaded and parsed
 		if (
