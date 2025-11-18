@@ -66,11 +66,11 @@
 					<span class="italic">with</span>
 					<span class="font-bold text-green-400">Confidence</span>.<br />
 					<div class="my-2"></div>
-					<span class="italic text-blue-400">Detect Errors</span>,
-					<span class="italic text-green-400">Prevent Fraud</span>,
-					<span class="italic text-blue-400">Find Discrepancies</span>. <br />
+					<span class="text-blue-400">Detect Errors</span>,
+					<span class="italic">Prevent Fraud</span>,
+					<span class="text-green-400">Find Discrepancies</span>. <br />
 					<div class="my-2"></div>
-					<span class="italic text-blue-400">Don't Guess</span> <span class="italic">but Be</span>
+					<span class="text-blue-400">Don't Guess,</span> <span class="italic"> Be</span>
 					<span class="font-extrabold text-green-400">100% sure</span>
 					<span class="italic">your</span> <span class="text-blue-400">Financial Transactions</span>
 					<span class="italic">are</span>
