@@ -89,7 +89,7 @@
 					>
 				</div>
 				<div class="lg:absolute lg:inset-y-0 lg:right-0 lg:flex lg:items-center lg:justify-end">
-					<ul class="flex">
+					<ul class="flex items-center">
 						<li class="mb-3 block py-2 lg:mb-0 lg:px-4">
 							<button
 								type="button"
@@ -104,7 +104,7 @@
 							<button
 								type="button"
 								title="Sign Up"
-								class="mt-12 rounded border border-red-400 bg-red-400 px-4 py-3 font-semibold text-white transition-colors hover:bg-red-600 hover:text-white lg:px-2 lg:py-2 lg:text-sm xl:px-4 xl:py-3 xl:text-base"
+								class="rounded border border-red-400 bg-red-400 px-4 py-3 font-semibold text-white transition-colors hover:bg-red-600 hover:text-white lg:mt-0 lg:px-2 lg:py-2 lg:text-sm xl:px-4 xl:py-3 xl:text-base"
 								on:click={openWaitlistModal}
 							>
 								Sign Up
