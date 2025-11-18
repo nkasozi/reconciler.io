@@ -14,7 +14,7 @@ export type ReconciliationConfig = {
 	// Reconciliation options
 	reverseReconciliation: boolean;
 	caseSensitive: boolean;
-	ignoreBlankValues: boolean;
+	trimValues: boolean;
 };
 
 // Define the result of a comparison between two values
@@ -144,7 +144,7 @@ export function reconcileData(
 						primaryValue,
 						comparisonValue,
 						actualConfig.caseSensitive,
-						actualConfig.ignoreBlankValues
+						actualConfig.trimValues
 					);
 
 					comparisonResults[pair.primaryColumn] = {
@@ -219,27 +219,29 @@ function compareValues(
 	value1: string | undefined,
 	value2: string | undefined,
 	caseSensitive: boolean = false,
-	ignoreBlankValues: boolean = true
+	trimValues: boolean = true
 ): boolean {
-	// Handle undefined or empty values
-	if (ignoreBlankValues) {
-		// If ignoring blank values, treat empty/null values as matches
-		if ((!value1 || value1.trim() === '') && (!value2 || value2.trim() === '')) return true;
-		if (!value1 || value1.trim() === '') return false;
-		if (!value2 || value2.trim() === '') return false;
-	} else {
-		// If not ignoring blank values, null/undefined comparison
-		if (!value1 && !value2) return true;
-		if (!value1 || !value2) return false;
+	// Handle null/undefined values
+	if (!value1 && !value2) return true;
+	if (!value1 || !value2) return false;
+
+	// Convert to strings for comparison
+	let stringValue1 = value1.toString();
+	let stringValue2 = value2.toString();
+
+	// Apply trimming if enabled
+	if (trimValues) {
+		stringValue1 = stringValue1.trim();
+		stringValue2 = stringValue2.trim();
 	}
 
-	// Normalize strings for comparison based on case sensitivity
-	const normalizedValue1 = caseSensitive
-		? value1.toString().trim()
-		: value1.toString().trim().toLowerCase();
-	const normalizedValue2 = caseSensitive
-		? value2.toString().trim()
-		: value2.toString().trim().toLowerCase();
+	// Handle empty values after trimming
+	if (!stringValue1 && !stringValue2) return true;
+	if (!stringValue1 || !stringValue2) return false;
+
+	// Apply case sensitivity
+	const normalizedValue1 = caseSensitive ? stringValue1 : stringValue1.toLowerCase();
+	const normalizedValue2 = caseSensitive ? stringValue2 : stringValue2.toLowerCase();
 
 	return normalizedValue1 === normalizedValue2;
 }

@@ -31,7 +31,7 @@
 	// Configuration options state
 	let reverseReconciliation = $state(false);
 	let caseSensitive = $state(true);
-	let ignoreBlankValues = $state(true);
+	let trimValues = $state(true);
 
 	onMount(() => {
 		// Get file data from the store
@@ -206,7 +206,7 @@
 			comparisonPairs: completeComparisonPairs,
 			reverseReconciliation,
 			caseSensitive,
-			ignoreBlankValues
+			trimValues
 		};
 
 		// Save the configuration to the store
@@ -611,22 +611,22 @@
 						</div>
 					</div>
 
-					<!-- Ignore Blank Values -->
+					<!-- Trim Values -->
 					<div class="flex items-start">
 						<div class="flex h-5 items-center">
 							<input
-								id="ignore-blank-values"
+								id="trim-values"
 								type="checkbox"
-								bind:checked={ignoreBlankValues}
+								bind:checked={trimValues}
 								class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:ring-offset-gray-800 dark:focus:ring-blue-600"
 							/>
 						</div>
 						<div class="ml-3 text-sm">
-							<label for="ignore-blank-values" class="font-medium text-gray-700 dark:text-gray-300">
-								Ignore blank values
+							<label for="trim-values" class="font-medium text-gray-700 dark:text-gray-300">
+								Trim whitespace from values
 							</label>
 							<p class="text-gray-500 dark:text-gray-400">
-								Skip comparison when either value is empty or null
+								Remove leading and trailing spaces before comparison (" 123 " matches "123")
 							</p>
 						</div>
 					</div>

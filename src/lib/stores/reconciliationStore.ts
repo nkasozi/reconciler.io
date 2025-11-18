@@ -85,7 +85,7 @@ export const reconciliationStore = {
 	setReconciliationOptions: (options: {
 		reverseReconciliation?: boolean;
 		caseSensitive?: boolean;
-		ignoreBlankValues?: boolean;
+		trimValues?: boolean;
 	}) => {
 		update((state) => ({
 			...state,

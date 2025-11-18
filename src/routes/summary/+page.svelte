@@ -23,7 +23,7 @@
 	// Reconciliation configuration options
 	let reverseReconciliation = $state(false);
 	let caseSensitive = $state(true);
-	let ignoreBlankValues = $state(true);
+	let trimValues = $state(true);
 
 	onMount(() => {
 		const unsubscribe = reconciliationStore.subscribe((state) => {
@@ -63,7 +63,7 @@
 			// Set configuration options
 			reverseReconciliation = config.reverseReconciliation;
 			caseSensitive = config.caseSensitive;
-			ignoreBlankValues = config.ignoreBlankValues;
+			trimValues = config.trimValues;
 		});
 
 		return unsubscribe;
@@ -345,7 +345,7 @@
 						class="flex items-center space-x-3 rounded-md border border-gray-200 bg-gray-50 p-4 dark:border-gray-600 dark:bg-gray-700"
 					>
 						<div class="flex items-center">
-							{#if ignoreBlankValues}
+							{#if trimValues}
 								<svg
 									class="h-5 w-5 text-green-500"
 									fill="none"
@@ -377,10 +377,10 @@
 						</div>
 						<div>
 							<div class="text-sm font-medium text-gray-900 dark:text-white">
-								Ignore Blank Values
+								Trim Whitespace from Values
 							</div>
 							<div class="text-xs text-gray-500 dark:text-gray-400">
-								{ignoreBlankValues ? 'Enabled' : 'Disabled'}
+								{trimValues ? 'Enabled' : 'Disabled'}
 							</div>
 						</div>
 					</div>
