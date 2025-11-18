@@ -5,6 +5,7 @@
 	import type { ParsedFileData } from '$lib/utils/fileParser';
 	import type { ColumnPair, ReconciliationConfig } from '$lib/utils/reconciliation';
 	import { get } from 'svelte/store';
+	import WaitlistModal from '$lib/components/WaitlistModal.svelte';
 
 	// Get file data from the store
 	let primaryFile = $state<ParsedFileData | null>(null);
@@ -32,6 +33,9 @@
 	let reverseReconciliation = $state(false);
 	let caseSensitive = $state(true);
 	let trimValues = $state(true);
+
+	// Waitlist modal state
+	let showWaitlistModal = $state(false);
 
 	onMount(() => {
 		// Get file data from the store
@@ -280,11 +284,22 @@
 	<!-- Page header -->
 	<div class="border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
 		<div class="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-			<div class="text-center">
-				<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Column Mapping</h1>
-				<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-					Map columns between your files to set up the reconciliation process
-				</p>
+			<div class="flex items-center justify-between">
+				<div class="flex-1 text-center">
+					<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Column Mapping</h1>
+					<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+						Map columns between your files to set up the reconciliation process
+					</p>
+				</div>
+				<div class="flex items-center space-x-3">
+					<button
+						type="button"
+						onclick={() => (showWaitlistModal = true)}
+						class="rounded-md bg-gradient-to-r from-blue-500 to-purple-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:from-blue-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+					>
+						Join Waitlist
+					</button>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -669,3 +684,6 @@
 		</div>
 	{/if}
 </div>
+
+<!-- Waitlist Modal -->
+<WaitlistModal bind:isOpen={showWaitlistModal} />

@@ -2,12 +2,14 @@
 	import '../app.css';
 	import { onMount } from 'svelte';
 	import { injectAnalytics } from '@vercel/analytics/sveltekit';
+	import WaitlistModal from '$lib/components/WaitlistModal.svelte';
 
 	injectAnalytics();
 
 	let { children } = $props();
 	let mobileNavOpen = $state(false);
 	let showComingSoonModal = $state(false);
+	let showWaitlistModal = $state(false);
 
 	onMount(() => {
 		console.log('Layout component mounted');
@@ -41,6 +43,11 @@
 
 	function closeComingSoon() {
 		showComingSoonModal = false;
+	}
+
+	function openWaitlistModal(event) {
+		event.preventDefault();
+		showWaitlistModal = true;
 	}
 </script>
 
@@ -84,24 +91,24 @@
 				<div class="lg:absolute lg:inset-y-0 lg:right-0 lg:flex lg:items-center lg:justify-end">
 					<ul class="flex">
 						<li class="mb-3 block py-2 lg:mb-0 lg:px-4">
-							<a
-								href="/login"
+							<button
+								type="button"
 								title="Login"
-								class="text-white hover:text-blue-400"
-								on:click={showComingSoon}
+								class="text-white transition-colors hover:text-blue-400"
+								on:click={openWaitlistModal}
 							>
 								Login
-							</a>
+							</button>
 						</li>
 						<li class="block py-2">
-							<a
-								href="/signup"
+							<button
+								type="button"
 								title="Sign Up"
-								class="mt-12 rounded border border-red-400 bg-red-400 px-4 py-3 font-semibold text-white hover:bg-red-600 hover:text-white lg:px-2 lg:py-2 lg:text-sm xl:px-4 xl:py-3 xl:text-base"
-								on:click={showComingSoon}
+								class="mt-12 rounded border border-red-400 bg-red-400 px-4 py-3 font-semibold text-white transition-colors hover:bg-red-600 hover:text-white lg:px-2 lg:py-2 lg:text-sm xl:px-4 xl:py-3 xl:text-base"
+								on:click={openWaitlistModal}
 							>
 								Sign Up
-							</a>
+							</button>
 						</li>
 					</ul>
 				</div>
@@ -138,22 +145,22 @@
 					>
 				</div>
 				<div class="flex items-center space-x-2">
-					<a
-						href="/login"
+					<button
+						type="button"
 						title="Login"
-						class="text-sm text-white hover:text-blue-400"
-						on:click={showComingSoon}
+						class="text-sm text-white transition-colors hover:text-blue-400"
+						on:click={openWaitlistModal}
 					>
 						Login
-					</a>
-					<a
-						href="/signup"
+					</button>
+					<button
+						type="button"
 						title="Sign Up"
-						class="rounded border border-red-400 bg-red-400 px-3 py-1 text-sm font-semibold text-white hover:bg-red-600 hover:text-white"
-						on:click={showComingSoon}
+						class="rounded border border-red-400 bg-red-400 px-3 py-1 text-sm font-semibold text-white transition-colors hover:bg-red-600 hover:text-white"
+						on:click={openWaitlistModal}
 					>
 						Sign Up
-					</a>
+					</button>
 				</div>
 			</nav>
 
@@ -254,20 +261,20 @@
 							</a>
 						</div>
 						<div>
-							<a
-								href="/login"
+							<button
+								type="button"
 								class="block w-full bg-gray-700 px-5 py-3 text-center font-medium text-white transition duration-150 ease-in-out hover:bg-gray-600 hover:text-white focus:outline-none"
-								on:click={showComingSoon}
+								on:click={openWaitlistModal}
 							>
 								Login
-							</a>
-							<a
-								href="/signup"
+							</button>
+							<button
+								type="button"
 								class="block w-full bg-red-400 px-5 py-3 text-center font-medium text-white transition duration-150 ease-in-out hover:bg-red-600 hover:text-white focus:outline-none"
-								on:click={showComingSoon}
+								on:click={openWaitlistModal}
 							>
 								Sign Up
-							</a>
+							</button>
 						</div>
 					</div>
 				</div>
@@ -339,6 +346,9 @@
 	<div class="home-page-circle-3"></div>
 	<div class="right_bottom_circle"></div>
 </div>
+
+<!-- Waitlist Modal -->
+<WaitlistModal bind:isOpen={showWaitlistModal} />
 
 <style>
 	/* Decorative circles styling - adding pointer-events: none to allow clicks to pass through */

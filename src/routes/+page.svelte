@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import WaitlistModal from '$lib/components/WaitlistModal.svelte';
 
 	let currentText = $state('');
 	let phrases = ['Easy', 'Simple', 'Quick'];
@@ -7,6 +8,9 @@
 	let isDeleting = $state(false);
 	let loopNum = 0;
 	let typingSpeed = $state(100);
+
+	// Waitlist modal state
+	let showWaitlistModal = $state(false);
 
 	onMount(() => {
 		typeText();
@@ -74,13 +78,22 @@
 				</span>
 			</div>
 
-			<a
-				href="/upload"
-				title="Try It Now"
-				class="btn-bottom-animation transform rounded-lg border-2 border-green-500 bg-green-500 px-8 py-5 text-lg font-bold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 hover:text-white lg:px-10 lg:py-4 xl:px-12 xl:py-5"
-			>
-				Try It Now For Free
-			</a>
+			<div class="flex flex-col space-y-4 sm:flex-row sm:space-x-6 sm:space-y-0">
+				<a
+					href="/upload"
+					title="Try It Now"
+					class="btn-bottom-animation transform rounded-lg border-2 border-green-500 bg-green-500 px-8 py-5 text-lg font-bold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 hover:text-white lg:px-10 lg:py-4 xl:px-12 xl:py-5"
+				>
+					Try It Now For Free
+				</a>
+				<button
+					type="button"
+					onclick={() => (showWaitlistModal = true)}
+					class="transform rounded-lg border-2 border-blue-500 bg-transparent px-8 py-5 text-lg font-bold text-blue-400 transition-all duration-300 hover:scale-105 hover:bg-blue-500 hover:text-white lg:px-10 lg:py-4 xl:px-12 xl:py-5"
+				>
+					Join Waitlist
+				</button>
+			</div>
 		</div>
 
 		<!-- Desktop SVG illustrations -->
@@ -110,6 +123,9 @@
 		</div>
 	</div>
 </div>
+
+<!-- Waitlist Modal -->
+<WaitlistModal bind:isOpen={showWaitlistModal} />
 
 <style>
 	@keyframes btn-bottom-animation {
