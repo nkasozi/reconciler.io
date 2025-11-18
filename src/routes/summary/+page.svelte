@@ -5,12 +5,10 @@
 
 	// User contact information
 	let email = $state('');
-	let phone = $state('');
 
 	// Form validation
 	let isFormSubmitted = $state(false);
 	let isValidEmail = $derived(validateEmail(email));
-	let isValidPhone = $derived(validatePhone(phone));
 	let isFormValid = $derived(validateForm());
 
 	// Reconciliation data from store
@@ -77,15 +75,9 @@
 		return emailRegex.test(email);
 	}
 
-	function validatePhone(phone: string): boolean {
-		if (!phone.trim()) return true; // Phone is optional if email is provided
-		const phoneRegex = /^\+?[0-9]{10,15}$/;
-		return phoneRegex.test(phone);
-	}
-
 	function validateForm(): boolean {
-		// Email is required, phone is optional
-		return isValidEmail && (phone === '' || isValidPhone);
+		// Only email is required
+		return isValidEmail;
 	}
 
 	function handleSubmit() {
@@ -97,8 +89,7 @@
 
 		// Save contact info to store
 		reconciliationStore.setContactInfo({
-			email,
-			phone
+			email
 		});
 
 		// Navigate to results page
@@ -425,61 +416,31 @@
 							handleSubmit();
 						}}
 					>
-						<div class="space-y-6">
-							<div>
-								<!-- Email field with responsive layout -->
-								<div class="flex flex-col gap-4 lg:flex-row lg:items-center">
-									<div class="lg:w-1/3">
-										<label
-											class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-											for="email"
-										>
-											Email Address <span class="text-blue-500">*</span>
-										</label>
-										{#if isFormSubmitted && !isValidEmail}
-											<p class="mt-1 text-sm text-blue-600 dark:text-blue-400">
-												Please enter a valid email address
-											</p>
-										{/if}
-									</div>
-									<div class="lg:w-2/3">
-										<input
-											class="w-full rounded-md border border-gray-300 bg-white px-4 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:focus:border-blue-400"
-											id="email"
-											type="email"
-											placeholder="your.email@example.com"
-											bind:value={email}
-											required
-										/>
-									</div>
+						<div>
+							<!-- Email field with responsive layout -->
+							<div class="flex flex-col gap-4 lg:flex-row lg:items-center">
+								<div class="lg:w-1/3">
+									<label
+										class="block text-sm font-medium text-gray-700 dark:text-gray-300"
+										for="email"
+									>
+										Email Address <span class="text-blue-500">*</span>
+									</label>
+									{#if isFormSubmitted && !isValidEmail}
+										<p class="mt-1 text-sm text-blue-600 dark:text-blue-400">
+											Please enter a valid email address
+										</p>
+									{/if}
 								</div>
-							</div>
-
-							<div>
-								<!-- Phone field with responsive layout -->
-								<div class="flex flex-col gap-4 lg:flex-row lg:items-center">
-									<div class="lg:w-1/3">
-										<label
-											class="block text-sm font-medium text-gray-700 dark:text-gray-300"
-											for="phone"
-										>
-											Phone Number (optional)
-										</label>
-										{#if isFormSubmitted && phone && !isValidPhone}
-											<p class="mt-1 text-sm text-blue-600 dark:text-blue-400">
-												Please enter a valid phone number
-											</p>
-										{/if}
-									</div>
-									<div class="lg:w-2/3">
-										<input
-											class="w-full rounded-md border border-gray-300 bg-white px-4 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:focus:border-blue-400"
-											id="phone"
-											type="tel"
-											placeholder="+1234567890"
-											bind:value={phone}
-										/>
-									</div>
+								<div class="lg:w-2/3">
+									<input
+										class="w-full rounded-md border border-gray-300 bg-white px-4 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:focus:border-blue-400"
+										id="email"
+										type="email"
+										placeholder="your.email@example.com"
+										bind:value={email}
+										required
+									/>
 								</div>
 							</div>
 						</div>
