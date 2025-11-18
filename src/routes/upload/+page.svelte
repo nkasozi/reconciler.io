@@ -63,6 +63,10 @@
 	let showPrimaryEditor = $state(false);
 	let showComparisonEditor = $state(false);
 
+	// Header row state - tracks whether files have no header row (should generate column names)
+	let primaryFileHasNoHeaders = $state(false);
+	let comparisonFileHasNoHeaders = $state(false);
+
 	// Typewriter effect state
 	let currentText = $state('');
 	let phrases = ['Easy', 'Simple', 'Quick'];
@@ -247,6 +251,9 @@
 					isUploaded: true
 				};
 
+				// Reset header state for new file
+				primaryFileHasNoHeaders = false;
+
 				// Store in the global store
 				reconciliationStore.setPrimaryFileData(parsedData);
 
@@ -263,6 +270,9 @@
 					isUploading: false,
 					isUploaded: true
 				};
+
+				// Reset header state for new file
+				comparisonFileHasNoHeaders = false;
 
 				// Store in the global store
 				reconciliationStore.setComparisonFileData(parsedData);
@@ -447,6 +457,7 @@
 				parsedData: null
 			};
 			showPrimaryEditor = false;
+			primaryFileHasNoHeaders = false; // Reset header state
 		} else {
 			comparisonFileData = {
 				file: null,
@@ -456,7 +467,145 @@
 				parsedData: null
 			};
 			showComparisonEditor = false;
+			comparisonFileHasNoHeaders = false; // Reset header state
 		}
+	}
+
+	function toggleHeaderMode(type: 'primary' | 'comparison', hasNoHeaders: boolean) {
+		const fileData = type === 'primary' ? primaryFileData : comparisonFileData;
+
+		if (!fileData.parsedData) {
+			console.error('No parsed data available for header mode toggle');
+			return;
+		}
+
+		let newParsedData: ParsedFileData;
+
+		if (hasNoHeaders) {
+			// Convert from having headers to no headers
+			// Current first row (header) becomes a regular data row
+			// Generate new column names: Column-1, Column-2, etc.
+			const currentColumns = fileData.parsedData.columns;
+			const currentRows = fileData.parsedData.rows;
+
+			console.log(`Converting ${type} file to no-headers mode`);
+			console.log('Current columns:', currentColumns);
+			console.log('Current rows count:', currentRows.length);
+
+			// Generate new auto column names
+			const newColumns = currentColumns.map((_, index) => `Column-${index + 1}`);
+
+			// Create a new first row from the old column names
+			const headerAsRow: Record<string, string> = {};
+			currentColumns.forEach((col, index) => {
+				headerAsRow[newColumns[index]] = col;
+			});
+
+			// Transform all existing rows to use new column names
+			const newRows = [
+				headerAsRow,
+				...currentRows.map((row) => {
+					const newRow: Record<string, string> = {};
+					currentColumns.forEach((oldCol, index) => {
+						newRow[newColumns[index]] = row[oldCol] || '';
+					});
+					return newRow;
+				})
+			];
+
+			newParsedData = {
+				...fileData.parsedData,
+				columns: newColumns,
+				rows: newRows
+			};
+
+			console.log('New columns:', newColumns);
+			console.log('New rows count:', newRows.length);
+		} else {
+			// Convert from no headers to having headers
+			// First row becomes the header, remove it from data rows
+			const currentColumns = fileData.parsedData.columns;
+			const currentRows = fileData.parsedData.rows;
+
+			if (currentRows.length === 0) {
+				console.warn('Cannot convert to header mode: no data rows available');
+				return;
+			}
+
+			console.log(`Converting ${type} file to headers mode`);
+			console.log('Current columns:', currentColumns);
+			console.log('Current rows count:', currentRows.length);
+
+			const firstRow = currentRows[0];
+			const remainingRows = currentRows.slice(1);
+
+			// Use values from first row as new column names, but ensure they're valid
+			const newColumns = currentColumns.map((col, index) => {
+				const headerValue = firstRow[col];
+				// Ensure we have a valid column name
+				return headerValue && headerValue.trim() ? headerValue.trim() : `Column-${index + 1}`;
+			});
+
+			// Check for duplicate column names and make them unique
+			const uniqueColumns = newColumns.map((col, index) => {
+				const duplicateCount = newColumns.slice(0, index).filter((c) => c === col).length;
+				return duplicateCount > 0 ? `${col}_${duplicateCount + 1}` : col;
+			});
+
+			// Transform remaining rows to use new column names
+			const newRows = remainingRows.map((row) => {
+				const newRow: Record<string, string> = {};
+				currentColumns.forEach((oldCol, index) => {
+					const newColName = uniqueColumns[index];
+					newRow[newColName] = row[oldCol] || '';
+				});
+				return newRow;
+			});
+
+			newParsedData = {
+				...fileData.parsedData,
+				columns: uniqueColumns,
+				rows: newRows
+			};
+
+			console.log('New columns:', uniqueColumns);
+			console.log('New rows count:', newRows.length);
+		}
+
+		// Update the file data
+		if (type === 'primary') {
+			primaryFileData = {
+				...primaryFileData,
+				parsedData: newParsedData
+			};
+			primaryFileHasNoHeaders = hasNoHeaders;
+			// Update store
+			reconciliationStore.setPrimaryFileData(newParsedData);
+
+			// Update localStorage backup
+			try {
+				localStorage.setItem('primary_file_data', JSON.stringify(newParsedData));
+			} catch (error) {
+				console.error('Error updating localStorage:', error);
+			}
+		} else {
+			comparisonFileData = {
+				...comparisonFileData,
+				parsedData: newParsedData
+			};
+			comparisonFileHasNoHeaders = hasNoHeaders;
+			// Update store
+			reconciliationStore.setComparisonFileData(newParsedData);
+
+			// Update localStorage backup
+			try {
+				localStorage.setItem('comparison_file_data', JSON.stringify(newParsedData));
+			} catch (error) {
+				console.error('Error updating localStorage:', error);
+			}
+		}
+
+		console.log(`Header mode toggle completed for ${type} file`);
 	}
 
 	function handleEditData(type: 'primary' | 'comparison') {
@@ -542,6 +691,30 @@
 									{primaryFileData.parsedData.rows.length.toLocaleString()} rows, {primaryFileData
 										.parsedData.columns.length} columns
 								</p>
+								<!-- Header checkbox -->
+								<div
+									class="mt-3 flex items-start space-x-2 rounded-md bg-gray-50 p-2 dark:bg-gray-700/50"
+								>
+									<input
+										type="checkbox"
+										id="primary-no-headers"
+										class="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:ring-offset-gray-800"
+										bind:checked={primaryFileHasNoHeaders}
+										onchange={(e) => toggleHeaderMode('primary', e.currentTarget.checked)}
+									/>
+									<div class="flex-1">
+										<label
+											for="primary-no-headers"
+											class="cursor-pointer text-xs font-medium text-gray-700 dark:text-gray-300"
+										>
+											File has no header row
+										</label>
+										<p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+											Check this if your file doesn't have column names in the first row. We'll
+											generate Column-1, Column-2, etc.
+										</p>
+									</div>
+								</div>
 							</div>
 							<button
 								class="flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-red-900 dark:hover:text-red-400"
@@ -753,6 +926,30 @@
 									{comparisonFileData.parsedData.rows.length.toLocaleString()} rows, {comparisonFileData
 										.parsedData.columns.length} columns
 								</p>
+								<!-- Header checkbox -->
+								<div
+									class="mt-3 flex items-start space-x-2 rounded-md bg-gray-50 p-2 dark:bg-gray-700/50"
+								>
+									<input
+										type="checkbox"
+										id="comparison-no-headers"
+										class="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:ring-offset-gray-800"
+										bind:checked={comparisonFileHasNoHeaders}
+										onchange={(e) => toggleHeaderMode('comparison', e.currentTarget.checked)}
+									/>
+									<div class="flex-1">
+										<label
+											for="comparison-no-headers"
+											class="cursor-pointer text-xs font-medium text-gray-700 dark:text-gray-300"
+										>
+											File has no header row
+										</label>
+										<p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+											Check this if your file doesn't have column names in the first row. We'll
+											generate Column-1, Column-2, etc.
+										</p>
+									</div>
+								</div>
 							</div>
 							<button
 								class="flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-red-900 dark:hover:text-red-400"
