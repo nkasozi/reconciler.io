@@ -831,7 +831,7 @@
 								<div class="upload-progress">
 									<div class="processing-text">
 										{isProcessingScan ? 'Processing scan...' : 'Processing...'}<span
-											class="cursor-blink">|</span
+											class="cursor-blink">▶</span
 										>
 									</div>
 									<div class="progress-bar">
@@ -1058,7 +1058,7 @@
 												stroke-linecap="round"
 												stroke-linejoin="round"
 												stroke-width="2"
-												d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+												d="M15 13a3 3 0 11-6 0 3 3 0 616 0z"
 											/>
 										</svg>
 										<span>📱 Scan Document</span>
@@ -1069,7 +1069,7 @@
 								<div class="upload-progress">
 									<div class="processing-text">
 										{isProcessingScan ? 'Processing scan...' : 'Processing...'}<span
-											class="cursor-blink">|</span
+											class="cursor-blink">▶</span
 										>
 									</div>
 									<div class="progress-bar">
