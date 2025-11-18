@@ -49,6 +49,19 @@
 		event.preventDefault();
 		showWaitlistModal = true;
 	}
+
+	function openWaitlistFromMobile(event) {
+		event.preventDefault();
+		// Close mobile navigation first
+		mobileNavOpen = false;
+		// Then open waitlist modal
+		showWaitlistModal = true;
+	}
+
+	function handleMobileNavClick() {
+		// Close mobile navigation when any navigation link is clicked
+		mobileNavOpen = false;
+	}
 </script>
 
 <!-- Main layout with navigation -->
@@ -238,24 +251,28 @@
 							<a
 								href="/"
 								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-blue-500 transition duration-150 ease-in-out hover:bg-gray-700 hover:text-blue-300 focus:bg-gray-700 focus:text-blue-300 focus:outline-none"
+								on:click={handleMobileNavClick}
 							>
 								Home
 							</a>
 							<a
 								href="/features"
 								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-blue-500 transition duration-150 ease-in-out hover:bg-gray-700 hover:text-blue-300 focus:bg-gray-700 focus:text-blue-300 focus:outline-none"
+								on:click={handleMobileNavClick}
 							>
 								Features
 							</a>
 							<a
 								href="/pricing"
 								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-blue-500 transition duration-150 ease-in-out hover:bg-gray-700 hover:text-blue-300 focus:bg-gray-700 focus:text-blue-300 focus:outline-none"
+								on:click={handleMobileNavClick}
 							>
 								Pricing
 							</a>
 							<a
 								href="/why-reconcile"
 								class="mt-1 block rounded-md px-3 py-2 text-base font-medium text-blue-500 transition duration-150 ease-in-out hover:bg-gray-700 hover:text-blue-300 focus:bg-gray-700 focus:text-blue-300 focus:outline-none"
+								on:click={handleMobileNavClick}
 							>
 								Why Reconcile?
 							</a>
@@ -264,14 +281,14 @@
 							<button
 								type="button"
 								class="block w-full bg-gray-700 px-5 py-3 text-center font-medium text-white transition duration-150 ease-in-out hover:bg-gray-600 hover:text-white focus:outline-none"
-								on:click={openWaitlistModal}
+								on:click={openWaitlistFromMobile}
 							>
 								Login
 							</button>
 							<button
 								type="button"
 								class="block w-full bg-red-400 px-5 py-3 text-center font-medium text-white transition duration-150 ease-in-out hover:bg-red-600 hover:text-white focus:outline-none"
-								on:click={openWaitlistModal}
+								on:click={openWaitlistFromMobile}
 							>
 								Sign Up
 							</button>

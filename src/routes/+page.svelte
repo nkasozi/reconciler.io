@@ -61,14 +61,14 @@
 				<span
 					class="mr-4 text-xl font-semibold leading-tight sm:text-2xl md:text-2xl lg:text-2xl xl:text-2xl"
 				>
+					<span>Let's handle all your</span>
+					<span class="font-bold text-blue-400">Reconciliation Needs</span>
+					<span class="italic">with</span>
+					<span class="font-bold text-green-400">Confidence</span>.<br />
+					<div class="my-2"></div>
 					<span class="italic text-blue-400">Detect Errors</span>,
 					<span class="italic text-green-400">Prevent Fraud</span>,
 					<span class="italic text-blue-400">Find Discrepancies</span>. <br />
-					<div class="my-2"></div>
-					<span>Let's handle your</span>
-					<span class="font-bold text-blue-400">Reconciliation</span>
-					<span class="italic">with</span>
-					<span class="font-bold text-green-400">Confidence</span>.<br />
 					<div class="my-2"></div>
 					<span class="italic text-blue-400">Don't Guess</span> <span class="italic">but Be</span>
 					<span class="font-extrabold text-green-400">100% sure</span>
@@ -91,7 +91,7 @@
 					onclick={() => (showWaitlistModal = true)}
 					class="transform rounded-lg border-2 border-blue-500 bg-transparent px-8 py-5 text-lg font-bold text-blue-400 transition-all duration-300 hover:scale-105 hover:bg-blue-500 hover:text-white lg:px-10 lg:py-4 xl:px-12 xl:py-5"
 				>
-					Join Waitlist
+					Join The Waitlist
 				</button>
 			</div>
 		</div>
