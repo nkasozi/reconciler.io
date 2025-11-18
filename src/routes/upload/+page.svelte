@@ -37,6 +37,21 @@
 
 	let errorMessage = $state<string | null>(null);
 
+	// Validation derived states
+	let hasValidPrimaryData = $derived(
+		primaryFileData.isUploaded &&
+			primaryFileData.parsedData &&
+			primaryFileData.parsedData.rows.length > 0
+	);
+
+	let hasValidComparisonData = $derived(
+		comparisonFileData.isUploaded &&
+			comparisonFileData.parsedData &&
+			comparisonFileData.parsedData.rows.length > 0
+	);
+
+	let canProceedToMapping = $derived(hasValidPrimaryData && hasValidComparisonData);
+
 	// Scanning state
 	let showPrimaryScanner = $state(false);
 	let showComparisonScanner = $state(false);
@@ -1005,23 +1020,11 @@
 				<!-- Main button -->
 				<button
 					onclick={openMappingModal}
-					disabled={!primaryFileData.isUploaded ||
-						!comparisonFileData.isUploaded ||
-						!primaryFileData.parsedData ||
-						!comparisonFileData.parsedData}
+					disabled={!canProceedToMapping}
 					class="hero-cta-button w-full max-w-3xl transform rounded-2xl border-4 border-green-500 bg-green-500 px-12 py-6 text-xl font-extrabold text-white shadow-2xl transition-all duration-300 hover:scale-[1.02] hover:bg-green-600 focus:outline-none focus:ring-4 focus:ring-green-400 focus:ring-opacity-50 active:scale-[0.98] sm:px-16 sm:py-8 sm:text-2xl"
-					class:opacity-40={!primaryFileData.isUploaded ||
-						!comparisonFileData.isUploaded ||
-						!primaryFileData.parsedData ||
-						!comparisonFileData.parsedData}
-					class:cursor-not-allowed={!primaryFileData.isUploaded ||
-						!comparisonFileData.isUploaded ||
-						!primaryFileData.parsedData ||
-						!comparisonFileData.parsedData}
-					class:hover:scale-100={!primaryFileData.isUploaded ||
-						!comparisonFileData.isUploaded ||
-						!primaryFileData.parsedData ||
-						!comparisonFileData.parsedData}
+					class:opacity-40={!canProceedToMapping}
+					class:cursor-not-allowed={!canProceedToMapping}
+					class:hover:scale-100={!canProceedToMapping}
 				>
 					<span class="flex items-center justify-center space-x-3 sm:space-x-4">
 						<span class="tracking-wide">Next Step</span>
@@ -1046,6 +1049,14 @@
 				<p class="mt-4 text-center text-sm text-gray-400">
 					{#if !primaryFileData.isUploaded || !comparisonFileData.isUploaded}
 						Upload both files to continue
+					{:else if !hasValidPrimaryData || !hasValidComparisonData}
+						{#if primaryFileData.parsedData && primaryFileData.parsedData.rows.length === 0}
+							Primary file has no data rows
+						{:else if comparisonFileData.parsedData && comparisonFileData.parsedData.rows.length === 0}
+							Comparison file has no data rows
+						{:else}
+							Files need to contain data rows to proceed
+						{/if}
 					{:else}
 						Ready to map your columns for reconciliation
 					{/if}
