@@ -240,7 +240,7 @@
 				<div class="border-b border-gray-200 p-6 dark:border-gray-700">
 					<h3 class="mb-2 text-xl font-bold text-gray-900 dark:text-white">Pro</h3>
 					<div class="mb-4 flex items-end gap-1">
-						<span class="text-4xl font-bold text-gray-900 dark:text-white">{getPrice(5)}</span>
+						<span class="text-4xl font-bold text-gray-900 dark:text-white">{getPrice(3)}</span>
 						<span class="pb-1 text-gray-500 dark:text-gray-400">{getPeriod()}</span>
 					</div>
 					<p class="text-sm text-gray-600 dark:text-gray-300">
