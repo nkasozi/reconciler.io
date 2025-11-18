@@ -129,16 +129,18 @@ describe('Reconciliation Configuration Tests', () => {
 
 			const result = reconcileData(primaryData, comparisonData, config);
 
-			// Should still find the unmatched comparison record
-			expect(result.unmatchedComparison.length).toBe(1);
-			expect(result.unmatchedComparison[0].FullName).toBe('Charlie Day');
+			// When reverse reconciliation is enabled, files are swapped:
+			// - comparisonData becomes "primary" (Charlie Day is now processed as primary)
+			// - primaryData becomes "comparison"
+			// - Charlie Day (ID 5) has no match in original primaryData, so it's unmatchedPrimary
+			expect(result.unmatchedPrimary.length).toBe(1);
+			expect(result.unmatchedPrimary[0].UserID).toBe('5'); // Note: UserID because files are swapped
+			expect(result.unmatchedPrimary[0].FullName).toBe('Charlie Day');
 
-			// Should process records from both files
+			// Should process records from both files (swapped perspective)
 			const totalProcessed =
 				result.matches.length + result.unmatchedPrimary.length + result.unmatchedComparison.length;
-			expect(totalProcessed).toBeGreaterThanOrEqual(
-				Math.max(primaryData.rows.length, comparisonData.rows.length)
-			);
+			expect(totalProcessed).toBe(comparisonData.rows.length); // Processing comparison as primary
 		});
 	});
 
