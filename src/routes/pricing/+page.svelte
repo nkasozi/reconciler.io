@@ -153,7 +153,7 @@
 								/>
 							</svg>
 							<span class="ml-2 text-gray-600 dark:text-gray-300"
-								>Upload & reconcile up to 10,000 rows</span
+								>Upload & reconcile up to 100,000 rows</span
 							>
 						</li>
 						<li class="flex items-start">
@@ -184,7 +184,7 @@
 									clip-rule="evenodd"
 								/>
 							</svg>
-							<span class="ml-2 text-gray-600 dark:text-gray-300">CSV & Excel support</span>
+							<span class="ml-2 text-gray-600 dark:text-gray-300">CSV, PDF & Excel support</span>
 						</li>
 						<li class="flex items-start">
 							<svg
@@ -205,18 +205,18 @@
 						</li>
 						<li class="flex items-start">
 							<svg
-								class="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400"
+								class="mt-0.5 h-5 w-5 flex-shrink-0 text-green-500"
 								xmlns="http://www.w3.org/2000/svg"
 								viewBox="0 0 20 20"
 								fill="currentColor"
 							>
 								<path
 									fill-rule="evenodd"
-									d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+									d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
 									clip-rule="evenodd"
 								/>
 							</svg>
-							<span class="ml-2 text-gray-500 dark:text-gray-400">Advanced analysis features</span>
+							<span class="ml-2 text-gray-600 dark:text-gray-300">Reverse Reconciliation</span>
 						</li>
 					</ul>
 					<button
@@ -262,7 +262,9 @@
 									clip-rule="evenodd"
 								/>
 							</svg>
-							<span class="ml-2 text-gray-600 dark:text-gray-300">Up to 100,000 rows per file</span>
+							<span class="ml-2 text-gray-600 dark:text-gray-300"
+								>Up to 10,000,000 rows per file</span
+							>
 						</li>
 						<li class="flex items-start">
 							<svg
@@ -573,6 +575,206 @@
 			</div>
 		</div>
 
+		<!-- Reconciliation Solutions Section -->
+		<div class="mb-16 bg-gray-50 px-4 py-16 dark:bg-gray-800">
+			<div class="mx-auto max-w-5xl">
+				<div class="mb-12 text-center">
+					<h2 class="mb-4 text-3xl font-bold text-gray-900 dark:text-white">
+						One Single Solution for Many Business Challenges
+					</h2>
+					<p class="text-lg text-gray-600 dark:text-gray-300">
+						Web-based and works with any ERP, accounting system, and external data sources
+					</p>
+				</div>
+
+				<div class="grid grid-cols-1 gap-8 md:grid-cols-2">
+					<!-- Bank Reconciliation -->
+					<div class="rounded-lg bg-white p-8 shadow dark:bg-gray-700">
+						<h3 class="mb-4 text-xl font-bold text-gray-900 dark:text-white">
+							Bank Reconciliation
+						</h3>
+						<ul class="space-y-3 text-gray-700 dark:text-gray-300">
+							<li class="flex items-start">
+								<span class="mr-3 text-blue-600 dark:text-blue-400">✓</span>
+								<span>Universal tool for any industry and business size</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-blue-600 dark:text-blue-400">✓</span>
+								<span>Match bank statements with internal financial records</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-blue-600 dark:text-blue-400">✓</span>
+								<span>Handle high transaction volumes and varied formats</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-blue-600 dark:text-blue-400">✓</span>
+								<span>Support multi-currency and complex matching (1-to-many, many-to-many)</span>
+							</li>
+						</ul>
+					</div>
+
+					<!-- Credit Card Reconciliation -->
+					<div class="rounded-lg bg-white p-8 shadow dark:bg-gray-700">
+						<h3 class="mb-4 text-xl font-bold text-gray-900 dark:text-white">
+							Credit Card Reconciliation
+						</h3>
+						<ul class="space-y-3 text-gray-700 dark:text-gray-300">
+							<li class="flex items-start">
+								<span class="mr-3 text-green-600 dark:text-green-400">✓</span>
+								<span>Multi-stepped matching for any process</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-green-600 dark:text-green-400">✓</span>
+								<span>Reconcile statements, payment gateways, and GL accounts</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-green-600 dark:text-green-400">✓</span>
+								<span>Handle POS, e-commerce, and expense management</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-green-600 dark:text-green-400">✓</span>
+								<span>Process corporate credit cards and employee expenses</span>
+							</li>
+						</ul>
+					</div>
+
+					<!-- AP/AR Reconciliation -->
+					<div class="rounded-lg bg-white p-8 shadow dark:bg-gray-700">
+						<h3 class="mb-4 text-xl font-bold text-gray-900 dark:text-white">
+							AP/AR Reconciliation
+						</h3>
+						<ul class="space-y-3 text-gray-700 dark:text-gray-300">
+							<li class="flex items-start">
+								<span class="mr-3 text-purple-600 dark:text-purple-400">✓</span>
+								<span>One centralized platform for AP and AR</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-purple-600 dark:text-purple-400">✓</span>
+								<span>Seamless invoice and payment matching</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-purple-600 dark:text-purple-400">✓</span>
+								<span>Reconcile vendor statements with payables</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-purple-600 dark:text-purple-400">✓</span>
+								<span>Auto-match incoming payments to open invoices</span>
+							</li>
+						</ul>
+					</div>
+
+					<!-- Securities & Trades Reconciliation -->
+					<div class="rounded-lg bg-white p-8 shadow dark:bg-gray-700">
+						<h3 class="mb-4 text-xl font-bold text-gray-900 dark:text-white">
+							Securities, Positions & Trades
+						</h3>
+						<ul class="space-y-3 text-gray-700 dark:text-gray-300">
+							<li class="flex items-start">
+								<span class="mr-3 text-orange-600 dark:text-orange-400">✓</span>
+								<span>Intraday positions reconciliation</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-orange-600 dark:text-orange-400">✓</span>
+								<span>Match ledgers against counterparty records</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-orange-600 dark:text-orange-400">✓</span>
+								<span>Automated break identification and resolution</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-orange-600 dark:text-orange-400">✓</span>
+								<span>Ensure regulatory compliance and contract obligations</span>
+							</li>
+						</ul>
+					</div>
+
+					<!-- Financial Close Management -->
+					<div class="rounded-lg bg-white p-8 shadow dark:bg-gray-700">
+						<h3 class="mb-4 text-xl font-bold text-gray-900 dark:text-white">
+							Financial Close Management
+						</h3>
+						<ul class="space-y-3 text-gray-700 dark:text-gray-300">
+							<li class="flex items-start">
+								<span class="mr-3 text-red-600 dark:text-red-400">✓</span>
+								<span>Centralized repository for balance sheet reconciliations</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-red-600 dark:text-red-400">✓</span>
+								<span>Fully auditable attestation and approval workflow</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-red-600 dark:text-red-400">✓</span>
+								<span>Period-end close checklist and automation</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-red-600 dark:text-red-400">✓</span>
+								<span>Variance analysis against previous periods</span>
+							</li>
+						</ul>
+					</div>
+
+					<!-- Intercompany Reconciliation -->
+					<div class="rounded-lg bg-white p-8 shadow dark:bg-gray-700">
+						<h3 class="mb-4 text-xl font-bold text-gray-900 dark:text-white">
+							Intercompany Reconciliation
+						</h3>
+						<ul class="space-y-3 text-gray-700 dark:text-gray-300">
+							<li class="flex items-start">
+								<span class="mr-3 text-indigo-600 dark:text-indigo-400">✓</span>
+								<span>Automated matching with configurable rules</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-indigo-600 dark:text-indigo-400">✓</span>
+								<span>Real-time exception management</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-indigo-600 dark:text-indigo-400">✓</span>
+								<span>Support multiple GL and accounting systems</span>
+							</li>
+							<li class="flex items-start">
+								<span class="mr-3 text-indigo-600 dark:text-indigo-400">✓</span>
+								<span>Unified reporting across subsidiaries</span>
+							</li>
+						</ul>
+					</div>
+				</div>
+
+				<!-- API & Integration Section -->
+				<div class="mt-12 rounded-lg bg-white p-8 shadow dark:bg-gray-700">
+					<h3 class="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
+						Comprehensive System Integration
+					</h3>
+					<p class="mb-6 text-gray-700 dark:text-gray-300">
+						Seamlessly integrate with your existing systems through our public API connector.
+					</p>
+					<ul class="grid grid-cols-1 gap-4 md:grid-cols-2">
+						<li class="flex items-start">
+							<span class="mr-3 text-blue-600 dark:text-blue-400">→</span>
+							<span class="text-gray-700 dark:text-gray-300"
+								>Inbound and outbound connections with ERPs</span
+							>
+						</li>
+						<li class="flex items-start">
+							<span class="mr-3 text-blue-600 dark:text-blue-400">→</span>
+							<span class="text-gray-700 dark:text-gray-300">Workflow and automation software</span>
+						</li>
+						<li class="flex items-start">
+							<span class="mr-3 text-blue-600 dark:text-blue-400">→</span>
+							<span class="text-gray-700 dark:text-gray-300"
+								>Data lakes and warehouse integration</span
+							>
+						</li>
+						<li class="flex items-start">
+							<span class="mr-3 text-blue-600 dark:text-blue-400">→</span>
+							<span class="text-gray-700 dark:text-gray-300"
+								>System-to-system integration readiness</span
+							>
+						</li>
+					</ul>
+				</div>
+			</div>
+		</div>
+
 		<!-- Feature Comparison Table -->
 		<div
 			class="mx-auto mb-16 max-w-5xl overflow-hidden rounded-lg bg-white shadow-lg dark:bg-gray-800"
@@ -605,8 +807,10 @@
 					<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
 						<tr>
 							<td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">Maximum rows</td>
-							<td class="px-6 py-4 text-center text-sm text-gray-700 dark:text-gray-300">10,000</td>
 							<td class="px-6 py-4 text-center text-sm text-gray-700 dark:text-gray-300">100,000</td
+							>
+							<td class="px-6 py-4 text-center text-sm text-gray-700 dark:text-gray-300"
+								>10,000,000</td
 							>
 							<td class="px-6 py-4 text-center text-sm text-gray-700 dark:text-gray-300"
 								>Unlimited</td
@@ -615,7 +819,7 @@
 						<tr>
 							<td class="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">File formats</td>
 							<td class="px-6 py-4 text-center text-sm text-gray-700 dark:text-gray-300"
-								>CSV, Excel</td
+								>All formats</td
 							>
 							<td class="px-6 py-4 text-center text-sm text-gray-700 dark:text-gray-300"
 								>All formats</td
@@ -630,14 +834,14 @@
 							>
 							<td class="px-6 py-4 text-center">
 								<svg
-									class="mx-auto h-5 w-5 text-red-500"
+									class="mx-auto h-5 w-5 text-green-500"
 									xmlns="http://www.w3.org/2000/svg"
 									viewBox="0 0 20 20"
 									fill="currentColor"
 								>
 									<path
 										fill-rule="evenodd"
-										d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+										d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
 										clip-rule="evenodd"
 									/>
 								</svg>
@@ -722,14 +926,14 @@
 							>
 							<td class="px-6 py-4 text-center">
 								<svg
-									class="mx-auto h-5 w-5 text-red-500"
+									class="mx-auto h-5 w-5 text-green-500"
 									xmlns="http://www.w3.org/2000/svg"
 									viewBox="0 0 20 20"
 									fill="currentColor"
 								>
 									<path
 										fill-rule="evenodd"
-										d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+										d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
 										clip-rule="evenodd"
 									/>
 								</svg>
