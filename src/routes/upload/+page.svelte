@@ -1419,6 +1419,20 @@
 		color: #4caf50;
 	}
 
+	/* Animated text - maintain consistent height */
+	.animated-text {
+		display: inline-block;
+		min-height: 1em;
+		min-width: 70px;
+		position: relative;
+	}
+
+	@media (min-width: 768px) {
+		.animated-text {
+			min-width: 140px;
+		}
+	}
+
 	@keyframes blink {
 		0%,
 		50% {
