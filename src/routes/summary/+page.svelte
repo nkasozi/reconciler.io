@@ -464,7 +464,7 @@
 			<button
 				type="button"
 				onclick={() => handleSubmit()}
-				class="btn-breathing transform rounded-lg border-2 border-green-500 bg-green-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-50 disabled:cursor-not-allowed disabled:opacity-50"
+				class="btn transform rounded-lg border-2 border-green-500 bg-green-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-50 disabled:cursor-not-allowed disabled:opacity-50"
 				disabled={!isFormValid}
 			>
 				Start Reconciliation
@@ -472,22 +472,3 @@
 		</div>
 	</div>
 </div>
-
-<style>
-	/* Button animation */
-	@keyframes btn-breathing {
-		0% {
-			transform: scale(1);
-		}
-		50% {
-			transform: scale(1.03);
-		}
-		100% {
-			transform: scale(1);
-		}
-	}
-
-	.btn-breathing {
-		animation: btn-breathing 4s ease-in-out infinite;
-	}
-</style>

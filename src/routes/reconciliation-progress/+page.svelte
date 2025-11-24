@@ -1292,7 +1292,7 @@
 	}
 </script>
 
-<div class="relative min-h-screen bg-gray-900 py-8 text-white">
+<div class="relative min-h-screen bg-gray-900 py-2 text-white md:py-8">
 	<!-- Desktop SVG illustrations (with lower opacity for background) -->
 	<div class="hidden md:block">
 		<img
@@ -1310,7 +1310,7 @@
 		/>
 	</div>
 
-	<div class="container mx-auto max-w-5xl px-4 py-8">
+	<div class="container mx-auto max-w-5xl px-4 py-4 md:py-8">
 		<h1 class="mb-6 text-center text-3xl font-bold text-white">
 			{#if isReconciliationComplete}
 				<span class="text-blue-400">Reconciliation Complete</span>
@@ -1538,14 +1538,14 @@
 				<div class="mt-4 flex justify-center space-x-4">
 					<button
 						onclick={downloadResults}
-						class="btn-breathing transform rounded-lg border-2 border-green-500 bg-green-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 hover:text-white"
+						class="btn transform rounded-lg border-2 border-green-500 bg-green-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 hover:text-white"
 					>
 						Download Results
 					</button>
 					{#if hasFailures}
 						<button
 							onclick={analyzeFailures}
-							class="btn-breathing transform rounded-lg border-2 border-blue-500 bg-blue-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-blue-600 hover:text-white"
+							class="btn transform rounded-lg border-2 border-blue-500 bg-blue-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-blue-600 hover:text-white"
 						>
 							Analyze Failures
 						</button>
@@ -1681,14 +1681,14 @@
 					<div class="mt-4 flex justify-center space-x-4">
 						<button
 							onclick={downloadReverseResults}
-							class="btn-breathing transform rounded-lg border-2 border-orange-500 bg-orange-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-orange-600 hover:text-white"
+							class="btn transform rounded-lg border-2 border-orange-500 bg-orange-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-orange-600 hover:text-white"
 						>
 							Download Reverse Results
 						</button>
 						{#if reverseHasFailures}
 							<button
 								onclick={analyzeReverseFailures}
-								class="btn-breathing transform rounded-lg border-2 border-blue-500 bg-blue-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-blue-600 hover:text-white"
+								class="btn transform rounded-lg border-2 border-blue-500 bg-blue-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-blue-600 hover:text-white"
 							>
 								Analyze Reverse Failures
 							</button>
@@ -1701,23 +1701,6 @@
 </div>
 
 <style>
-	/* Button animation */
-	@keyframes btn-breathing {
-		0% {
-			transform: scale(1);
-		}
-		50% {
-			transform: scale(1.03);
-		}
-		100% {
-			transform: scale(1);
-		}
-	}
-
-	.btn-breathing {
-		animation: btn-breathing 4s ease-in-out infinite;
-	}
-
 	/* Animation for progress bar */
 	@keyframes pulse {
 		0%,

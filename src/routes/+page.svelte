@@ -49,7 +49,7 @@
 
 <div class="min-h-screen bg-gray-900 text-white dark:bg-gray-900">
 	<div class="container mx-auto pb-2 pt-24 text-center">
-		<div class="flex min-h-[80vh] flex-col items-center justify-start pt-28">
+		<div class="welcome-hero-banner flex min-h-[80vh] flex-col items-center justify-start pt-28">
 			<h1
 				class="mb-12 px-8 text-3xl font-semibold leading-tight text-white sm:text-4xl md:text-6xl lg:px-0 lg:text-6xl xl:text-7xl"
 			>

@@ -489,7 +489,7 @@
 							<!-- Download results button -->
 							<button
 								on:click={downloadResults}
-								class="btn-breathing transform rounded-lg border-2 border-green-500 bg-green-500 px-4 py-2 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600"
+								class="btn transform rounded-lg border-2 border-green-500 bg-green-500 px-4 py-2 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600"
 							>
 								Download Results
 							</button>
@@ -627,7 +627,7 @@
 					<div class="mt-4">
 						<button
 							on:click={downloadResults}
-							class="btn-breathing transform rounded-lg border-2 border-green-500 bg-green-500 px-4 py-2 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600"
+							class="btn transform rounded-lg border-2 border-green-500 bg-green-500 px-4 py-2 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600"
 						>
 							Download Results
 						</button>
@@ -757,23 +757,6 @@
 </div>
 
 <style>
-	/* Button animation */
-	@keyframes btn-breathing {
-		0% {
-			transform: scale(1);
-		}
-		50% {
-			transform: scale(1.03);
-		}
-		100% {
-			transform: scale(1);
-		}
-	}
-
-	.btn-breathing {
-		animation: btn-breathing 4s ease-in-out infinite;
-	}
-
 	/* Add smooth scrolling to tables */
 	#primary-table,
 	#comparison-table {
