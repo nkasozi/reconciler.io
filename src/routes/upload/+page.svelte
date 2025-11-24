@@ -669,7 +669,8 @@
 		<h1
 			class="mb-8 px-8 text-2xl font-semibold leading-tight text-white sm:text-3xl md:text-5xl lg:px-0 lg:text-5xl xl:text-5xl"
 		>
-			<span class="font-extrabold text-green-500">Reconciliation</span> has <br /> never been so
+			<span class="font-extrabold text-green-500">Reconciliation</span> has <br />
+			never been so <br />
 			<span class="animated-text font-extrabold text-blue-600">{currentText}</span>
 		</h1>
 

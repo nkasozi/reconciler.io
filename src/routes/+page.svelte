@@ -50,7 +50,7 @@
 <div class="min-h-screen bg-gray-900 text-white dark:bg-gray-900">
 	<div class="container mx-auto pb-2 pt-24 text-center">
 		<div
-			class="welcome-hero-banner flex min-h-[80vh] flex-col items-center justify-start pt-1 md:pt-28"
+			class="welcome-hero-banner flex min-h-[80vh] flex-col items-center justify-start pt-1 md:pt-10"
 		>
 			<h1
 				class="mb-12 px-8 text-3xl font-semibold leading-tight text-white sm:text-4xl md:text-6xl lg:px-0 lg:text-6xl xl:text-7xl"
@@ -60,24 +60,31 @@
 				<span class="animated-text font-extrabold">{currentText}</span>
 			</h1>
 
-			<div class="error fraud mb-16 px-8 text-white sm:leading-loose lg:px-0">
+			<div class="error fraud mb-8 px-8 text-white sm:leading-loose lg:px-0">
 				<span
 					class="mr-4 text-xl font-semibold leading-tight sm:text-2xl md:text-2xl lg:text-2xl xl:text-2xl"
 				>
-					<span>Let's handle all your</span>
-					<span class="font-bold text-blue-400">Reconciliation Needs</span>
-					<span class="italic">with</span>
-					<span class="font-bold text-green-400">Confidence</span>.<br />
-					<div class="my-2"></div>
-					<span class="text-blue-400">Detect Errors</span>,
-					<span class="italic">Prevent Fraud</span>,
-					<span class="text-green-400">Find Discrepancies</span>. <br />
-					<div class="my-2"></div>
-					<span class="text-blue-400">Don't Guess,</span> <span class="italic"> Be</span>
-					<span class="font-extrabold text-green-400">100% sure</span>
-					<span class="italic">your</span> <span class="text-blue-400">Financial Transactions</span>
-					<span class="italic">are</span>
-					<span class="font-bold text-green-500">Accurate</span>. <br />
+					<div>
+						<span>Let's handle all your</span>
+						<span class="font-bold text-blue-400">Reconciliation Needs</span>
+						<span class="italic">with</span>
+						<span class="font-bold text-green-400">Confidence</span>.<br />
+					</div>
+					<div class="my-2 pt-1"></div>
+					<div class="hidden md:block">
+						<span class="text-blue-400">Detect Errors</span>,
+						<span class="italic">Prevent Fraud</span>,
+						<span class="text-green-400">Find Discrepancies</span>. <br />
+					</div>
+					<div class="my-2 pt-1"></div>
+					<div>
+						<span class="text-blue-400">Don't Guess,</span> <span class="italic"> Be</span>
+						<span class="font-extrabold text-green-400">100% sure</span>
+						<span class="italic">your</span>
+						<span class="text-blue-400">Financial Transactions</span>
+						<span class="italic">are</span>
+						<span class="font-bold text-green-500">Accurate</span>. <br />
+					</div>
 				</span>
 			</div>
 
@@ -133,19 +140,15 @@
 <style>
 	.animated-text {
 		display: inline-block;
-		min-width: 140px;
+		min-width: 70px;
 		position: relative;
 		color: #63b3ed;
 	}
 
-	.animated-text::after {
-		content: '';
-		position: absolute;
-		right: -8px;
-		top: 0;
-		height: 100%;
-		border-right: 0.12em solid #63b3ed;
-		animation: blink 1.2s step-end infinite;
+	@media (min-width: 768px) {
+		.animated-text {
+			min-width: 140px;
+		}
 	}
 
 	@keyframes blink {
