@@ -142,7 +142,7 @@
 		display: inline-block;
 		min-width: 70px;
 		position: relative;
-		color: #63b3ed;
+		color: #165dfb;
 	}
 
 	@media (min-width: 768px) {
