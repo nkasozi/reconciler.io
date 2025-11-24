@@ -7,6 +7,7 @@
 	import type { ColumnPair } from '$lib/utils/reconciliation';
 	import DocumentScanner from '$lib/components/DocumentScanner.svelte';
 	import ImagePreview from '$lib/components/ImagePreview.svelte';
+	import InfoIcon from '$lib/components/InfoIcon.svelte';
 
 	import FileDataEditor from '$lib/components/FileDataEditor.svelte';
 
@@ -678,6 +679,16 @@
 		<div class="mx-auto flex max-w-6xl flex-wrap justify-center p-4">
 			<!-- Primary File Section -->
 			<div class="mb-8 w-full p-4 sm:w-1/2 md:w-1/2 lg:w-1/2 xl:w-1/2">
+				<!-- Title Section with Info Icon (Outside Upload Area) -->
+				{#if !primaryFileData.isUploaded}
+					<div class="mb-4 flex items-center justify-center gap-1">
+						<span class="text-xl font-bold text-white">Primary-File</span>
+						<InfoIcon
+							tooltip="The Primary File is your main reference data - the source of truth you want to compare against."
+						/>
+					</div>
+				{/if}
+
 				<!-- File Info Header -->
 				{#if primaryFileData.parsedData}
 					<div class="mb-3 overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800">
@@ -786,7 +797,7 @@
 									onchange={handlePrimaryFileUpload}
 								/>
 								<div class="upload-message">
-									Drag &amp; Drop <br /> Primary Excel, CSV, PDF, or image file here
+									Drag &amp; Drop <br />Excel, CSV, PDF, or image file here
 								</div>
 
 								<!-- Upload options -->
@@ -911,6 +922,16 @@
 
 			<!-- Comparison File Section -->
 			<div class="mb-8 w-full p-4 sm:w-1/2 md:w-1/2 lg:w-1/2 xl:w-1/2">
+				<!-- Title Section with Info Icon (Outside Upload Area) -->
+				{#if !comparisonFileData.isUploaded}
+					<div class="mb-4 flex items-center justify-center gap-1">
+						<span class="text-xl font-bold text-white">Comparison-File</span>
+						<InfoIcon
+							tooltip="The Comparison File is the second dataset you want to compare against your Primary File to identify differences and discrepancies."
+						/>
+					</div>
+				{/if}
+
 				<!-- File Info Header -->
 				{#if comparisonFileData.parsedData}
 					<div class="mb-3 overflow-hidden rounded-lg bg-white shadow-md dark:bg-gray-800">
@@ -1021,7 +1042,7 @@
 									onchange={handleComparisonFileUpload}
 								/>
 								<div class="upload-message">
-									Drag &amp; Drop <br /> Comparison Excel, CSV, PDF, or image file here
+									Drag &amp; Drop <br />Excel, CSV, PDF, or image file here
 								</div>
 
 								<!-- Upload options -->
