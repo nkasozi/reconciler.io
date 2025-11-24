@@ -49,11 +49,14 @@
 
 <div class="min-h-screen bg-gray-900 text-white dark:bg-gray-900">
 	<div class="container mx-auto pb-2 pt-24 text-center">
-		<div class="welcome-hero-banner flex min-h-[80vh] flex-col items-center justify-start pt-28">
+		<div
+			class="welcome-hero-banner flex min-h-[80vh] flex-col items-center justify-start pt-1 md:pt-28"
+		>
 			<h1
 				class="mb-12 px-8 text-3xl font-semibold leading-tight text-white sm:text-4xl md:text-6xl lg:px-0 lg:text-6xl xl:text-7xl"
 			>
-				<span class="font-extrabold text-green-500">Reconciliation</span> has <br /> never been so
+				<span class="font-extrabold text-green-500">Reconciliation</span> has <br />
+				never been so<br />
 				<span class="animated-text font-extrabold">{currentText}</span>
 			</h1>
 
@@ -82,7 +85,7 @@
 				<a
 					href="/upload"
 					title="Try It Now"
-					class="btn-bottom-animation transform rounded-lg border-2 border-green-500 bg-green-500 px-8 py-5 text-lg font-bold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 hover:text-white lg:px-10 lg:py-4 xl:px-12 xl:py-5"
+					class="btn transform rounded-lg border-2 border-green-500 bg-green-500 px-8 py-5 text-lg font-bold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 hover:text-white lg:px-10 lg:py-4 xl:px-12 xl:py-5"
 				>
 					Try It Now For Free
 				</a>
@@ -128,22 +131,6 @@
 <WaitlistModal bind:isOpen={showWaitlistModal} />
 
 <style>
-	@keyframes btn-bottom-animation {
-		0% {
-			transform: translateY(-8px) scale(1);
-		}
-		50% {
-			transform: translateY(8px) scale(1.05);
-		}
-		100% {
-			transform: translateY(-8px) scale(1);
-		}
-	}
-
-	.btn-bottom-animation {
-		animation: btn-bottom-animation 4s ease-in-out infinite;
-	}
-
 	.animated-text {
 		display: inline-block;
 		min-width: 140px;
