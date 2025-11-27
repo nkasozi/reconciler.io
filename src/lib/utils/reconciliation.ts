@@ -43,6 +43,9 @@ export type ComparisonResult = {
 	comparisonValue: string | number | null;
 	match: boolean;
 	difference?: number | string;
+	reason?: string; // Clear explanation of why it matched or didn't match
+	status?: 'exact_match' | 'within_tolerance' | 'partial_match' | 'no_match' | 'missing';
+	tolerance?: Tolerance; // The tolerance that was applied (if any)
 };
 
 // Define a row matching result
@@ -173,11 +176,25 @@ export function reconcileData(
 
 					const isMatch = isExactMatch || isWithinToleranceMatch;
 
+					// Generate detailed status and reason for the match or mismatch
+					const { status, reason } = generateMatchStatusAndReason(
+						primaryValue,
+						comparisonValue,
+						isMatch,
+						isExactMatch,
+						pair.tolerance,
+						actualConfig.caseSensitive,
+						actualConfig.trimValues
+					);
+
 					comparisonResults[pair.primaryColumn] = {
 						primaryValue,
 						comparisonValue,
 						match: isMatch,
-						difference: calculateDifference(primaryValue, comparisonValue)
+						difference: calculateDifference(primaryValue, comparisonValue),
+						reason,
+						status,
+						tolerance: pair.tolerance
 					};
 
 					if (isMatch) {
@@ -236,6 +253,104 @@ export function reconcileData(
 		config: actualConfig, // Return the actual config used (might be flipped for reverse reconciliation)
 		summary
 	};
+}
+
+/**
+ * Generate a detailed reason for why values match or don't match
+ */
+/**
+ * Generate a detailed status and reason for why values match or don't match
+ * Returns an object with status and human-readable reason. Status values:
+ * - exact_match
+ * - within_tolerance
+ * - partial_match
+ * - no_match
+ * - missing
+ */
+type MatchStatus = 'exact_match' | 'within_tolerance' | 'partial_match' | 'no_match' | 'missing';
+
+function generateMatchStatusAndReason(
+	primaryValue: string | number | null | undefined,
+	comparisonValue: string | number | null | undefined,
+	match: boolean,
+	isExactMatch: boolean,
+	tolerance: Tolerance | undefined,
+	caseSensitive: boolean,
+	trimValues: boolean
+): { status: MatchStatus; reason: string } {
+	// Handle null/empty values
+	if (!primaryValue && !comparisonValue) {
+		return { status: 'missing', reason: match ? 'Both values are empty' : 'Values are different' };
+	}
+
+	if (!primaryValue) return { status: 'missing', reason: 'Primary value is empty' };
+	if (!comparisonValue) return { status: 'missing', reason: 'Comparison value is empty' };
+
+	const pVal = primaryValue.toString();
+	const cVal = comparisonValue.toString();
+	const num1 = parseFloat(pVal);
+	const num2 = parseFloat(cVal);
+
+	if (isExactMatch) {
+		return { status: 'exact_match', reason: `Exact match: '${pVal}'` };
+	}
+
+	if (match && tolerance) {
+		// Match by tolerance
+		if (tolerance.type === 'absolute') {
+			if (!isNaN(num1) && !isNaN(num2)) {
+				const diff = Math.abs(num1 - num2);
+				return {
+					status: 'within_tolerance',
+					reason: `Within absolute tolerance ${tolerance.value}: |${num1} - ${num2}| = ${diff.toFixed(4)}`
+				};
+			} else {
+				const similarity = calculateStringSimilarity(pVal, cVal);
+				const threshold = tolerance.value > 1 ? tolerance.value / 100 : tolerance.value;
+				return {
+					status: 'within_tolerance',
+					reason: `String similarity ${(similarity * 100).toFixed(1)}% >= threshold ${(threshold * 100).toFixed(1)}% (${pVal} vs ${cVal})`
+				};
+			}
+		} else if (tolerance.type === 'relative') {
+			if (!isNaN(num1) && !isNaN(num2)) {
+				const difference = Math.abs(num1 - num2);
+				const average = Math.abs((num1 + num2) / 2);
+				const percentDiff = average !== 0 ? (difference / average) * 100 : 0;
+				return {
+					status: 'within_tolerance',
+					reason: `Within relative tolerance ${tolerance.percentage}%: actual difference ${percentDiff.toFixed(2)}% (${num1} vs ${num2})`
+				};
+			} else {
+				const similarity = calculateStringSimilarity(pVal, cVal);
+				const threshold = tolerance.percentage;
+				return {
+					status: 'within_tolerance',
+					reason: `String similarity ${(similarity * 100).toFixed(1)}% >= threshold ${threshold}% (${pVal} vs ${cVal})`
+				};
+			}
+		} else if (tolerance.type === 'custom') {
+			return { status: 'within_tolerance', reason: 'Matches custom formula' };
+		}
+	}
+
+	// No tolerance match - construct partial or no match explanations
+	if (!isNaN(num1) && !isNaN(num2)) {
+		const diff = Math.abs(num1 - num2);
+		// If numeric and percent diff is small, call it partial_match (but not within tolerance)
+		const average = Math.abs((num1 + num2) / 2);
+		const percentDiff = average !== 0 ? (diff / average) * 100 : 0;
+		const status: MatchStatus = percentDiff <= 10 ? 'partial_match' : 'no_match';
+		return {
+			status,
+			reason: `Values differ by ${diff.toFixed(4)} (${percentDiff.toFixed(2)}% of average) - ${pVal} vs ${cVal}`
+		};
+	} else {
+		const similarity = calculateStringSimilarity(pVal, cVal);
+		const percent = (similarity * 100).toFixed(1);
+		const status: MatchStatus = similarity >= 0.8 ? 'partial_match' : 'no_match';
+		return { status, reason: `${percent}% similar (${pVal} vs ${cVal})` };
+	}
 }
 
 /**

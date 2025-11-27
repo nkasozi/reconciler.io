@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { reconciliationStore } from '$lib/stores/reconciliationStore';
+	import type { ColumnPair } from '$lib/utils/reconciliation';
 
 	// User contact information
 	let email = $state('');
@@ -17,6 +18,7 @@
 	let columnMappings = $state<{ primaryColumn: string | null; comparisonColumn: string | null }[]>(
 		[]
 	);
+	let comparisonPairs = $state<ColumnPair[]>([]);
 	let primaryIdColumn = $state<string>('');
 	let comparisonIdColumn = $state<string>('');
 
@@ -60,6 +62,9 @@
 				comparisonColumn: pair.comparisonColumn
 			}));
 
+			// Keep full comparison pairs (including tolerance) for display
+			comparisonPairs = config.comparisonPairs || [];
+
 			// Set configuration options
 			reverseReconciliation = config.reverseReconciliation;
 			caseSensitive = config.caseSensitive;
@@ -78,6 +83,24 @@
 	function validateForm(): boolean {
 		// Only email is required
 		return isValidEmail;
+	}
+
+	function formatTolerance(tolerance: any): string {
+		if (!tolerance) return 'None';
+
+		if (tolerance.type === 'absolute') {
+			return `Absolute ≤ ${tolerance.value}`;
+		}
+
+		if (tolerance.type === 'relative') {
+			return `Relative ≤ ${tolerance.percentage}%`;
+		}
+
+		if (tolerance.type === 'custom') {
+			return `Custom: ${tolerance.formula}`;
+		}
+
+		return 'Unknown';
 	}
 
 	function handleSubmit() {
@@ -237,6 +260,18 @@
 												{mapping.comparisonColumn}
 											</p>
 											<p class="text-xs text-blue-300">Comparison File</p>
+											<!-- Show tolerance for this mapping if available -->
+											{#if comparisonPairs.find((p) => p.primaryColumn === mapping.primaryColumn && p.comparisonColumn === mapping.comparisonColumn)?.tolerance}
+												<p class="mt-2 text-xs text-gray-300">
+													Tolerance: {formatTolerance(
+														comparisonPairs.find(
+															(p) =>
+																p.primaryColumn === mapping.primaryColumn &&
+																p.comparisonColumn === mapping.comparisonColumn
+														)?.tolerance
+													)}
+												</p>
+											{/if}
 										</div>
 									</div>
 								</div>

@@ -559,7 +559,11 @@
 												>
 												<th
 													class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"
-													>Match</th
+													>Status</th
+												>
+												<th
+													class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"
+													>Reason</th
 												>
 											</tr>
 										</thead>
@@ -600,6 +604,9 @@
 															</span>
 														{/if}
 													</td>
+													<td class="px-3 py-2 text-sm text-gray-700 dark:text-gray-400"
+														>{result.reason || 'No reason provided'}</td
+													>
 												</tr>
 											{/each}
 										</tbody>
