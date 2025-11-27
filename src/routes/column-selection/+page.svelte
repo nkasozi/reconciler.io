@@ -17,7 +17,7 @@
 		comparisonColumn: null
 	});
 
-	let comparisonPairs = $state<ColumnPair[]>([{ primaryColumn: null, comparisonColumn: null }]);
+	let comparisonPairs = $state<ColumnPair[]>([]);
 
 	// Selected columns for mapping
 	let selectedPrimaryColumn = $state<string | null>(null);
@@ -36,6 +36,10 @@
 
 	// Waitlist modal state
 	let showWaitlistModal = $state(false);
+
+	// Match flash animation state
+	let lastMatchedPrimary = $state<string | null>(null);
+	let lastMatchedComparison = $state<string | null>(null);
 
 	onMount(() => {
 		// Get file data from the store
@@ -114,8 +118,23 @@
 		}
 	}
 
+	// Clear the Primary ID mapping - the next mapping will become the Primary ID
+	function clearPrimaryIdMapping() {
+		primaryIdPair = {
+			primaryColumn: null,
+			comparisonColumn: null
+		};
+		// Switch to ID mapping mode so next mapping becomes the Primary ID
+		setMappingContext('id');
+	}
+
 	// Handle column selection for mapping
 	function selectColumn(column: string, fileType: 'primary' | 'comparison') {
+		// If we're in comparison mode and trying to map to a pair that doesn't exist yet, create it
+		if (currentMappingType === 'comparison' && currentPairIndex >= comparisonPairs.length) {
+			comparisonPairs = [...comparisonPairs, { primaryColumn: null, comparisonColumn: null }];
+		}
+
 		if (fileType === 'primary') {
 			selectedPrimaryColumn = column;
 
@@ -137,6 +156,10 @@
 	function createConnection() {
 		if (!selectedPrimaryColumn || !selectedComparisonColumn) return;
 
+		// Show flash animation for matched columns
+		lastMatchedPrimary = selectedPrimaryColumn;
+		lastMatchedComparison = selectedComparisonColumn;
+
 		// Update the appropriate pair based on mapping type
 		if (currentMappingType === 'id') {
 			// Update the ID pair
@@ -145,10 +168,12 @@
 				comparisonColumn: selectedComparisonColumn
 			};
 
-			// Automatically move to first comparison pair
-			if (comparisonPairs.length > 0) {
-				setMappingContext('comparison', 0);
+			// Automatically create and move to first comparison pair
+			if (comparisonPairs.length === 0) {
+				// Create the first comparison pair
+				comparisonPairs = [{ primaryColumn: null, comparisonColumn: null }];
 			}
+			setMappingContext('comparison', 0);
 		} else {
 			// Update the specific comparison pair
 			comparisonPairs = comparisonPairs.map((pair, index) => {
@@ -161,20 +186,19 @@
 				return pair;
 			});
 
-			// Check if there's a next pair to map, otherwise create a new one
-			const nextPairIndex = currentPairIndex + 1;
-			if (nextPairIndex < comparisonPairs.length) {
-				// Move to next existing pair
-				setMappingContext('comparison', nextPairIndex);
-			} else {
-				// Add a new pair and move to it
-				addComparisonPair();
-			}
+			// Automatically advance to the next pair for continued mapping
+			setMappingContext('comparison', currentPairIndex + 1);
 		}
 
 		// Reset selected columns
 		selectedPrimaryColumn = null;
 		selectedComparisonColumn = null;
+
+		// Clear flash animation after a brief delay
+		setTimeout(() => {
+			lastMatchedPrimary = null;
+			lastMatchedComparison = null;
+		}, 600);
 
 		// Validate form after connection is made
 		validateForm();
@@ -278,6 +302,48 @@
 
 		return text;
 	}
+
+	// Tolerance management functions
+	function setAbsoluteTolerance(pairIndex: number, value: number) {
+		const pair = comparisonPairs[pairIndex];
+		if (pair) {
+			pair.tolerance = {
+				type: 'absolute',
+				value
+			};
+			comparisonPairs[pairIndex] = pair;
+		}
+	}
+
+	function setRelativeTolerance(pairIndex: number, percentage: number) {
+		const pair = comparisonPairs[pairIndex];
+		if (pair) {
+			pair.tolerance = {
+				type: 'relative',
+				percentage
+			};
+			comparisonPairs[pairIndex] = pair;
+		}
+	}
+
+	function setCustomTolerance(pairIndex: number, formula: string) {
+		const pair = comparisonPairs[pairIndex];
+		if (pair) {
+			pair.tolerance = {
+				type: 'custom',
+				formula
+			};
+			comparisonPairs[pairIndex] = pair;
+		}
+	}
+
+	function clearTolerance(pairIndex: number) {
+		const pair = comparisonPairs[pairIndex];
+		if (pair) {
+			pair.tolerance = null;
+			comparisonPairs[pairIndex] = pair;
+		}
+	}
 </script>
 
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -290,15 +356,6 @@
 					<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
 						Map columns between your files to set up the reconciliation process
 					</p>
-				</div>
-				<div class="flex items-center space-x-3">
-					<button
-						type="button"
-						onclick={() => (showWaitlistModal = true)}
-						class="rounded-md bg-gradient-to-r from-blue-500 to-purple-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:from-blue-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-					>
-						Join Waitlist
-					</button>
 				</div>
 			</div>
 		</div>
@@ -328,15 +385,31 @@
 					</div>
 					<div class="text-center">
 						<p class="text-sm font-medium text-blue-800 dark:text-blue-200">
-							{#if selectedPrimaryColumn || selectedComparisonColumn}
-								Currently selecting: {selectedPrimaryColumn || selectedComparisonColumn}
-							{:else}
-								Currently mapping: {getSelectedColumnText()}
+							<span>{getSelectedColumnText()}</span>
+							{#if selectedPrimaryColumn && !selectedComparisonColumn}
+								<span class="mt-1 block text-xs font-normal text-blue-700 dark:text-blue-300">
+									✓ Primary column selected: <strong>{selectedPrimaryColumn}</strong>
+									<br />
+									Waiting for comparison column match...
+								</span>
+							{:else if selectedComparisonColumn && !selectedPrimaryColumn}
+								<span class="mt-1 block text-xs font-normal text-blue-700 dark:text-blue-300">
+									✓ Comparison column selected: <strong>{selectedComparisonColumn}</strong>
+									<br />
+									Waiting for primary column match...
+								</span>
+							{:else if selectedPrimaryColumn && selectedComparisonColumn}
+								<span class="mt-1 block text-xs font-normal text-green-700 dark:text-green-300">
+									✓ Match ready: <strong>{selectedPrimaryColumn}</strong> ↔
+									<strong>{selectedComparisonColumn}</strong>
+									<br />
+									Confirming match...
+								</span>
 							{/if}
 						</p>
-						<p class="mt-1 text-xs text-blue-700 dark:text-blue-300">
-							Select a column from each side to create a mapping. Mapping will automatically advance
-							to the next pair.
+						<p class="mt-2 text-xs text-blue-700 dark:text-blue-300">
+							Select a column from each side to create a mapping. The next pair will automatically
+							be prepared.
 						</p>
 					</div>
 				</div>
@@ -354,17 +427,60 @@
 						{#each primaryFile.columns as column}
 							<button
 								type="button"
-								class="mb-2 flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left transition-colors"
-								class:bg-blue-50={isColumnSelected(column, 'primary')}
-								class:border-blue-300={isColumnSelected(column, 'primary')}
-								class:dark:bg-blue-900={isColumnSelected(column, 'primary')}
-								class:dark:border-blue-700={isColumnSelected(column, 'primary')}
-								class:bg-white={!isColumnSelected(column, 'primary')}
-								class:border-gray-200={!isColumnSelected(column, 'primary')}
-								class:dark:bg-gray-800={!isColumnSelected(column, 'primary')}
-								class:dark:border-gray-600={!isColumnSelected(column, 'primary')}
-								class:hover:bg-gray-100={!isColumnSelected(column, 'primary')}
-								class:dark:hover:bg-gray-700={!isColumnSelected(column, 'primary')}
+								class="mb-2 flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left transition-all"
+								class:bg-green-100={lastMatchedPrimary === column}
+								class:border-green-400={lastMatchedPrimary === column}
+								class:shadow-lg={lastMatchedPrimary === column}
+								class:ring-2={lastMatchedPrimary === column ||
+									(isColumnSelected(column, 'primary') && lastMatchedPrimary !== column)}
+								class:ring-green-300={lastMatchedPrimary === column}
+								class:ring-blue-300={isColumnSelected(column, 'primary') &&
+									lastMatchedPrimary !== column}
+								class:dark:bg-green-800={lastMatchedPrimary === column}
+								class:dark:border-green-600={lastMatchedPrimary === column}
+								class:dark:ring-green-600={lastMatchedPrimary === column}
+								class:bg-blue-100={isColumnSelected(column, 'primary') &&
+									lastMatchedPrimary !== column}
+								class:border-blue-400={isColumnSelected(column, 'primary') &&
+									lastMatchedPrimary !== column}
+								class:shadow-md={isColumnSelected(column, 'primary') &&
+									lastMatchedPrimary !== column}
+								class:dark:bg-blue-800={isColumnSelected(column, 'primary') &&
+									lastMatchedPrimary !== column}
+								class:dark:border-blue-600={isColumnSelected(column, 'primary') &&
+									lastMatchedPrimary !== column}
+								class:dark:ring-blue-600={isColumnSelected(column, 'primary') &&
+									lastMatchedPrimary !== column}
+								class:bg-amber-50={selectedComparisonColumn &&
+									!isColumnSelected(column, 'primary') &&
+									lastMatchedPrimary !== column}
+								class:border-amber-200={selectedComparisonColumn &&
+									!isColumnSelected(column, 'primary') &&
+									lastMatchedPrimary !== column}
+								class:dark:bg-amber-800={selectedComparisonColumn &&
+									!isColumnSelected(column, 'primary') &&
+									lastMatchedPrimary !== column}
+								class:dark:border-amber-800={selectedComparisonColumn &&
+									!isColumnSelected(column, 'primary') &&
+									lastMatchedPrimary !== column}
+								class:bg-white={!isColumnSelected(column, 'primary') &&
+									!selectedComparisonColumn &&
+									lastMatchedPrimary !== column}
+								class:border-gray-200={!isColumnSelected(column, 'primary') &&
+									!selectedComparisonColumn &&
+									lastMatchedPrimary !== column}
+								class:dark:bg-gray-800={!isColumnSelected(column, 'primary') &&
+									!selectedComparisonColumn &&
+									lastMatchedPrimary !== column}
+								class:dark:border-gray-600={!isColumnSelected(column, 'primary') &&
+									!selectedComparisonColumn &&
+									lastMatchedPrimary !== column}
+								class:hover:bg-gray-100={!isColumnSelected(column, 'primary') &&
+									!selectedComparisonColumn &&
+									lastMatchedPrimary !== column}
+								class:dark:hover:bg-gray-700={!isColumnSelected(column, 'primary') &&
+									!selectedComparisonColumn &&
+									lastMatchedPrimary !== column}
 								onclick={() => selectColumn(column, 'primary')}
 							>
 								<div>
@@ -378,8 +494,18 @@
 									{/if}
 								</div>
 
-								{#if isColumnSelected(column, 'primary')}
-									<span class="h-2 w-2 rounded-full bg-blue-500"></span>
+								{#if lastMatchedPrimary === column}
+									<div class="flex items-center gap-1">
+										<span class="text-xs font-bold text-green-600 dark:text-green-300">✓</span>
+										<span class="h-3 w-3 animate-pulse rounded-full bg-green-500"></span>
+									</div>
+								{:else if isColumnSelected(column, 'primary')}
+									<div class="flex items-center gap-1">
+										<span class="text-xs font-bold text-blue-600 dark:text-blue-300">✓</span>
+										<span class="h-3 w-3 animate-pulse rounded-full bg-blue-500"></span>
+									</div>
+								{:else if selectedComparisonColumn}
+									<span class="text-xs text-amber-600 dark:text-amber-300">waiting →</span>
 								{/if}
 							</button>
 						{/each}
@@ -396,17 +522,60 @@
 						{#each comparisonFile.columns as column}
 							<button
 								type="button"
-								class="mb-2 flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left transition-colors"
-								class:bg-blue-50={isColumnSelected(column, 'comparison')}
-								class:border-blue-300={isColumnSelected(column, 'comparison')}
-								class:dark:bg-blue-900={isColumnSelected(column, 'comparison')}
-								class:dark:border-blue-700={isColumnSelected(column, 'comparison')}
-								class:bg-white={!isColumnSelected(column, 'comparison')}
-								class:border-gray-200={!isColumnSelected(column, 'comparison')}
-								class:dark:bg-gray-800={!isColumnSelected(column, 'comparison')}
-								class:dark:border-gray-600={!isColumnSelected(column, 'comparison')}
-								class:hover:bg-gray-100={!isColumnSelected(column, 'comparison')}
-								class:dark:hover:bg-gray-700={!isColumnSelected(column, 'comparison')}
+								class="mb-2 flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left transition-all"
+								class:bg-green-100={lastMatchedComparison === column}
+								class:border-green-400={lastMatchedComparison === column}
+								class:shadow-lg={lastMatchedComparison === column}
+								class:ring-2={lastMatchedComparison === column ||
+									(isColumnSelected(column, 'comparison') && lastMatchedComparison !== column)}
+								class:ring-green-300={lastMatchedComparison === column}
+								class:ring-purple-300={isColumnSelected(column, 'comparison') &&
+									lastMatchedComparison !== column}
+								class:dark:bg-green-800={lastMatchedComparison === column}
+								class:dark:border-green-600={lastMatchedComparison === column}
+								class:dark:ring-green-600={lastMatchedComparison === column}
+								class:bg-purple-100={isColumnSelected(column, 'comparison') &&
+									lastMatchedComparison !== column}
+								class:border-purple-400={isColumnSelected(column, 'comparison') &&
+									lastMatchedComparison !== column}
+								class:shadow-md={isColumnSelected(column, 'comparison') &&
+									lastMatchedComparison !== column}
+								class:dark:bg-purple-800={isColumnSelected(column, 'comparison') &&
+									lastMatchedComparison !== column}
+								class:dark:border-purple-600={isColumnSelected(column, 'comparison') &&
+									lastMatchedComparison !== column}
+								class:dark:ring-purple-600={isColumnSelected(column, 'comparison') &&
+									lastMatchedComparison !== column}
+								class:bg-amber-50={selectedPrimaryColumn &&
+									!isColumnSelected(column, 'comparison') &&
+									lastMatchedComparison !== column}
+								class:border-amber-200={selectedPrimaryColumn &&
+									!isColumnSelected(column, 'comparison') &&
+									lastMatchedComparison !== column}
+								class:dark:bg-amber-800={selectedPrimaryColumn &&
+									!isColumnSelected(column, 'comparison') &&
+									lastMatchedComparison !== column}
+								class:dark:border-amber-800={selectedPrimaryColumn &&
+									!isColumnSelected(column, 'comparison') &&
+									lastMatchedComparison !== column}
+								class:bg-white={!isColumnSelected(column, 'comparison') &&
+									!selectedPrimaryColumn &&
+									lastMatchedComparison !== column}
+								class:border-gray-200={!isColumnSelected(column, 'comparison') &&
+									!selectedPrimaryColumn &&
+									lastMatchedComparison !== column}
+								class:dark:bg-gray-800={!isColumnSelected(column, 'comparison') &&
+									!selectedPrimaryColumn &&
+									lastMatchedComparison !== column}
+								class:dark:border-gray-600={!isColumnSelected(column, 'comparison') &&
+									!selectedPrimaryColumn &&
+									lastMatchedComparison !== column}
+								class:hover:bg-gray-100={!isColumnSelected(column, 'comparison') &&
+									!selectedPrimaryColumn &&
+									lastMatchedComparison !== column}
+								class:dark:hover:bg-gray-700={!isColumnSelected(column, 'comparison') &&
+									!selectedPrimaryColumn &&
+									lastMatchedComparison !== column}
 								onclick={() => selectColumn(column, 'comparison')}
 							>
 								<div>
@@ -420,8 +589,18 @@
 									{/if}
 								</div>
 
-								{#if isColumnSelected(column, 'comparison')}
-									<span class="h-2 w-2 rounded-full bg-blue-500"></span>
+								{#if lastMatchedComparison === column}
+									<div class="flex items-center gap-1">
+										<span class="text-xs font-bold text-green-600 dark:text-green-300">✓</span>
+										<span class="h-3 w-3 animate-pulse rounded-full bg-green-500"></span>
+									</div>
+								{:else if isColumnSelected(column, 'comparison')}
+									<div class="flex items-center gap-1">
+										<span class="text-xs font-bold text-purple-600 dark:text-purple-300">✓</span>
+										<span class="h-3 w-3 animate-pulse rounded-full bg-purple-500"></span>
+									</div>
+								{:else if selectedPrimaryColumn}
+									<span class="text-xs text-amber-600 dark:text-amber-300">← waiting</span>
 								{/if}
 							</button>
 						{/each}
@@ -439,13 +618,15 @@
 						<h3 class="font-bold text-indigo-800 dark:text-indigo-300">
 							Primary ID Column Mapping
 						</h3>
-						<button
-							type="button"
-							class="rounded-md bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-700 transition hover:bg-indigo-200 dark:bg-indigo-800 dark:text-indigo-200 dark:hover:bg-indigo-700"
-							onclick={() => setMappingContext('id')}
-						>
-							Edit
-						</button>
+						{#if primaryIdPair.primaryColumn && primaryIdPair.comparisonColumn}
+							<button
+								type="button"
+								class="rounded-md bg-red-100 px-3 py-1 text-sm font-medium text-red-700 transition hover:bg-red-200 dark:bg-red-800 dark:text-red-200 dark:hover:bg-red-700"
+								onclick={clearPrimaryIdMapping}
+							>
+								Clear
+							</button>
+						{/if}
 					</div>
 
 					<p class="mb-3 text-sm text-indigo-700 dark:text-indigo-300">
@@ -484,16 +665,7 @@
 				<div
 					class="rounded-md border border-gray-200 bg-white p-4 shadow dark:border-gray-700 dark:bg-gray-800"
 				>
-					<div class="mb-3 flex items-center justify-between">
-						<h3 class="font-bold text-gray-800 dark:text-white">Comparison Column Pairs</h3>
-						<button
-							type="button"
-							class="rounded-md bg-green-100 px-3 py-1 text-sm font-medium text-green-700 transition hover:bg-green-200 dark:bg-green-800 dark:text-green-200 dark:hover:bg-green-700"
-							onclick={addComparisonPair}
-						>
-							+ Add Manual Pair
-						</button>
-					</div>
+					<h3 class="mb-3 font-bold text-gray-800 dark:text-white">Comparison Column Pairs</h3>
 
 					{#if comparisonPairs.length === 0}
 						<p class="text-sm italic text-gray-500 dark:text-gray-400">
@@ -518,46 +690,134 @@
 												>
 											{/if}
 										</h4>
-										<div class="flex space-x-2">
+										{#if comparisonPairs.length > 1}
 											<button
 												type="button"
-												class="rounded-md bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-200 dark:bg-blue-800 dark:text-blue-200 dark:hover:bg-blue-700"
-												onclick={() => setMappingContext('comparison', index)}
+												class="rounded-md bg-red-100 px-2 py-1 text-xs font-medium text-red-700 transition hover:bg-red-200 dark:bg-red-800 dark:text-red-200 dark:hover:bg-red-700"
+												onclick={() => removeComparisonPair(index)}
 											>
-												Edit
+												Remove
 											</button>
-											{#if comparisonPairs.length > 1}
-												<button
-													type="button"
-													class="rounded-md bg-red-100 px-2 py-1 text-xs font-medium text-red-700 transition hover:bg-red-200 dark:bg-red-800 dark:text-red-200 dark:hover:bg-red-700"
-													onclick={() => removeComparisonPair(index)}
-												>
-													Remove
-												</button>
-											{/if}
-										</div>
+										{/if}
 									</div>
 
 									{#if pair.primaryColumn && pair.comparisonColumn}
-										<div class="flex items-center space-x-2 text-sm">
-											<span class="font-medium text-gray-700 dark:text-gray-300"
-												>{pair.primaryColumn}</span
-											>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												class="h-4 w-4 text-gray-500"
-												viewBox="0 0 20 20"
-												fill="currentColor"
-											>
-												<path
-													fill-rule="evenodd"
-													d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z"
-													clip-rule="evenodd"
-												/>
-											</svg>
-											<span class="font-medium text-gray-700 dark:text-gray-300"
-												>{pair.comparisonColumn}</span
-											>
+										<div class="space-y-3">
+											<div class="flex items-center space-x-2 text-sm">
+												<span class="font-medium text-gray-700 dark:text-gray-300"
+													>{pair.primaryColumn}</span
+												>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													class="h-4 w-4 text-gray-500"
+													viewBox="0 0 20 20"
+													fill="currentColor"
+												>
+													<path
+														fill-rule="evenodd"
+														d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z"
+														clip-rule="evenodd"
+													/>
+												</svg>
+												<span class="font-medium text-gray-700 dark:text-gray-300"
+													>{pair.comparisonColumn}</span
+												>
+											</div>
+
+											<!-- Tolerance Configuration -->
+											<div class="rounded-md bg-white p-2 dark:bg-gray-600">
+												<p class="mb-2 text-xs font-medium text-gray-700 dark:text-gray-300">
+													Tolerance Window (optional)
+												</p>
+												<div class="space-y-3">
+													<select
+														onchange={(e) => {
+															const value = e.currentTarget.value;
+															if (value === '' || value === 'null') {
+																clearTolerance(index);
+															} else if (!value) {
+																// Do nothing
+															}
+														}}
+														class="w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"
+													>
+														<option value="null" selected={!pair.tolerance}> No Tolerance </option>
+														<option value="absolute" selected={pair.tolerance?.type === 'absolute'}>
+															Absolute (Fixed Difference)
+														</option>
+														<option value="relative" selected={pair.tolerance?.type === 'relative'}>
+															Relative (Percentage-Based)
+														</option>
+														<option value="custom" selected={pair.tolerance?.type === 'custom'}>
+															Custom Formula
+														</option>
+													</select>
+
+													{#if pair.tolerance?.type === 'absolute'}
+														<div>
+															<label class="text-xs text-gray-600 dark:text-gray-400">
+																Tolerance Value (e.g., 0.01 for $0.01 or 1 for 1 char difference)
+															</label>
+															<input
+																type="number"
+																step="0.01"
+																placeholder="0.01"
+																value={pair.tolerance.value}
+																onchange={(e) =>
+																	setAbsoluteTolerance(index, parseFloat(e.currentTarget.value))}
+																class="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"
+															/>
+														</div>
+													{:else if pair.tolerance?.type === 'relative'}
+														<div>
+															<label class="text-xs text-gray-600 dark:text-gray-400">
+																Percentage (e.g., 0.5 for 0.5%)
+															</label>
+															<input
+																type="number"
+																step="0.1"
+																placeholder="0.5"
+																value={pair.tolerance.percentage}
+																onchange={(e) =>
+																	setRelativeTolerance(index, parseFloat(e.currentTarget.value))}
+																class="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"
+															/>
+														</div>
+													{:else if pair.tolerance?.type === 'custom'}
+														<div>
+															<label class="text-xs text-gray-600 dark:text-gray-400">
+																Formula (use primaryColumnValue and comparisonColumnValue variables)
+															</label>
+															<textarea
+																placeholder="e.g., Math.abs(primaryColumnValue - comparisonColumnValue) <= 0.5"
+																value={pair.tolerance.formula}
+																onchange={(e) => setCustomTolerance(index, e.currentTarget.value)}
+																class="mt-1 w-full rounded border border-gray-300 px-2 py-1 font-mono text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"
+																rows="2"
+															/>
+															<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+																Allowed: numbers, operators (+, -, *, /, %), parentheses,
+																primaryColumnValue, comparisonColumnValue
+															</p>
+														</div>
+													{/if}
+
+													{#if pair.tolerance}
+														<p
+															class="rounded bg-blue-50 p-2 text-xs text-blue-700 dark:bg-blue-900 dark:text-blue-200"
+														>
+															{#if pair.tolerance.type === 'absolute'}
+																✓ Absolute tolerance: Fixed difference of {pair.tolerance.value}
+															{:else if pair.tolerance.type === 'relative'}
+																✓ Relative tolerance: {pair.tolerance.percentage}% difference
+																allowed
+															{:else if pair.tolerance.type === 'custom'}
+																✓ Custom formula enabled
+															{/if}
+														</p>
+													{/if}
+												</div>
+											</div>
 										</div>
 									{:else}
 										<div class="text-sm italic text-gray-500 dark:text-gray-400">

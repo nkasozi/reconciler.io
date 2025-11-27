@@ -1,9 +1,29 @@
 import type { ParsedFileData } from './fileParser';
 
+// Define tolerance configuration types
+export type AbsoluteTolerance = {
+	type: 'absolute';
+	value: number; // Fixed difference threshold
+};
+
+export type RelativeTolerance = {
+	type: 'relative';
+	percentage: number; // Percentage threshold (e.g., 0.5 for 0.5%)
+};
+
+export type CustomTolerance = {
+	type: 'custom';
+	formula: string; // Mathematical expression with primaryColumnValue and comparisonColumnValue variables
+};
+
+export type Tolerance = AbsoluteTolerance | RelativeTolerance | CustomTolerance | null;
+
 // Define the column pair type for mapping columns between files
 export type ColumnPair = {
 	primaryColumn: string | null;
 	comparisonColumn: string | null;
+	// Tolerance configuration for comparisons
+	tolerance?: Tolerance;
 };
 
 // Define reconciliation configuration
@@ -140,12 +160,18 @@ export function reconcileData(
 					const comparisonValue = comparisonRow[pair.comparisonColumn];
 
 					// Compare the values using the configuration options
-					const isMatch = compareValues(
+					const isExactMatch = compareValues(
 						primaryValue,
 						comparisonValue,
 						actualConfig.caseSensitive,
 						actualConfig.trimValues
 					);
+
+					// Check if within tolerance if exact match failed
+					const isWithinToleranceMatch =
+						!isExactMatch && isWithinTolerance(primaryValue, comparisonValue, pair.tolerance);
+
+					const isMatch = isExactMatch || isWithinToleranceMatch;
 
 					comparisonResults[pair.primaryColumn] = {
 						primaryValue,
@@ -244,6 +270,223 @@ function compareValues(
 	const normalizedValue2 = caseSensitive ? stringValue2 : stringValue2.toLowerCase();
 
 	return normalizedValue1 === normalizedValue2;
+}
+
+/**
+ * Validate a custom tolerance formula to ensure it's safe
+ * Only allows: numbers, primaryColumnValue, comparisonColumnValue, basic math operators (+, -, *, /, %), and parentheses
+ * @throws Error if formula contains invalid syntax or dangerous code
+ */
+export function validateCustomFormula(formula: string): void {
+	// Remove whitespace
+	const cleaned = formula.replace(/\s/g, '');
+
+	// Only allow specific patterns: variables, numbers, operators, and parentheses
+	const allowedPattern = /^[0-9+\-*/%().,primaryColumnValuecomparisonColumnValue]+$/;
+
+	if (!allowedPattern.test(cleaned)) {
+		throw new Error(
+			'Formula contains invalid characters. Only numbers, operators (+, -, *, /, %), parentheses, and the variables primaryColumnValue and comparisonColumnValue are allowed.'
+		);
+	}
+
+	// Check for variable names - they should only appear as whole words
+	const variablePattern = /primaryColumnValue|comparisonColumnValue/g;
+	const variables = new Set(cleaned.match(variablePattern) || []);
+
+	if (variables.size === 0) {
+		throw new Error(
+			'Formula must contain at least one of: primaryColumnValue or comparisonColumnValue'
+		);
+	}
+
+	// Check for balanced parentheses
+	let parenCount = 0;
+	for (const char of cleaned) {
+		if (char === '(') parenCount++;
+		if (char === ')') parenCount--;
+		if (parenCount < 0) {
+			throw new Error('Formula has unbalanced parentheses');
+		}
+	}
+	if (parenCount !== 0) {
+		throw new Error('Formula has unbalanced parentheses');
+	}
+}
+
+/**
+ * Calculate string similarity (0 to 1, where 1 is identical)
+ * Uses Levenshtein distance normalized to 0-1 range
+ */
+function calculateStringSimilarity(str1: string, str2: string): number {
+	const longer = str1.length > str2.length ? str1 : str2;
+	const shorter = str1.length > str2.length ? str2 : str1;
+
+	if (longer.length === 0) {
+		return 1.0;
+	}
+
+	const editDistance = getLevenshteinDistance(longer, shorter);
+	return (longer.length - editDistance) / longer.length;
+}
+
+/**
+ * Calculate Levenshtein distance between two strings
+ */
+function getLevenshteinDistance(s1: string, s2: string): number {
+	const costs: number[] = [];
+
+	for (let i = 0; i <= s1.length; i++) {
+		let lastValue = i;
+		for (let j = 0; j <= s2.length; j++) {
+			if (i === 0) {
+				costs[j] = j;
+			} else if (j > 0) {
+				let newValue = costs[j - 1];
+				if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
+					newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+				}
+				costs[j - 1] = lastValue;
+				lastValue = newValue;
+			}
+		}
+		if (i > 0) costs[s2.length] = lastValue;
+	}
+
+	return costs[s2.length];
+}
+
+/**
+ * Check if two values are within a specified tolerance
+ * Handles three tolerance types:
+ * 1. absolute: fixed difference threshold
+ * 2. relative: percentage-based threshold
+ * 3. custom: user-defined mathematical formula
+ */
+export function isWithinTolerance(
+	value1: string | undefined,
+	value2: string | undefined,
+	tolerance: Tolerance | undefined
+): boolean {
+	// If no tolerance is specified, return false (exact match already checked)
+	if (!tolerance) {
+		return false;
+	}
+
+	// Handle undefined or empty values
+	if (!value1 && !value2) return true;
+	if (!value1 || !value2) return false;
+
+	if (tolerance.type === 'absolute') {
+		return checkAbsoluteTolerance(value1, value2, tolerance.value);
+	} else if (tolerance.type === 'relative') {
+		return checkRelativeTolerance(value1, value2, tolerance.percentage);
+	} else if (tolerance.type === 'custom') {
+		return checkCustomTolerance(value1, value2, tolerance.formula);
+	}
+
+	return false;
+}
+
+/**
+ * Check absolute tolerance: difference <= constant value
+ * For numbers: checks if |num1 - num2| <= constant
+ * For strings: checks if similarity >= (1 - constant)
+ * For other types: throws an error
+ */
+function checkAbsoluteTolerance(value1: string, value2: string, constant: number): boolean {
+	const num1 = parseFloat(value1);
+	const num2 = parseFloat(value2);
+
+	// Try numeric comparison first
+	if (!isNaN(num1) && !isNaN(num2)) {
+		const difference = Math.abs(num1 - num2);
+		return difference <= constant;
+	}
+
+	// Try string similarity
+	if (typeof value1 === 'string' && typeof value2 === 'string') {
+		const similarity = calculateStringSimilarity(value1, value2);
+		// For strings, if constant is 0-1, treat it as a similarity threshold
+		const threshold = constant > 1 ? constant / 100 : constant;
+		return similarity >= 1 - threshold;
+	}
+
+	// For other types, absolute tolerance doesn't apply
+	throw new Error(
+		`Absolute tolerance cannot be applied to non-numeric and non-string values: ${typeof value1} and ${typeof value2}`
+	);
+}
+
+/**
+ * Check relative tolerance: difference within percentage of the value
+ * For numbers: checks if |num1 - num2| <= (percentage% of average)
+ * For strings: checks if similarity >= (1 - percentage%)
+ * For other types: throws an error
+ */
+function checkRelativeTolerance(value1: string, value2: string, percentage: number): boolean {
+	const num1 = parseFloat(value1);
+	const num2 = parseFloat(value2);
+
+	// Try numeric comparison first
+	if (!isNaN(num1) && !isNaN(num2)) {
+		const difference = Math.abs(num1 - num2);
+		const average = Math.abs((num1 + num2) / 2);
+		const toleranceAmount = (percentage / 100) * average;
+		return difference <= toleranceAmount;
+	}
+
+	// Try string similarity
+	if (typeof value1 === 'string' && typeof value2 === 'string') {
+		const similarity = calculateStringSimilarity(value1, value2);
+		const threshold = 1 - percentage / 100;
+		return similarity >= threshold;
+	}
+
+	// For other types, relative tolerance doesn't apply
+	throw new Error(
+		`Relative tolerance cannot be applied to non-numeric and non-string values: ${typeof value1} and ${typeof value2}`
+	);
+}
+
+/**
+ * Check custom tolerance using user-defined formula
+ * Formula can reference primaryColumnValue and comparisonColumnValue
+ * Returns true if formula evaluates to a truthy value
+ */
+function checkCustomTolerance(value1: string, value2: string, formula: string): boolean {
+	// Validate formula once
+	try {
+		validateCustomFormula(formula);
+	} catch (error) {
+		throw new Error(
+			`Invalid custom tolerance formula: ${error instanceof Error ? error.message : String(error)}`
+		);
+	}
+
+	// Parse numeric values
+	const primaryNum = parseFloat(value1);
+	const comparisonNum = parseFloat(value2);
+
+	// Try to create a safe evaluation function
+	// Replace variable names with actual values
+	let evaluableFormula = formula
+		.replace(/primaryColumnValue/g, `(${primaryNum})`)
+		.replace(/comparisonColumnValue/g, `(${comparisonNum})`);
+
+	try {
+		// Use Function constructor in a sandbox-like way (more restricted than eval)
+		// eslint-disable-next-line no-new-func
+		const result = new Function(`return ${evaluableFormula}`)();
+
+		// For numbers, check if result is <= some threshold (typically 0 for "difference <= 0")
+		// For the formula, we expect it to return a boolean or truthy value
+		return Boolean(result);
+	} catch (error) {
+		throw new Error(
+			`Error evaluating custom tolerance formula: ${error instanceof Error ? error.message : String(error)}`
+		);
+	}
 }
 
 /**
