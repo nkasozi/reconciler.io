@@ -91,11 +91,6 @@
 						>Features</a
 					>
 					<a
-						href="/pricing"
-						class="ml-8 font-medium text-blue-500 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-blue-400 dark:hover:text-blue-300 dark:focus:text-blue-300"
-						>Pricing</a
-					>
-					<a
 						href="/why-reconcile"
 						class="ml-8 font-medium text-blue-500 transition duration-150 ease-in-out hover:text-blue-600 focus:text-blue-600 focus:outline-none dark:text-blue-400 dark:hover:text-blue-300 dark:focus:text-blue-300"
 						>Why Reconcile?</a

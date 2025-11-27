@@ -39,9 +39,10 @@
 		}
 		touchStartTime = null;
 		// Keep tooltip visible for a few seconds on mobile
-		setTimeout(() => {
+		const hideTimer = setTimeout(() => {
 			showTooltip = false;
 		}, 3000);
+		return () => clearTimeout(hideTimer);
 	}
 </script>
 
