@@ -6,6 +6,7 @@
 	import type { ColumnPair, ReconciliationConfig } from '$lib/utils/reconciliation';
 	import { get } from 'svelte/store';
 	import WaitlistModal from '$lib/components/WaitlistModal.svelte';
+	import InfoIcon from '$lib/components/InfoIcon.svelte';
 
 	// Get file data from the store
 	let primaryFile = $state<ParsedFileData | null>(null);
@@ -19,7 +20,7 @@
 
 	let comparisonPairs = $state<ColumnPair[]>([]);
 
-	// Selected columns for mapping
+	// Selected columns during mapping
 	let selectedPrimaryColumn = $state<string | null>(null);
 	let selectedComparisonColumn = $state<string | null>(null);
 	let currentMappingType = $state<'id' | 'comparison'>('id');
@@ -82,10 +83,17 @@
 				(!pair.primaryColumn && pair.comparisonColumn)
 		);
 
+		// Check that all custom tolerances have formulas
+		const invalidCustomTolerances = comparisonPairs.some(
+			(pair) => pair.tolerance?.type === 'custom' && !pair.tolerance?.formula?.trim()
+		);
+
 		// Form is valid if:
 		// 1. Primary ID is mapped
 		// 2. There are no incomplete comparison pairs (either both columns set or both null)
-		formValid = isPrimaryIdValid && incompleteComparisonPairs.length === 0;
+		// 3. All custom tolerances have formulas
+		formValid =
+			isPrimaryIdValid && incompleteComparisonPairs.length === 0 && !invalidCustomTolerances;
 	}
 
 	// Add another comparison pair
@@ -726,17 +734,26 @@
 
 											<!-- Tolerance Configuration -->
 											<div class="rounded-md bg-white p-2 dark:bg-gray-600">
-												<p class="mb-2 text-xs font-medium text-gray-700 dark:text-gray-300">
-													Tolerance Window (optional)
-												</p>
+												<div class="mb-2 flex items-center justify-between">
+													<p class="text-xs font-medium text-gray-700 dark:text-gray-300">
+														Tolerance Window (optional)
+													</p>
+													<InfoIcon
+														tooltip="Define how much difference is acceptable between columns when matching. Absolute: fixed amount. Relative: percentage. Custom: write your own rule."
+													/>
+												</div>
 												<div class="space-y-3">
 													<select
 														onchange={(e) => {
 															const value = e.currentTarget.value;
 															if (value === '' || value === 'null') {
 																clearTolerance(index);
-															} else if (!value) {
-																// Do nothing
+															} else if (value === 'absolute') {
+																setAbsoluteTolerance(index, 0.01);
+															} else if (value === 'relative') {
+																setRelativeTolerance(index, 0.5);
+															} else if (value === 'custom') {
+																setCustomTolerance(index, '');
 															}
 														}}
 														class="w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"
@@ -755,46 +772,79 @@
 
 													{#if pair.tolerance?.type === 'absolute'}
 														<div>
-															<label class="text-xs text-gray-600 dark:text-gray-400">
-																Tolerance Value (e.g., 0.01 for $0.01 or 1 for 1 char difference)
-															</label>
+															<div class="flex items-center gap-2">
+																<label
+																	for="tolerance-value-{index}"
+																	class="text-xs text-gray-600 dark:text-gray-400"
+																>
+																	Tolerance Value
+																</label>
+																<InfoIcon
+																	tooltip="Numbers: the difference can be up to this amount. Example: 0.01 allows amounts like $100.00 and $100.01 to match. Text: similarity score from 0 to 1. Example: 0.9 means very similar text."
+																/>
+															</div>
 															<input
+																id="tolerance-value-{index}"
 																type="number"
 																step="0.01"
 																placeholder="0.01"
-																value={pair.tolerance.value}
+																value={pair.tolerance.value || ''}
 																onchange={(e) =>
-																	setAbsoluteTolerance(index, parseFloat(e.currentTarget.value))}
+																	setAbsoluteTolerance(
+																		index,
+																		parseFloat(e.currentTarget.value) || 0
+																	)}
 																class="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"
 															/>
 														</div>
 													{:else if pair.tolerance?.type === 'relative'}
 														<div>
-															<label class="text-xs text-gray-600 dark:text-gray-400">
-																Percentage (e.g., 0.5 for 0.5%)
-															</label>
+															<div class="flex items-center gap-2">
+																<label
+																	for="tolerance-percentage-{index}"
+																	class="text-xs text-gray-600 dark:text-gray-400"
+																>
+																	Percentage (%)
+																</label>
+																<InfoIcon
+																	tooltip="Numbers: the difference can be up to this percentage of the primary value. Example: 5% means $100 can match with values between $95 and $105. Text: similarity percentage. Example: 90 means 90% of characters must match."
+																/>
+															</div>
 															<input
+																id="tolerance-percentage-{index}"
 																type="number"
 																step="0.1"
 																placeholder="0.5"
-																value={pair.tolerance.percentage}
+																value={pair.tolerance.percentage || ''}
 																onchange={(e) =>
-																	setRelativeTolerance(index, parseFloat(e.currentTarget.value))}
+																	setRelativeTolerance(
+																		index,
+																		parseFloat(e.currentTarget.value) || 0
+																	)}
 																class="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"
 															/>
 														</div>
 													{:else if pair.tolerance?.type === 'custom'}
 														<div>
-															<label class="text-xs text-gray-600 dark:text-gray-400">
-																Formula (use primaryColumnValue and comparisonColumnValue variables)
-															</label>
+															<div class="flex items-center gap-2">
+																<label
+																	for="tolerance-formula-{index}"
+																	class="text-xs text-gray-600 dark:text-gray-400"
+																>
+																	Formula
+																</label>
+																<InfoIcon
+																	tooltip="Write any expression that returns true (match) or false (no match). Use primaryColumnValue and comparisonColumnValue. Examples: Math.abs(primaryColumnValue - comparisonColumnValue) < 0.5 or primaryColumnValue.toLowerCase() === comparisonColumnValue.toLowerCase()"
+																/>
+															</div>
 															<textarea
+																id="tolerance-formula-{index}"
 																placeholder="e.g., Math.abs(primaryColumnValue - comparisonColumnValue) <= 0.5"
-																value={pair.tolerance.formula}
+																value={pair.tolerance.formula || ''}
 																onchange={(e) => setCustomTolerance(index, e.currentTarget.value)}
 																class="mt-1 w-full rounded border border-gray-300 px-2 py-1 font-mono text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"
 																rows="2"
-															/>
+															></textarea>
 															<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
 																Allowed: numbers, operators (+, -, *, /, %), parentheses,
 																primaryColumnValue, comparisonColumnValue
