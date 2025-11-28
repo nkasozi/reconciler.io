@@ -20,7 +20,7 @@
 			return;
 		}
 
-		// Create results with status and reasons
+		// Create results with status and reasons (including per-column status/reason/tolerance)
 		const results = primaryData.rows.map((row) => {
 			// Find the reconciliation result for this row
 			const idColumnName = data.reconciliationConfig?.primaryIdPair.primaryColumn;
@@ -32,7 +32,7 @@
 				};
 
 			const id = row[idColumnName];
-			const matchResult = data.reconciliationResult.matches.find((m) => m.idValues.primary === id);
+			const matchResult = data.reconciliationResult!.matches.find((m) => m.idValues.primary === id);
 
 			let status = 'Not Found';
 			let reason = 'No matching record in comparison file';
@@ -44,23 +44,45 @@
 				} else {
 					status = 'Partial Match';
 
-					// Create detailed reason text
-					const mismatchedColumns = [];
+					// Create detailed per-column entries
 					for (const [col, result] of Object.entries(matchResult.comparisonResults)) {
+						const keyStatus = `__${col}_status`;
+						const keyReason = `__${col}_reason`;
+						const keyTol = `__${col}_tolerance`;
+						// assign into res below
+						// will set into res object after it's created
+						// find tolerance from config if present
+						const pair = data.reconciliationConfig?.comparisonPairs.find(
+							(p) => p.primaryColumn === col
+						);
+						const tolStr = pair?.tolerance ? formatTolerance(pair.tolerance) : '';
 						if (!result.match) {
-							mismatchedColumns.push(`${col}: ${result.primaryValue} ≠ ${result.comparisonValue}`);
+							reason =
+								(reason ? reason + '; ' : '') +
+								`${col}: ${result.primaryValue} ≠ ${result.comparisonValue}`;
 						}
+						// store into a temp map on the matchResult for later use
+						// We'll set per-column values on the returned object below
+						(matchResult as any).__perColumn = (matchResult as any).__perColumn || {};
+						(matchResult as any).__perColumn[keyStatus] =
+							result.status || (result.match ? 'Match' : 'Mismatch');
+						(matchResult as any).__perColumn[keyReason] = result.reason || '';
+						(matchResult as any).__perColumn[keyTol] = tolStr;
 					}
-
-					reason = mismatchedColumns.join('; ');
 				}
 			}
 
-			return {
+			const resObj: Record<string, any> = {
 				...row,
 				__ReconciliationStatus: status,
 				__ReconciliationReason: reason
 			};
+			// merge per-column details if present
+			if (matchResult && (matchResult as any).__perColumn) {
+				Object.assign(resObj, (matchResult as any).__perColumn);
+			}
+
+			return resObj;
 		});
 
 		// Convert to CSV
@@ -69,7 +91,8 @@
 
 		results.forEach((row) => {
 			const values = headers.map((header) => {
-				const val = row[header] || '';
+				// row is a Record so index signature allowed
+				const val = (row as Record<string, any>)[header] || '';
 				// Escape values with commas or quotes
 				if (val.toString().includes(',') || val.toString().includes('"')) {
 					return `"${val.toString().replace(/"/g, '""')}"`;
@@ -103,7 +126,8 @@
 	let primaryData = $state<Record<string, string>[]>([]);
 	let comparisonData = $state<Record<string, string>[]>([]);
 	let reconciliationResults = $state<RowMatchResult[]>([]);
-	let failureResults = $state<RowMatchResult[]>([]);
+	// failureResults may contain unmatchedPrimary entries that are not full RowMatchResult objects
+	let failureResults = $state<any[]>([]);
 	let primaryIdColumn = $state<string | null>(null);
 	let comparisonIdColumn = $state<string | null>(null);
 	let comparisonPairs = $state<ColumnPair[]>([]);
@@ -127,7 +151,7 @@
 	// Filter state
 	let filterStatus = $state<string>('failures');
 
-	onMount(async () => {
+	onMount(() => {
 		const unsubscribe = reconciliationStore.subscribe((state) => {
 			if (!state.primaryFileData) {
 				console.log('Missing primaryFileData in reconciliation store state');
@@ -182,7 +206,7 @@
 					primaryRow: row,
 					comparisonRow: null,
 					idValues: {
-						primary: row[primaryIdColumn],
+						primary: (row as any)[primaryIdColumn as string],
 						comparison: ''
 					},
 					comparisonResults: {},
@@ -241,8 +265,11 @@
 			activeComparisonRowId = failure.idValues.comparison;
 
 			// Find the first mismatched column pair
-			for (const [columnName, comparison] of Object.entries(failure.comparisonResults)) {
-				if (!comparison.match) {
+			for (const [columnName, comparison] of Object.entries(failure.comparisonResults) as [
+				string,
+				any
+			][]) {
+				if (!(comparison as any).match) {
 					const pair = comparisonPairs.find((p) => p.primaryColumn === columnName);
 					if (pair) {
 						activeColumnPair = pair;
@@ -252,7 +279,7 @@
 			}
 
 			// Scroll to the primary row
-			scrollToRow('primary-table', activePrimaryRowId);
+			if (activePrimaryRowId) scrollToRow('primary-table', activePrimaryRowId);
 
 			// Scroll to the comparison row if it exists
 			if (activeComparisonRowId) {
@@ -309,10 +336,28 @@
 		return '';
 	}
 
+	function formatTolerance(tolerance: any): string {
+		if (!tolerance) return '';
+		if (tolerance.type === 'absolute') {
+			return `Absolute ≤ ${tolerance.value} (numeric diff ≤ ${tolerance.value}; for strings, threshold = ${
+				tolerance.value > 1 ? (tolerance.value / 100).toFixed(2) : tolerance.value
+			} )`;
+		}
+		if (tolerance.type === 'relative') {
+			return `Relative ≤ ${tolerance.percentage}% (difference ≤ ${tolerance.percentage}% of average)`;
+		}
+		if (tolerance.type === 'custom') {
+			return `Custom: ${tolerance.formula}`;
+		}
+		return '';
+	}
+
 	// Check if a row is the active one
 	function isActiveRow(rowId: string, isComparison: boolean = false) {
 		return isComparison ? rowId === activeComparisonRowId : rowId === activePrimaryRowId;
 	}
+
+	// (template will compute currentComparisonEntries locally using {@const})
 </script>
 
 <div class="relative min-h-screen bg-gray-900 py-8 text-white">
@@ -455,7 +500,7 @@
 							>
 							<div class="flex flex-1 gap-2">
 								<button
-									on:click={prevFailure}
+									onclick={prevFailure}
 									disabled={currentFailureIndex === 0}
 									class="rounded bg-gray-400 px-3 py-1 hover:bg-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-400 dark:hover:bg-gray-600"
 									aria-label="Previous failure"
@@ -469,7 +514,7 @@
 									</svg>
 								</button>
 								<button
-									on:click={nextFailure}
+									onclick={nextFailure}
 									disabled={currentFailureIndex === totalFailures - 1}
 									class="rounded bg-gray-400 px-3 py-1 hover:bg-gray-300 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-400 dark:hover:bg-gray-600"
 									aria-label="Next failure"
@@ -488,7 +533,7 @@
 						<div>
 							<!-- Download results button -->
 							<button
-								on:click={downloadResults}
+								onclick={downloadResults}
 								class="btn transform rounded-lg border-2 border-green-500 bg-green-500 px-4 py-2 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600"
 							>
 								Download Results
@@ -499,6 +544,9 @@
 					<!-- Current failure details -->
 					{#if currentFailureIndex >= 0 && currentFailureIndex < failureResults.length}
 						{@const currentFailure = failureResults[currentFailureIndex]}
+						{@const currentComparisonEntries = currentFailure.comparisonResults
+							? (Object.entries(currentFailure.comparisonResults) as [string, any][])
+							: []}
 						{@const matchScore = currentFailure.matchScore}
 						<div class="mt-4 rounded-lg border border-gray-200 p-4 dark:border-gray-700">
 							<div class="mb-4 flex flex-col gap-4 md:flex-row md:items-center">
@@ -563,6 +611,10 @@
 												>
 												<th
 													class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"
+													>Tolerance</th
+												>
+												<th
+													class="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500 dark:text-gray-400"
 													>Reason</th
 												>
 											</tr>
@@ -570,7 +622,7 @@
 										<tbody
 											class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-900"
 										>
-											{#each Object.entries(currentFailure.comparisonResults) as [column, result], i}
+											{#each currentComparisonEntries as [column, result], i}
 												<tr
 													class={i % 2 === 0
 														? 'bg-white dark:bg-gray-900'
@@ -590,19 +642,47 @@
 														>{result.comparisonValue}</td
 													>
 													<td class="px-3 py-2 text-sm">
-														{#if result.match}
+														{#if result.status === 'exact_match'}
 															<span
+																title={result.reason}
 																class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-300"
 															>
-																Match
+																Exact
+															</span>
+														{:else if result.status === 'within_tolerance'}
+															<span
+																title={result.reason}
+																class="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/20 dark:text-green-300"
+															>
+																Within Tolerance
+															</span>
+														{:else if result.status === 'partial_match'}
+															<span
+																title={result.reason}
+																class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300"
+															>
+																Partial
+															</span>
+														{:else if result.status === 'missing'}
+															<span
+																title={result.reason}
+																class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-900/20 dark:text-gray-300"
+															>
+																Missing
 															</span>
 														{:else}
 															<span
+																title={result.reason}
 																class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900/30 dark:text-red-300"
 															>
-																Mismatch
+																No Match
 															</span>
 														{/if}
+													</td>
+													<td class="px-3 py-2 text-sm text-gray-700 dark:text-gray-400">
+														{formatTolerance(
+															comparisonPairs.find((p) => p.primaryColumn === column)?.tolerance
+														)}
 													</td>
 													<td class="px-3 py-2 text-sm text-gray-700 dark:text-gray-400"
 														>{result.reason || 'No reason provided'}</td
@@ -633,7 +713,7 @@
 					<p class="mt-2 text-green-600 dark:text-green-400">All records matched successfully!</p>
 					<div class="mt-4">
 						<button
-							on:click={downloadResults}
+							onclick={downloadResults}
 							class="btn transform rounded-lg border-2 border-green-500 bg-green-500 px-4 py-2 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600"
 						>
 							Download Results

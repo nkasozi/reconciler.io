@@ -269,6 +269,134 @@ export function reconcileData(
  */
 type MatchStatus = 'exact_match' | 'within_tolerance' | 'partial_match' | 'no_match' | 'missing';
 
+// Configurable threshold for string partial-match classification (0..1)
+export const PARTIAL_STRING_SIMILARITY = 0.5;
+
+/**
+ * Normalize a value for comparison according to trim and case options.
+ * Returns a string suitable for string-equality and similarity checks.
+ */
+export function normalizeForComparison(
+	value: string | number | null | undefined,
+	caseSensitive: boolean,
+	trimValues: boolean
+): string {
+	let s = value == null ? '' : String(value);
+	if (trimValues) s = s.trim();
+	return caseSensitive ? s : s.toLowerCase();
+}
+
+export function parseNumeric(value: string): { num: number; isNumeric: boolean } {
+	const n = parseFloat(value);
+	return { num: n, isNumeric: !isNaN(n) };
+}
+
+/**
+ * Decide status and reason for two numeric values when no tolerance or when tolerance does not apply
+ */
+export function decideNumericStatus(
+	num1: number,
+	num2: number
+): { status: MatchStatus; reason: string } {
+	const diff = Math.abs(num1 - num2);
+	const average = Math.abs((num1 + num2) / 2);
+	const percentDiff = average !== 0 ? (diff / average) * 100 : 0;
+	const status: MatchStatus = percentDiff <= 10 ? 'partial_match' : 'no_match';
+	return {
+		status,
+		reason: `Values differ by ${diff.toFixed(4)} (${percentDiff.toFixed(2)}% of average) - ${num1} vs ${num2}`
+	};
+}
+
+/**
+ * Decide status and reason for two strings when no tolerance applies
+ */
+export function decideStringStatus(
+	pStr: string,
+	cStr: string
+): { status: MatchStatus; reason: string } {
+	const similarity = calculateStringSimilarity(pStr, cStr);
+	const percent = (similarity * 100).toFixed(1);
+	const status: MatchStatus =
+		similarity >= PARTIAL_STRING_SIMILARITY ? 'partial_match' : 'no_match';
+	return { status, reason: `${percent}% similar (${pStr} vs ${cStr})` };
+}
+
+/**
+ * Evaluate a tolerance configuration for two values and produce whether they match under that tolerance and a human-readable reason.
+ */
+export function evaluateTolerance(
+	primaryValue: string | number | null | undefined,
+	comparisonValue: string | number | null | undefined,
+	tolerance: Tolerance | undefined,
+	caseSensitive: boolean,
+	trimValues: boolean
+): { matches: boolean; reason: string } {
+	if (!tolerance) return { matches: false, reason: 'No tolerance specified' };
+
+	// Normalize strings according to options for string-based checks
+	const pNorm = normalizeForComparison(primaryValue, caseSensitive, trimValues);
+	const cNorm = normalizeForComparison(comparisonValue, caseSensitive, trimValues);
+
+	const rawP = trimValues
+		? (primaryValue?.toString().trim() ?? '')
+		: (primaryValue?.toString() ?? '');
+	const rawC = trimValues
+		? (comparisonValue?.toString().trim() ?? '')
+		: (comparisonValue?.toString() ?? '');
+
+	const { num: num1, isNumeric: isNum1 } = parseNumeric(rawP);
+	const { num: num2, isNumeric: isNum2 } = parseNumeric(rawC);
+
+	if (tolerance.type === 'absolute') {
+		if (isNum1 && isNum2) {
+			const diff = Math.abs(num1 - num2);
+			const matches = diff <= tolerance.value;
+			const reason = `Within absolute tolerance ${tolerance.value}: |${num1} - ${num2}| = ${diff.toFixed(4)}`;
+			return { matches, reason };
+		}
+
+		// String case: interpret absolute tolerance as similarity threshold when <=1 or percent when >1
+		const similarity = calculateStringSimilarity(pNorm, cNorm);
+		const threshold = tolerance.value > 1 ? tolerance.value / 100 : tolerance.value;
+		const effectiveSimilarity = (1 - threshold) * 100;
+		const matches = similarity >= 1 - threshold;
+		const reason = `String similarity ${(similarity * 100).toFixed(1)}% >= threshold ${effectiveSimilarity.toFixed(1)}% (${pNorm} vs ${cNorm})`;
+		return { matches, reason };
+	} else if (tolerance.type === 'relative') {
+		if (isNum1 && isNum2) {
+			const difference = Math.abs(num1 - num2);
+			const average = Math.abs((num1 + num2) / 2);
+			const percentDiff = average !== 0 ? (difference / average) * 100 : 0;
+			const toleranceAmount = (tolerance.percentage / 100) * average;
+			const matches = difference <= toleranceAmount;
+			const reason = `Within relative tolerance ${tolerance.percentage}%: actual difference ${percentDiff.toFixed(2)}% (${num1} vs ${num2})`;
+			return { matches, reason };
+		}
+
+		const similarity = calculateStringSimilarity(pNorm, cNorm);
+		const threshold = 1 - tolerance.percentage / 100;
+		const matches = similarity >= threshold;
+		const effectiveSimilarity = threshold * 100;
+		const reason = `String similarity ${(similarity * 100).toFixed(1)}% >= threshold ${effectiveSimilarity.toFixed(1)}% (${pNorm} vs ${cNorm})`;
+		return { matches, reason };
+	} else if (tolerance.type === 'custom') {
+		// Use checkCustomTolerance which evaluates formula; pass raw (trimmed) values
+		try {
+			const matches = checkCustomTolerance(rawP, rawC, tolerance.formula);
+			const reason = `Matches custom formula: ${tolerance.formula}`;
+			return { matches, reason };
+		} catch (err) {
+			return {
+				matches: false,
+				reason: `Invalid custom formula: ${err instanceof Error ? err.message : String(err)}`
+			};
+		}
+	}
+
+	return { matches: false, reason: 'Unsupported tolerance type' };
+}
+
 function generateMatchStatusAndReason(
 	primaryValue: string | number | null | undefined,
 	comparisonValue: string | number | null | undefined,
@@ -286,56 +414,41 @@ function generateMatchStatusAndReason(
 	if (!primaryValue) return { status: 'missing', reason: 'Primary value is empty' };
 	if (!comparisonValue) return { status: 'missing', reason: 'Comparison value is empty' };
 
-	const pVal = primaryValue.toString();
-	const cVal = comparisonValue.toString();
-	const num1 = parseFloat(pVal);
-	const num2 = parseFloat(cVal);
+	// Normalize values according to options
+	const pNorm = normalizeForComparison(primaryValue, caseSensitive, trimValues);
+	const cNorm = normalizeForComparison(comparisonValue, caseSensitive, trimValues);
+
+	// For numeric parsing we use the trimmed strings (case does not affect numbers)
+	const rawP = trimValues
+		? (primaryValue?.toString().trim() ?? '')
+		: (primaryValue?.toString() ?? '');
+	const rawC = trimValues
+		? (comparisonValue?.toString().trim() ?? '')
+		: (comparisonValue?.toString() ?? '');
+	const { num: num1, isNumeric: isNum1 } = parseNumeric(rawP);
+	const { num: num2, isNumeric: isNum2 } = parseNumeric(rawC);
 
 	if (isExactMatch) {
-		return { status: 'exact_match', reason: `Exact match: '${pVal}'` };
+		// Use normalized display value for reason
+		return { status: 'exact_match', reason: `Exact match: '${pNorm}'` };
 	}
 
 	if (match && tolerance) {
-		// Match by tolerance
-		if (tolerance.type === 'absolute') {
-			if (!isNaN(num1) && !isNaN(num2)) {
-				const diff = Math.abs(num1 - num2);
-				return {
-					status: 'within_tolerance',
-					reason: `Within absolute tolerance ${tolerance.value}: |${num1} - ${num2}| = ${diff.toFixed(4)}`
-				};
-			} else {
-				const similarity = calculateStringSimilarity(pVal, cVal);
-				const threshold = tolerance.value > 1 ? tolerance.value / 100 : tolerance.value;
-				return {
-					status: 'within_tolerance',
-					reason: `String similarity ${(similarity * 100).toFixed(1)}% >= threshold ${(threshold * 100).toFixed(1)}% (${pVal} vs ${cVal})`
-				};
-			}
-		} else if (tolerance.type === 'relative') {
-			if (!isNaN(num1) && !isNaN(num2)) {
-				const difference = Math.abs(num1 - num2);
-				const average = Math.abs((num1 + num2) / 2);
-				const percentDiff = average !== 0 ? (difference / average) * 100 : 0;
-				return {
-					status: 'within_tolerance',
-					reason: `Within relative tolerance ${tolerance.percentage}%: actual difference ${percentDiff.toFixed(2)}% (${num1} vs ${num2})`
-				};
-			} else {
-				const similarity = calculateStringSimilarity(pVal, cVal);
-				const threshold = tolerance.percentage;
-				return {
-					status: 'within_tolerance',
-					reason: `String similarity ${(similarity * 100).toFixed(1)}% >= threshold ${threshold}% (${pVal} vs ${cVal})`
-				};
-			}
-		} else if (tolerance.type === 'custom') {
-			return { status: 'within_tolerance', reason: 'Matches custom formula' };
+		const { matches: tolMatches, reason: tolReason } = evaluateTolerance(
+			primaryValue,
+			comparisonValue,
+			tolerance,
+			caseSensitive,
+			trimValues
+		);
+		if (tolMatches) {
+			return { status: 'within_tolerance', reason: tolReason };
 		}
+		// If tolerance evaluation didn't match (unexpected since `match` was true), fall-through to partial/no match logic
 	}
 
 	// No tolerance match - construct partial or no match explanations
-	if (!isNaN(num1) && !isNaN(num2)) {
+	if (isNum1 && isNum2) {
 		const diff = Math.abs(num1 - num2);
 		// If numeric and percent diff is small, call it partial_match (but not within tolerance)
 		const average = Math.abs((num1 + num2) / 2);
@@ -343,13 +456,15 @@ function generateMatchStatusAndReason(
 		const status: MatchStatus = percentDiff <= 10 ? 'partial_match' : 'no_match';
 		return {
 			status,
-			reason: `Values differ by ${diff.toFixed(4)} (${percentDiff.toFixed(2)}% of average) - ${pVal} vs ${cVal}`
+			reason: `Values differ by ${diff.toFixed(4)} (${percentDiff.toFixed(2)}% of average) - ${num1} vs ${num2}`
 		};
 	} else {
-		const similarity = calculateStringSimilarity(pVal, cVal);
+		const similarity = calculateStringSimilarity(pNorm, cNorm);
 		const percent = (similarity * 100).toFixed(1);
-		const status: MatchStatus = similarity >= 0.8 ? 'partial_match' : 'no_match';
-		return { status, reason: `${percent}% similar (${pVal} vs ${cVal})` };
+		// Relaxed threshold: consider strings with >=50% similarity as partial matches
+		const status: MatchStatus =
+			similarity >= PARTIAL_STRING_SIMILARITY ? 'partial_match' : 'no_match';
+		return { status, reason: `${percent}% similar (${pNorm} vs ${cNorm})` };
 	}
 }
 
@@ -396,12 +511,14 @@ export function validateCustomFormula(formula: string): void {
 	// Remove whitespace
 	const cleaned = formula.replace(/\s/g, '');
 
-	// Only allow specific patterns: variables, numbers, operators, and parentheses
-	const allowedPattern = /^[0-9+\-*/%().,primaryColumnValuecomparisonColumnValue]+$/;
+	// Only allow specific patterns: variables, numbers, operators, comparisons, logical operators, and parentheses
+	// Allow comparison operators: < > = ! (so <=, >=, ==, != are possible)
+	// Allow logical operators: & | (so && and || are possible)
+	const allowedPattern = /^[0-9+\-*/%().,<>!=&|primaryColumnValuecomparisonColumnValue]+$/;
 
 	if (!allowedPattern.test(cleaned)) {
 		throw new Error(
-			'Formula contains invalid characters. Only numbers, operators (+, -, *, /, %), parentheses, and the variables primaryColumnValue and comparisonColumnValue are allowed.'
+			'Formula contains invalid characters. Only numbers, operators (+, -, *, /, %), comparisons (<, >, =, !), logical operators (&, |), parentheses, and the variables primaryColumnValue and comparisonColumnValue are allowed.'
 		);
 	}
 

@@ -89,11 +89,16 @@
 		if (!tolerance) return 'None';
 
 		if (tolerance.type === 'absolute') {
-			return `Absolute ≤ ${tolerance.value}`;
+			// For numbers: interpreted as max absolute difference. For strings: interpreted as similarity threshold when >1.
+			const extra =
+				tolerance.value > 1
+					? ` (strings treated as ${(tolerance.value / 100).toFixed(2)} similarity threshold)`
+					: '';
+			return `Absolute ≤ ${tolerance.value}${extra}`;
 		}
 
 		if (tolerance.type === 'relative') {
-			return `Relative ≤ ${tolerance.percentage}%`;
+			return `Relative ≤ ${tolerance.percentage}% (difference ≤ ${tolerance.percentage}% of average)`;
 		}
 
 		if (tolerance.type === 'custom') {
