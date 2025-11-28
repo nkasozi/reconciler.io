@@ -213,7 +213,7 @@ describe('tolerance-specific behavior', () => {
 		};
 		const comparison = {
 			columns: ['id', 'name'],
-			rows: [{ id: 'c', name: 'Acme Inc.' }],
+			rows: [{ id: 'c', name: 'Acme Incorporate' }],
 			fileName: 'c',
 			fileType: 'csv'
 		};
@@ -223,7 +223,7 @@ describe('tolerance-specific behavior', () => {
 				{
 					primaryColumn: 'name',
 					comparisonColumn: 'name',
-					tolerance: { type: 'absolute', value: 0.5 } // 50% similarity threshold (more realistic for abbrevs)
+					tolerance: { type: 'relative', value: 0.5 } // 50% similarity threshold (more realistic for abbrevs)
 				}
 			]
 		} as any;
