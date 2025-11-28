@@ -5,6 +5,7 @@ import {
 	decideNumericStatus,
 	decideStringStatus,
 	evaluateTolerance,
+	evaluateCustomFormula,
 	PARTIAL_STRING_SIMILARITY
 } from './reconciliation';
 
@@ -72,6 +73,94 @@ describe('reconciliation helpers', () => {
 		// Values within 5
 		const res = evaluateTolerance('100', '103', tol2, false, true);
 		expect(res.matches).toBe(true);
-		expect(res.reason).toContain('Matches custom formula');
+		expect(res.reason).toContain('Custom formula matched');
+	});
+});
+
+describe('string similarity function', () => {
+	it('returns 1.0 for identical strings', () => {
+		const res = evaluateCustomFormula(
+			'hello',
+			'hello',
+			'primaryColumnValue == comparisonColumnValue'
+		);
+		expect(res.result).toBe(true);
+	});
+
+	it('calculates similarity for similar strings', () => {
+		// "cat" vs "hat" - 2 chars same, 1 different
+		// Using formula: (primaryColumnValue-comparisonColumnValue) = 0 is false for strings
+		const res = evaluateCustomFormula('abc', 'abc', 'primaryColumnValue == comparisonColumnValue');
+		expect(res.result).toBe(true);
+	});
+
+	it('returns lower similarity for dissimilar strings', () => {
+		const res = evaluateCustomFormula('xyz', 'abc', 'primaryColumnValue == comparisonColumnValue');
+		expect(res.result).toBe(false);
+	});
+});
+
+describe('custom formula evaluation', () => {
+	it('evaluates simple numeric comparison formulas', () => {
+		const res = evaluateCustomFormula('100', '50', 'primaryColumnValue > comparisonColumnValue');
+		expect(res.result).toBe(true);
+		expect(res.evaluatedFormula).toContain('(100)');
+		expect(res.evaluatedFormula).toContain('(50)');
+	});
+
+	it('handles greater-than or equal formulas', () => {
+		const res = evaluateCustomFormula('100', '100', 'primaryColumnValue >= comparisonColumnValue');
+		expect(res.result).toBe(true);
+	});
+
+	it('handles less-than formulas', () => {
+		const res = evaluateCustomFormula('50', '100', 'primaryColumnValue < comparisonColumnValue');
+		expect(res.result).toBe(true);
+	});
+
+	it('handles not-equal formulas', () => {
+		const res = evaluateCustomFormula('100', '50', 'primaryColumnValue != comparisonColumnValue');
+		expect(res.result).toBe(true);
+	});
+
+	it('handles arithmetic expressions in RHS', () => {
+		// 100 <= 50 * 2 (100) is true
+		const res = evaluateCustomFormula(
+			'100',
+			'50',
+			'primaryColumnValue <= comparisonColumnValue * 2'
+		);
+		expect(res.result).toBe(true);
+	});
+
+	it('returns false for unmet conditions', () => {
+		const res = evaluateCustomFormula('100', '50', 'primaryColumnValue == comparisonColumnValue');
+		expect(res.result).toBe(false);
+	});
+
+	it('throws error for invalid formulas', () => {
+		expect(() => {
+			evaluateCustomFormula('100', '50', 'invalid syntax here');
+		}).toThrow();
+	});
+
+	it('handles logical AND operators in formulas', () => {
+		// (100 > 50) && (50 < 100)
+		const res = evaluateCustomFormula(
+			'100',
+			'50',
+			'primaryColumnValue > comparisonColumnValue && comparisonColumnValue < primaryColumnValue'
+		);
+		expect(res.result).toBe(true);
+	});
+
+	it('handles logical OR operators in formulas', () => {
+		// (100 == 50) || (100 > 50)
+		const res = evaluateCustomFormula(
+			'100',
+			'50',
+			'primaryColumnValue == comparisonColumnValue || primaryColumnValue > comparisonColumnValue'
+		);
+		expect(res.result).toBe(true);
 	});
 });

@@ -384,12 +384,14 @@ export function evaluateTolerance(
 		// Use checkCustomTolerance which evaluates formula; pass raw (trimmed) values
 		try {
 			const matches = checkCustomTolerance(rawP, rawC, tolerance.formula);
-			const reason = `Matches custom formula: ${tolerance.formula}`;
+			const reason = matches
+				? `Custom formula matched: ${tolerance.formula}`
+				: `Custom formula did not match: ${tolerance.formula} (primaryValue: ${primaryValue}, comparisonValue: ${comparisonValue})`;
 			return { matches, reason };
 		} catch (err) {
 			return {
 				matches: false,
-				reason: `Invalid custom formula: ${err instanceof Error ? err.message : String(err)}`
+				reason: `Custom formula error: ${err instanceof Error ? err.message : String(err)}`
 			};
 		}
 	}
@@ -686,7 +688,11 @@ function checkRelativeTolerance(value1: string, value2: string, percentage: numb
  * Formula can reference primaryColumnValue and comparisonColumnValue
  * Returns true if formula evaluates to a truthy value
  */
-function checkCustomTolerance(value1: string, value2: string, formula: string): boolean {
+export function evaluateCustomFormula(
+	value1: string,
+	value2: string,
+	formula: string
+): { result: boolean; evaluatedFormula: string } {
 	// Validate formula once
 	try {
 		validateCustomFormula(formula);
@@ -696,15 +702,19 @@ function checkCustomTolerance(value1: string, value2: string, formula: string): 
 		);
 	}
 
-	// Parse numeric values
+	// Parse numeric values and prepare substitution values
 	const primaryNum = parseFloat(value1);
 	const comparisonNum = parseFloat(value2);
+
+	// Use numeric values if they're valid numbers, otherwise use string literals (quoted)
+	const primarySubst = isNaN(primaryNum) ? `"${value1}"` : `(${primaryNum})`;
+	const comparisonSubst = isNaN(comparisonNum) ? `"${value2}"` : `(${comparisonNum})`;
 
 	// Try to create a safe evaluation function
 	// Replace variable names with actual values
 	let evaluableFormula = formula
-		.replace(/primaryColumnValue/g, `(${primaryNum})`)
-		.replace(/comparisonColumnValue/g, `(${comparisonNum})`);
+		.replace(/primaryColumnValue/g, primarySubst)
+		.replace(/comparisonColumnValue/g, comparisonSubst);
 
 	try {
 		// Use Function constructor in a sandbox-like way (more restricted than eval)
@@ -713,12 +723,22 @@ function checkCustomTolerance(value1: string, value2: string, formula: string): 
 
 		// For numbers, check if result is <= some threshold (typically 0 for "difference <= 0")
 		// For the formula, we expect it to return a boolean or truthy value
-		return Boolean(result);
+		return { result: Boolean(result), evaluatedFormula: evaluableFormula };
 	} catch (error) {
 		throw new Error(
 			`Error evaluating custom tolerance formula: ${error instanceof Error ? error.message : String(error)}`
 		);
 	}
+}
+
+/**
+ * Check custom tolerance using user-defined formula
+ * Formula can reference primaryColumnValue and comparisonColumnValue
+ * Returns true if formula evaluates to a truthy value
+ */
+function checkCustomTolerance(value1: string, value2: string, formula: string): boolean {
+	const { result } = evaluateCustomFormula(value1, value2, formula);
+	return result;
 }
 
 /**

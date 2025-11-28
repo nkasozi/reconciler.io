@@ -352,6 +352,39 @@
 			comparisonPairs[pairIndex] = pair;
 		}
 	}
+
+	// Helper functions for custom tolerance formula builder
+	const operatorMap = {
+		equals: '=',
+		'less than': '<',
+		'greater than': '>',
+		'less than or equal': '<=',
+		'greater than or equal': '>=',
+		'not equal': '!='
+	};
+
+	function getOperator(formula: string): string {
+		if (!formula) return '=';
+		// Match operators: <=, >=, !=, ==, =, <, >
+		const match = formula.match(/primaryColumnValue\s*(<=|>=|!=|==|=|<|>)\s*/);
+		return match ? match[1] : '=';
+	}
+
+	function getOperatorLabel(operator: string): string {
+		for (const [label, sym] of Object.entries(operatorMap)) {
+			if (sym === operator) return label;
+		}
+		return 'equals';
+	}
+
+	function extractRHS(formula: string): string {
+		if (!formula) return '';
+		// Remove 'primaryColumnValue' and operator, keep the RHS
+		const withoutPrimary = formula.replace(/primaryColumnValue\s*/, '');
+		// Remove operator (<=, >=, !=, ==, =, <, >)
+		const rhs = withoutPrimary.replace(/^(<=|>=|!=|==|=|<|>)\s*/, '');
+		return rhs.trim();
+	}
 </script>
 
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -827,28 +860,80 @@
 													{:else if pair.tolerance?.type === 'custom'}
 														<div>
 															<div class="flex items-center gap-2">
-																<label
-																	for="tolerance-formula-{index}"
-																	class="text-xs text-gray-600 dark:text-gray-400"
-																>
-																	Formula
+																<label class="text-xs text-gray-600 dark:text-gray-400">
+																	Formula Builder
 																</label>
 																<InfoIcon
-																	tooltip="Write any expression that returns true (match) or false (no match). Use primaryColumnValue and comparisonColumnValue. Examples: Math.abs(primaryColumnValue - comparisonColumnValue) < 0.5 or primaryColumnValue.toLowerCase() === comparisonColumnValue.toLowerCase()"
+																	tooltip="Use the template to build a formula. Select a comparison operator and enter an expression. Example: 'less than or equal' + '100' creates 'primaryColumnValue <= 100'"
 																/>
 															</div>
-															<textarea
-																id="tolerance-formula-{index}"
-																placeholder="e.g., Math.abs(primaryColumnValue - comparisonColumnValue) <= 0.5"
-																value={pair.tolerance.formula || ''}
-																onchange={(e) => setCustomTolerance(index, e.currentTarget.value)}
-																class="mt-1 w-full rounded border border-gray-300 px-2 py-1 font-mono text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"
-																rows="2"
-															></textarea>
-															<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-																Allowed: numbers, operators (+, -, *, /, %), parentheses,
-																primaryColumnValue, comparisonColumnValue
-															</p>
+															<div
+																class="mt-2 space-y-2 rounded-md border border-gray-300 bg-gray-50 p-3 dark:border-gray-500 dark:bg-gray-700"
+															>
+																<!-- Template display showing primaryColumnValue -->
+																<div class="flex items-center gap-2">
+																	<span
+																		class="rounded bg-blue-100 px-2 py-1 font-mono text-xs font-medium text-blue-900 dark:bg-blue-900 dark:text-blue-100"
+																	>
+																		primaryColumnValue
+																	</span>
+
+																	<!-- Operator select -->
+																	<select
+																		onchange={(e) => {
+																			const label = e.currentTarget.value;
+																			const operator =
+																				operatorMap[label as keyof typeof operatorMap];
+																			const rhs = extractRHS(pair.tolerance?.formula || '');
+																			setCustomTolerance(
+																				index,
+																				`primaryColumnValue${operator}${rhs}`
+																			);
+																		}}
+																		class="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"
+																	>
+																		{#each Object.keys(operatorMap) as label}
+																			<option
+																				value={label}
+																				selected={getOperatorLabel(
+																					getOperator(pair.tolerance?.formula || '')
+																				) === label}
+																			>
+																				{label}
+																			</option>
+																		{/each}
+																	</select>
+
+																	<!-- RHS expression input -->
+																	<input
+																		type="text"
+																		placeholder="e.g. comparisonColumnValue * 1.05"
+																		value={extractRHS(pair.tolerance?.formula || '')}
+																		onchange={(e) => {
+																			const operator = getOperator(pair.tolerance?.formula || '');
+																			const rhs = e.currentTarget.value;
+																			setCustomTolerance(
+																				index,
+																				`primaryColumnValue${operator}${rhs}`
+																			);
+																		}}
+																		class="flex-1 rounded border border-gray-300 px-2 py-1 font-mono text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"
+																	/>
+																</div>
+																<p class="text-xs text-gray-500 dark:text-gray-400">
+																	<strong>Example:</strong> Choose 'less than or equal' and enter '100'
+																	to create: primaryColumnValue &lt;= 100
+																</p>
+															</div>
+
+															<!-- Optional: Show the full formula being generated -->
+															<div class="mt-2 rounded-md bg-gray-100 p-2 dark:bg-gray-800">
+																<p class="font-mono text-xs text-gray-600 dark:text-gray-400">
+																	Formula: <strong
+																		>{pair.tolerance.formula || 'primaryColumnValue = '}</strong
+																	>
+																</p>
+															</div>
 														</div>
 													{/if}
 
