@@ -60,10 +60,19 @@
 			if (state.reconciliationConfig) {
 				const cfg = state.reconciliationConfig;
 				primaryIdPair = cfg.primaryIdPair || primaryIdPair;
-				comparisonPairs =
-					cfg.comparisonPairs && cfg.comparisonPairs.length > 0
-						? cfg.comparisonPairs
-						: comparisonPairs;
+
+				// Normalize comparison pairs from saved config to ensure defaults exist
+				if (cfg.comparisonPairs && cfg.comparisonPairs.length > 0) {
+					comparisonPairs = cfg.comparisonPairs.map((p) => ({
+						primaryColumn: p.primaryColumn ?? null,
+						comparisonColumn: p.comparisonColumn ?? null,
+						tolerance: p.tolerance ?? { type: 'exact_match' },
+						settings: p.settings ?? { caseSensitive: false, trimValues: true }
+					}));
+				} else {
+					comparisonPairs = comparisonPairs;
+				}
+
 				reverseReconciliation = !!cfg.reverseReconciliation;
 			}
 		});
@@ -130,7 +139,15 @@
 	function selectColumn(column: string, fileType: 'primary' | 'comparison') {
 		// If we're in comparison mode and trying to map to a pair that doesn't exist yet, create it
 		if (currentMappingType === 'comparison' && currentPairIndex >= comparisonPairs.length) {
-			comparisonPairs = [...comparisonPairs, { primaryColumn: null, comparisonColumn: null }];
+			comparisonPairs = [
+				...comparisonPairs,
+				{
+					primaryColumn: null,
+					comparisonColumn: null,
+					tolerance: { type: 'exact_match' },
+					settings: { caseSensitive: false, trimValues: true }
+				}
+			];
 		}
 
 		if (fileType === 'primary') {
@@ -180,12 +197,16 @@
 			}
 			setMappingContext('comparison', 0);
 		} else {
-			// Update the specific comparison pair
+			// Update the specific comparison pair — preserve existing tolerance and settings
 			comparisonPairs = comparisonPairs.map((pair, index) => {
 				if (index === currentPairIndex) {
 					return {
+						...pair,
 						primaryColumn: selectedPrimaryColumn,
-						comparisonColumn: selectedComparisonColumn
+						comparisonColumn: selectedComparisonColumn,
+						// ensure defaults exist for older or partially-initialized pairs
+						tolerance: pair.tolerance ?? { type: 'exact_match' },
+						settings: pair.settings ?? { caseSensitive: false, trimValues: true }
 					};
 				}
 				return pair;
@@ -588,8 +609,15 @@
 									lastMatchedPrimary !== column.name}
 								onclick={() => selectColumn(column.name, 'primary')}
 							>
-								<div>
+								<div class="flex items-center gap-2">
 									<span class="font-medium text-gray-800 dark:text-white">{column.name}</span>
+									{#if column.dataType}
+										<span
+											class="ml-2 inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+										>
+											{column.dataType}
+										</span>
+									{/if}
 									{#if isColumnUsed(column.name, 'primary')}
 										<span
 											class="ml-2 inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
@@ -1059,10 +1087,10 @@
 														<label class="inline-flex items-center text-sm">
 															<input
 																type="checkbox"
-																checked={pair.settings?.caseSensitive}
+																bind:checked={pair.settings.caseSensitive}
 																onchange={(e) =>
 																	setPairCaseSensitive(index, e.currentTarget.checked)}
-																class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
+																class="h-4 w-4 rounded border-gray-300 bg-gray-100 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:bg-gray-700"
 															/>
 															<span class="ml-2 text-xs text-gray-700 dark:text-gray-300"
 																>Case Sensitive</span
@@ -1072,9 +1100,9 @@
 														<label class="inline-flex items-center text-sm">
 															<input
 																type="checkbox"
-																checked={pair.settings?.trimValues}
+																bind:checked={pair.settings.trimValues}
 																onchange={(e) => setPairTrimValues(index, e.currentTarget.checked)}
-																class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
+																class="h-4 w-4 rounded border-gray-300 bg-gray-100 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:bg-gray-700"
 															/>
 															<span class="ml-2 text-xs text-gray-700 dark:text-gray-300"
 																>Trim Values</span
