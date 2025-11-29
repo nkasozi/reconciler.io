@@ -1,12 +1,31 @@
 import { describe, test, expect } from 'vitest';
 import { reconcileData, type ColumnPair, type ReconciliationConfig } from './reconciliation';
-import type { ParsedFileData } from './fileParser';
+import type { ParsedFileData, FileColumn } from './fileParser';
+
+/**
+ * Helper to create FileColumn array from column names
+ */
+function createColumns(names: string[]): FileColumn[] {
+	return names.map((name) => ({ name, dataType: 'string' as const }));
+}
+
+/**
+ * Helper to create a default ColumnPair with tolerance and settings
+ */
+function createColumnPair(primaryColumn: string, comparisonColumn: string): ColumnPair {
+	return {
+		primaryColumn,
+		comparisonColumn,
+		tolerance: { type: 'exact_match' },
+		settings: { caseSensitive: true, trimValues: true }
+	};
+}
 
 describe('reconciliation', () => {
 	describe('reconcileData', () => {
 		// Test data
 		const primaryData: ParsedFileData = {
-			columns: ['ID', 'Name', 'Amount', 'Date'],
+			columns: createColumns(['ID', 'Name', 'Amount', 'Date']),
 			rows: [
 				{ ID: '1', Name: 'John Doe', Amount: '100', Date: '2023-01-01' },
 				{ ID: '2', Name: 'Jane Smith', Amount: '200', Date: '2023-01-02' },
@@ -18,7 +37,7 @@ describe('reconciliation', () => {
 		};
 
 		const comparisonData: ParsedFileData = {
-			columns: ['ID', 'FullName', 'Value', 'TransactionDate'],
+			columns: createColumns(['ID', 'FullName', 'Value', 'TransactionDate']),
 			rows: [
 				{ ID: '1', FullName: 'John Doe', Value: '100', TransactionDate: '2023-01-01' },
 				{ ID: '2', FullName: 'Jane Smith', Value: '250', TransactionDate: '2023-01-02' }, // Amount mismatch
@@ -29,18 +48,13 @@ describe('reconciliation', () => {
 		};
 
 		const config: ReconciliationConfig = {
-			primaryIdPair: {
-				primaryColumn: 'ID',
-				comparisonColumn: 'ID'
-			},
+			primaryIdPair: createColumnPair('ID', 'ID'),
 			comparisonPairs: [
-				{ primaryColumn: 'Name', comparisonColumn: 'FullName' },
-				{ primaryColumn: 'Amount', comparisonColumn: 'Value' },
-				{ primaryColumn: 'Date', comparisonColumn: 'TransactionDate' }
+				createColumnPair('Name', 'FullName'),
+				createColumnPair('Amount', 'Value'),
+				createColumnPair('Date', 'TransactionDate')
 			],
-			reverseReconciliation: false,
-			caseSensitive: true,
-			trimValues: true
+			reverseReconciliation: false
 		};
 
 		test('should properly reconcile data between primary and comparison files', () => {
@@ -83,14 +97,14 @@ describe('reconciliation', () => {
 
 		test('should handle empty data sets', () => {
 			const emptyPrimary: ParsedFileData = {
-				columns: ['ID', 'Name', 'Amount', 'Date'],
+				columns: createColumns(['ID', 'Name', 'Amount', 'Date']),
 				rows: [],
 				fileName: 'empty.csv',
 				fileType: 'csv'
 			};
 
 			const emptyComparison: ParsedFileData = {
-				columns: ['ID', 'FullName', 'Value', 'TransactionDate'],
+				columns: createColumns(['ID', 'FullName', 'Value', 'TransactionDate']),
 				rows: [],
 				fileName: 'empty.csv',
 				fileType: 'csv'

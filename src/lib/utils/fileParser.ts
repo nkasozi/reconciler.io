@@ -1,10 +1,23 @@
 import { scanDocument, type DocumentScanResult } from './documentScanner';
 
 /**
+ * Data type detected for a column
+ */
+export type ColumnDataType = 'string' | 'number' | 'boolean' | 'date';
+
+/**
+ * Represents a column with metadata
+ */
+export type FileColumn = {
+	name: string;
+	dataType: ColumnDataType;
+};
+
+/**
  * Defines the structure for parsed file data
  */
 export type ParsedFileData = {
-	columns: string[];
+	columns: FileColumn[];
 	rows: Record<string, string>[];
 	fileName: string;
 	fileType: string;
@@ -77,6 +90,86 @@ export class RowLimitExceededError extends Error {
 export const MAX_FREE_TIER_ROWS = 10000;
 
 /**
+ * Infers the data type of a value
+ */
+function inferDataType(value: string): ColumnDataType {
+	if (value === null || value === undefined || value.trim() === '') {
+		return 'string'; // Default to string for empty values
+	}
+
+	const trimmed = value.trim();
+
+	// Check for boolean
+	if (trimmed.toLowerCase() === 'true' || trimmed.toLowerCase() === 'false') {
+		return 'boolean';
+	}
+
+	// Check for number (including decimals and scientific notation)
+	if (!isNaN(Number(trimmed)) && trimmed !== '') {
+		return 'number';
+	}
+
+	// Check for date (ISO format, common date patterns)
+	if (
+		/^\d{4}-\d{2}-\d{2}/.test(trimmed) || // YYYY-MM-DD
+		/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(trimmed) || // MM/DD/YYYY or DD/MM/YYYY
+		/^\d{1,2}-\d{1,2}-\d{2,4}/.test(trimmed) // MM-DD-YYYY or DD-MM-YYYY
+	) {
+		return 'date';
+	}
+
+	return 'string';
+}
+
+/**
+ * Infers the data type for a column by sampling the first 20 non-empty values
+ */
+function inferColumnDataType(columnValues: string[]): ColumnDataType {
+	// Sample up to 20 non-empty values
+	const samples = columnValues.filter((v) => v && v.trim() !== '').slice(0, 20);
+
+	if (samples.length === 0) {
+		return 'string'; // Default to string if all values are empty
+	}
+
+	// Count the types found
+	const typeCounts: Record<ColumnDataType, number> = {
+		number: 0,
+		boolean: 0,
+		date: 0,
+		string: 0
+	};
+
+	samples.forEach((sample) => {
+		const type = inferDataType(sample);
+		typeCounts[type]++;
+	});
+
+	// Return the most common type, with preference order: number > date > boolean > string
+	if (typeCounts.number > 0 && typeCounts.number >= samples.length * 0.8) {
+		return 'number'; // At least 80% numbers
+	}
+	if (typeCounts.date > 0 && typeCounts.date >= samples.length * 0.8) {
+		return 'date'; // At least 80% dates
+	}
+	if (typeCounts.boolean > 0 && typeCounts.boolean >= samples.length * 0.8) {
+		return 'boolean'; // At least 80% booleans
+	}
+
+	return 'string'; // Default fallback
+}
+
+/**
+ * Creates FileColumn array from column names and row data
+ */
+function createFileColumns(columnNames: string[], rows: Record<string, string>[]): FileColumn[] {
+	return columnNames.map((name) => ({
+		name,
+		dataType: inferColumnDataType(rows.map((row) => row[name] || ''))
+	}));
+}
+
+/**
  * Main function to parse any supported file type
  */
 export async function parseFile(file: File): Promise<ParsedFileData> {
@@ -107,13 +200,16 @@ export async function parseFile(file: File): Promise<ParsedFileData> {
  * (In a real app, this would be replaced with actual parsing logic)
  */
 function createPlaceholderData(file: File, fileType: string): ParsedFileData {
+	const columnNames = ['Column1', 'Column2', 'Column3'];
+	const rows = [
+		{ Column1: 'Data 1-1', Column2: 'Data 1-2', Column3: 'Data 1-3' },
+		{ Column1: 'Data 2-1', Column2: 'Data 2-2', Column3: 'Data 2-3' },
+		{ Column1: 'Data 3-1', Column2: 'Data 3-2', Column3: 'Data 3-3' }
+	];
+
 	return {
-		columns: ['Column1', 'Column2', 'Column3'],
-		rows: [
-			{ Column1: 'Data 1-1', Column2: 'Data 1-2', Column3: 'Data 1-3' },
-			{ Column1: 'Data 2-1', Column2: 'Data 2-2', Column3: 'Data 2-3' },
-			{ Column1: 'Data 3-1', Column2: 'Data 3-2', Column3: 'Data 3-3' }
-		],
+		columns: createFileColumns(columnNames, rows),
+		rows,
 		fileName: file.name,
 		fileType: fileType
 	};
@@ -149,7 +245,7 @@ async function parseCSV(file: File): Promise<ParsedFileData> {
 				}
 
 				// Parse header row
-				const columns = parseCSVLine(lines[0]);
+				const columnNames = parseCSVLine(lines[0]);
 
 				// Parse data rows
 				const rows: Record<string, string>[] = [];
@@ -159,7 +255,7 @@ async function parseCSV(file: File): Promise<ParsedFileData> {
 					const values = parseCSVLine(lines[i]);
 					const rowData: Record<string, string> = {};
 
-					columns.forEach((column, index) => {
+					columnNames.forEach((column, index) => {
 						rowData[column] = index < values.length ? values[index] : '';
 					});
 
@@ -172,7 +268,7 @@ async function parseCSV(file: File): Promise<ParsedFileData> {
 				}
 
 				resolve({
-					columns,
+					columns: createFileColumns(columnNames, rows),
 					rows,
 					fileName: file.name,
 					fileType: 'csv'
@@ -269,7 +365,7 @@ async function parseExcel(file: File): Promise<ParsedFileData> {
 				}
 
 				// Extract columns (first row)
-				const columns = (jsonData[0] as any[]).map((col) => String(col));
+				const columnNames = (jsonData[0] as any[]).map((col) => String(col));
 
 				// Process data rows
 				const rows: Record<string, string>[] = [];
@@ -280,7 +376,7 @@ async function parseExcel(file: File): Promise<ParsedFileData> {
 					// Skip empty rows
 					if (!row || row.length === 0) continue;
 
-					columns.forEach((column, index) => {
+					columnNames.forEach((column, index) => {
 						// Convert all values to strings
 						rowData[column] = index < row.length ? String(row[index] ?? '') : '';
 					});
@@ -294,7 +390,7 @@ async function parseExcel(file: File): Promise<ParsedFileData> {
 				}
 
 				resolve({
-					columns,
+					columns: createFileColumns(columnNames, rows),
 					rows,
 					fileName: file.name,
 					fileType: 'excel'
@@ -318,11 +414,7 @@ async function parseExcel(file: File): Promise<ParsedFileData> {
  */
 async function parsePDF(file: File): Promise<ParsedFileData> {
 	try {
-		const scanResult = await scanDocument(file, {
-			useOCR: false, // Try text extraction first
-			extractTables: true,
-			useGoogleDocumentAI: true // Enable Google Document AI for better PDF processing
-		});
+		const scanResult = await scanDocument(file);
 
 		// If we have table data, use it directly (already in the correct format)
 		if (scanResult.columns && scanResult.rows && scanResult.rows.length > 0) {
@@ -332,7 +424,7 @@ async function parsePDF(file: File): Promise<ParsedFileData> {
 			}
 
 			return {
-				columns: scanResult.columns,
+				columns: createFileColumns(scanResult.columns, scanResult.rows),
 				rows: scanResult.rows,
 				fileName: file.name,
 				fileType: 'pdf',
@@ -345,18 +437,18 @@ async function parsePDF(file: File): Promise<ParsedFileData> {
 
 		// Use first few words as column headers if available
 		const firstLine = textLines[0] || '';
-		const columns =
+		const columnNames =
 			firstLine.split(/\s{2,}|\t/).length > 1 ? firstLine.split(/\s{2,}|\t/) : ['Content'];
 
 		const rows: Record<string, string>[] = [];
 
 		// If we have multiple columns, try to parse remaining lines
-		if (columns.length > 1) {
+		if (columnNames.length > 1) {
 			for (let i = 1; i < Math.min(textLines.length, MAX_FREE_TIER_ROWS + 1); i++) {
 				const values = textLines[i].split(/\s{2,}|\t/);
 				const rowData: Record<string, string> = {};
 
-				columns.forEach((column, index) => {
+				columnNames.forEach((column, index) => {
 					rowData[column] = index < values.length ? values[index] : '';
 				});
 
@@ -370,7 +462,7 @@ async function parsePDF(file: File): Promise<ParsedFileData> {
 		}
 
 		return {
-			columns,
+			columns: createFileColumns(columnNames, rows),
 			rows,
 			fileName: file.name,
 			fileType: 'pdf',
@@ -388,12 +480,7 @@ async function parsePDF(file: File): Promise<ParsedFileData> {
  */
 async function parseImage(file: File): Promise<ParsedFileData> {
 	try {
-		const scanResult = await scanDocument(file, {
-			useOCR: true,
-			extractTables: true,
-			preprocessImage: true,
-			useGoogleDocumentAI: true // Enable Google Document AI for superior image OCR
-		});
+		const scanResult = await scanDocument(file);
 
 		// If we have table data from OCR, use it directly (already in the correct format)
 		if (scanResult.columns && scanResult.rows && scanResult.rows.length > 0) {
@@ -403,7 +490,7 @@ async function parseImage(file: File): Promise<ParsedFileData> {
 			}
 
 			return {
-				columns: scanResult.columns,
+				columns: createFileColumns(scanResult.columns, scanResult.rows),
 				rows: scanResult.rows,
 				fileName: file.name,
 				fileType: 'image',
@@ -418,20 +505,20 @@ async function parseImage(file: File): Promise<ParsedFileData> {
 		const firstLine = textLines[0] || '';
 		const possibleColumns = firstLine.split(/\s{2,}|\t/);
 
-		const columns =
+		const columnNames =
 			possibleColumns.length > 1 && possibleColumns.every((col) => col.length < 50)
 				? possibleColumns
 				: ['Extracted Text'];
 
 		const rows: Record<string, string>[] = [];
 
-		if (columns.length > 1) {
+		if (columnNames.length > 1) {
 			// Multi-column format
 			for (let i = 1; i < Math.min(textLines.length, MAX_FREE_TIER_ROWS + 1); i++) {
 				const values = textLines[i].split(/\s{2,}|\t/);
 				const rowData: Record<string, string> = {};
 
-				columns.forEach((column, index) => {
+				columnNames.forEach((column, index) => {
 					rowData[column] = index < values.length ? values[index] : '';
 				});
 
@@ -445,7 +532,7 @@ async function parseImage(file: File): Promise<ParsedFileData> {
 		}
 
 		return {
-			columns,
+			columns: createFileColumns(columnNames, rows),
 			rows,
 			fileName: file.name,
 			fileType: 'image',

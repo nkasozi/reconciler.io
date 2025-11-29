@@ -8,6 +8,17 @@ import {
 	evaluateCustomFormula,
 	PARTIAL_STRING_SIMILARITY
 } from './reconciliation';
+import type { ColumnPairSettings } from './reconciliation';
+
+/**
+ * Helper to create settings for tests
+ */
+function createSettings(
+	caseSensitive: boolean = false,
+	trimValues: boolean = true
+): ColumnPairSettings {
+	return { caseSensitive, trimValues };
+}
 
 describe('reconciliation helpers', () => {
 	it('normalizeForComparison trims and lowercases when requested', () => {
@@ -37,41 +48,44 @@ describe('reconciliation helpers', () => {
 		expect(different.status).toBe('no_match');
 	});
 
-	it('evaluateTolerance handles absolute numeric tolerance', () => {
-		const tol = { type: 'absolute', value: 5 } as any;
-		const res = evaluateTolerance('100', '103', tol, false, true);
+	it('evaluateTolerance handles numeric exact_match tolerance', () => {
+		const tol = { type: 'exact_match' } as const;
+		const res = evaluateTolerance('100', '100', tol, createSettings());
 		expect(res.matches).toBe(true);
-		expect(res.reason).toContain('Within absolute tolerance');
+		expect(res.reason).toContain('Exact match');
 	});
 
-	it('evaluateTolerance handles relative numeric tolerance', () => {
-		const tol = { type: 'relative', percentage: 5 } as any; // 5%
-		const res = evaluateTolerance('100', '104', tol, false, true);
+	it('evaluateTolerance handles numeric within_range tolerance', () => {
+		const tol = { type: 'within_range', value: 5 } as const;
+		const res = evaluateTolerance('100', '103', tol, createSettings());
+		expect(res.matches).toBe(true);
+		expect(res.reason).toContain('Within range tolerance');
+	});
+
+	it('evaluateTolerance handles numeric within_range_percentage tolerance', () => {
+		const tol = { type: 'within_range_percentage', percentage: 5 } as const; // 5%
+		const res = evaluateTolerance('100', '104', tol, createSettings());
 		// 4 difference on average 102 -> ~3.92% which is within 5%
 		expect(res.matches).toBe(true);
-		expect(res.reason).toContain('Within relative tolerance');
+		expect(res.reason).toContain('Within 5% range');
 	});
 
-	it('evaluateTolerance returns false when no tolerance specified', () => {
-		const res = evaluateTolerance('a', 'b', null, false, true);
+	it('evaluateTolerance returns false when values do not match exact_match', () => {
+		const tol = { type: 'exact_match' } as const;
+		const res = evaluateTolerance('a', 'b', tol, createSettings());
 		expect(res.matches).toBe(false);
-		expect(res.reason).toBe('No tolerance specified');
+		expect(res.reason).toContain('do not match');
 	});
 
 	it('evaluateTolerance handles custom formula using comparison operators', () => {
-		// formula is true when difference <= 5
-		const tol = {
-			type: 'custom',
-			formula: 'Math.abs(primaryColumnValue-comparisonColumnValue) <= 5'
-		} as any;
-		// Since validateCustomFormula restricts Math/letters, use equivalent without Math.abs
+		// formula is true when difference is small
 		const tol2 = {
 			type: 'custom',
 			formula:
 				'(primaryColumnValue-comparisonColumnValue) <= 5 && (comparisonColumnValue-primaryColumnValue) <= 5'
-		} as any;
+		} as const;
 		// Values within 5
-		const res = evaluateTolerance('100', '103', tol2, false, true);
+		const res = evaluateTolerance('100', '103', tol2, createSettings());
 		expect(res.matches).toBe(true);
 		expect(res.reason).toContain('Custom formula matched');
 	});
