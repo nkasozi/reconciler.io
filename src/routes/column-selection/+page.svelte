@@ -12,104 +12,89 @@
 	let primaryFile = $state<ParsedFileData | null>(null);
 	let comparisonFile = $state<ParsedFileData | null>(null);
 
-	// Column mapping state
-						{#each primaryFile.columns as column}
-						<button
-							type="button"
-							class="mb-2 flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left transition-all"
-							class:bg-green-100={lastMatchedPrimary === column.name}
-							class:border-green-400={lastMatchedPrimary === column.name}
-							class:shadow-lg={lastMatchedPrimary === column.name}
-							class:ring-2={lastMatchedPrimary === column.name ||
-								(isColumnSelected(column.name, 'primary') && lastMatchedPrimary !== column.name)}
-							class:ring-green-300={lastMatchedPrimary === column.name}
-							class:ring-blue-300={isColumnSelected(column.name, 'primary') &&
-								lastMatchedPrimary !== column.name}
-							class:dark:bg-green-800={lastMatchedPrimary === column.name}
-							class:dark:border-green-600={lastMatchedPrimary === column.name}
-							class:dark:ring-green-600={lastMatchedPrimary === column.name}
-							class:bg-blue-100={isColumnSelected(column.name, 'primary') &&
-								lastMatchedPrimary !== column.name}
-							class:border-blue-400={isColumnSelected(column.name, 'primary') &&
-								lastMatchedPrimary !== column.name}
-							class:shadow-md={isColumnSelected(column.name, 'primary') &&
-								lastMatchedPrimary !== column.name}
-							class:dark:bg-blue-800={isColumnSelected(column.name, 'primary') &&
-								lastMatchedPrimary !== column.name}
-							class:dark:border-blue-600={isColumnSelected(column.name, 'primary') &&
-								lastMatchedPrimary !== column.name}
-							class:dark:ring-blue-600={isColumnSelected(column.name, 'primary') &&
-								lastMatchedPrimary !== column.name}
-							class:bg-amber-50={selectedComparisonColumn &&
-								!isColumnSelected(column.name, 'primary') &&
-								lastMatchedPrimary !== column.name}
-							class:border-amber-200={selectedComparisonColumn &&
-								!isColumnSelected(column.name, 'primary') &&
-								lastMatchedPrimary !== column.name}
-							class:dark:bg-amber-800={selectedComparisonColumn &&
-								!isColumnSelected(column.name, 'primary') &&
-								lastMatchedPrimary !== column.name}
-							class:dark:border-amber-800={selectedComparisonColumn &&
-								!isColumnSelected(column.name, 'primary') &&
-								lastMatchedPrimary !== column.name}
-							class:bg-white={!isColumnSelected(column.name, 'primary') &&
-								!selectedComparisonColumn &&
-								lastMatchedPrimary !== column.name}
-							class:border-gray-200={!isColumnSelected(column.name, 'primary') &&
-								!selectedComparisonColumn &&
-								lastMatchedPrimary !== column.name}
-							class:dark:bg-gray-800={!isColumnSelected(column.name, 'primary') &&
-								!selectedComparisonColumn &&
-								lastMatchedPrimary !== column.name}
-							class:dark:border-gray-600={!isColumnSelected(column.name, 'primary') &&
-								!selectedComparisonColumn &&
-								lastMatchedPrimary !== column.name}
-							class:hover:bg-gray-100={!isColumnSelected(column.name, 'primary') &&
-								!selectedComparisonColumn &&
-								lastMatchedPrimary !== column.name}
-							class:dark:hover:bg-gray-700={!isColumnSelected(column.name, 'primary') &&
-								!selectedComparisonColumn &&
-								lastMatchedPrimary !== column.name}
-							onclick={() => selectColumn(column.name, 'primary')}
-						>
-								<div class="flex items-center gap-2">
-									<span class="font-medium text-gray-800 dark:text-white">{column.name}</span>
-									<!-- dataType badge -->
-									{#if column.dataType}
-										<span class="ml-2 inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-200">
-											{column.dataType}
-										</span>
-									{/if}
-									{#if isColumnUsed(column.name, 'primary')}
-										<span
-											class="ml-2 inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
-										>
-											{getColumnUsageDescription(column.name, 'primary')}
-										</span>
-									{/if}
-								</div>
+	// UI state
+	let reverseReconciliation = $state(false);
 
-						{#if lastMatchedPrimary === column.name}
-							<div class="flex items-center gap-1">
-								<span class="text-xs font-bold text-green-600 dark:text-green-300">✓</span>
-								<span class="h-3 w-3 animate-pulse rounded-full bg-green-500"></span>
-							</div>
-						{:else if isColumnSelected(column.name, 'primary')}
-							<div class="flex items-center gap-1">
-								<span class="text-xs font-bold text-blue-600 dark:text-blue-300">✓</span>
-								<span class="h-3 w-3 animate-pulse rounded-full bg-blue-500"></span>
-							</div>
-						{:else if selectedComparisonColumn}
-							<span class="text-xs text-amber-600 dark:text-amber-300">waiting →</span>
-						{/if}
-					</button>
-				{/each}
-	comparisonPairs = [...comparisonPairs, { primaryColumn: null, comparisonColumn: null, tolerance: { type: 'exact_match' }, settings: { caseSensitive: false, trimValues: true } }];
+	// UI flags
+	let showWaitlistModal = $state(false);
 
-		// Automatically switch to editing the new pair
-		setMappingContext('comparison', newPairIndex);
-		return newPairIndex;
+	// Mapping state (mirrors ColumnMappingModal defaults)
+	let primaryIdPair = $state<ColumnPair>({
+		primaryColumn: null,
+		comparisonColumn: null
+	});
+
+	let comparisonPairs = $state<ColumnPair[]>([
+		{
+			primaryColumn: null,
+			comparisonColumn: null,
+			tolerance: { type: 'exact_match' },
+			settings: { caseSensitive: false, trimValues: true }
+		}
+	]);
+
+	let selectedPrimaryColumn = $state<string | null>(null);
+	let selectedComparisonColumn = $state<string | null>(null);
+	let currentMappingType = $state<'id' | 'comparison'>('id');
+	let currentPairIndex = $state<number>(0);
+
+	// Validation & flash state
+	let primaryIdPairValid = $state(false);
+	let formValid = $state(false);
+	let lastMatchedPrimary = $state<string | null>(null);
+	let lastMatchedComparison = $state<string | null>(null);
+
+	// Keep local store snapshot in sync
+	onMount(() => {
+		const unsubscribe = reconciliationStore.subscribe((state) => {
+			// If either file is missing, send user back to upload
+			if (!state.primaryFileData || !state.comparisonFileData) {
+				goto('/upload');
+				return;
+			}
+
+			primaryFile = state.primaryFileData;
+			comparisonFile = state.comparisonFileData;
+
+			// If config exists, hydrate mapping defaults
+			if (state.reconciliationConfig) {
+				const cfg = state.reconciliationConfig;
+				primaryIdPair = cfg.primaryIdPair || primaryIdPair;
+				comparisonPairs =
+					cfg.comparisonPairs && cfg.comparisonPairs.length > 0
+						? cfg.comparisonPairs
+						: comparisonPairs;
+				reverseReconciliation = !!cfg.reverseReconciliation;
+			}
+		});
+
+		return unsubscribe;
+	});
+
+	// Reactive validation
+	$effect(() => {
+		primaryIdPairValid = !!primaryIdPair.primaryColumn && !!primaryIdPair.comparisonColumn;
+		validateForm();
+	});
+
+	function validateForm() {
+		const isPrimaryIdValid = !!primaryIdPair.primaryColumn && !!primaryIdPair.comparisonColumn;
+
+		const validComparisonPairs = comparisonPairs.filter(
+			(pair) => pair.primaryColumn && pair.comparisonColumn
+		);
+
+		const incompleteComparisonPairs = comparisonPairs.filter(
+			(pair) =>
+				(pair.primaryColumn && !pair.comparisonColumn) ||
+				(!pair.primaryColumn && pair.comparisonColumn)
+		);
+
+		formValid = isPrimaryIdValid && incompleteComparisonPairs.length === 0;
 	}
+
+	// Column mapping state
+	// ...existing column mapping UI lives in the template below
 
 	// Remove a comparison pair
 	function removeComparisonPair(index: number) {
@@ -184,7 +169,14 @@
 			// Automatically create and move to first comparison pair
 			if (comparisonPairs.length === 0) {
 				// Create the first comparison pair
-				comparisonPairs = [{ primaryColumn: null, comparisonColumn: null, tolerance: { type: 'exact_match' }, settings: { caseSensitive: false, trimValues: true } }];
+				comparisonPairs = [
+					{
+						primaryColumn: null,
+						comparisonColumn: null,
+						tolerance: { type: 'exact_match' },
+						settings: { caseSensitive: false, trimValues: true }
+					}
+				];
 			}
 			setMappingContext('comparison', 0);
 		} else {
@@ -407,9 +399,13 @@
 	}
 
 	// Helper: find a column's dataType from the parsed file objects
-	function getColumnDataType(columnName: string | null, fileType: 'primary' | 'comparison'): string | null {
+	function getColumnDataType(
+		columnName: string | null,
+		fileType: 'primary' | 'comparison'
+	): string | null {
 		if (!columnName) return null;
-		const cols = fileType === 'primary' ? primaryFile?.columns ?? [] : comparisonFile?.columns ?? [];
+		const cols =
+			fileType === 'primary' ? (primaryFile?.columns ?? []) : (comparisonFile?.columns ?? []);
 		const col = cols.find((c: any) => c.name === columnName);
 		return col?.dataType ?? null;
 	}
@@ -436,18 +432,23 @@
 			options.push({ value: 'within_range', label: 'Within range (fixed amount)' });
 			options.push({ value: 'within_range_percentage', label: 'Within percentage (numeric)' });
 		} else if (bothString) {
-			options.push({ value: 'within_percentage_similarity', label: 'Similarity percentage (text)' });
+			options.push({
+				value: 'within_percentage_similarity',
+				label: 'Similarity percentage (text)'
+			});
 		} else {
 			// Mixed types: expose both numeric and similarity options so user can pick appropriate
 			options.push({ value: 'within_range', label: 'Within range (fixed amount)' });
 			options.push({ value: 'within_range_percentage', label: 'Within percentage (numeric)' });
-			options.push({ value: 'within_percentage_similarity', label: 'Similarity percentage (text)' });
+			options.push({
+				value: 'within_percentage_similarity',
+				label: 'Similarity percentage (text)'
+			});
 		}
 
 		options.push({ value: 'custom', label: 'Custom Formula' });
 		return options;
 	}
-
 </script>
 
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
