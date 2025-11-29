@@ -13,93 +13,98 @@
 	let comparisonFile = $state<ParsedFileData | null>(null);
 
 	// Column mapping state
-	let primaryIdPair = $state<ColumnPair>({
-		primaryColumn: null,
-		comparisonColumn: null
-	});
+						{#each primaryFile.columns as column}
+						<button
+							type="button"
+							class="mb-2 flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left transition-all"
+							class:bg-green-100={lastMatchedPrimary === column.name}
+							class:border-green-400={lastMatchedPrimary === column.name}
+							class:shadow-lg={lastMatchedPrimary === column.name}
+							class:ring-2={lastMatchedPrimary === column.name ||
+								(isColumnSelected(column.name, 'primary') && lastMatchedPrimary !== column.name)}
+							class:ring-green-300={lastMatchedPrimary === column.name}
+							class:ring-blue-300={isColumnSelected(column.name, 'primary') &&
+								lastMatchedPrimary !== column.name}
+							class:dark:bg-green-800={lastMatchedPrimary === column.name}
+							class:dark:border-green-600={lastMatchedPrimary === column.name}
+							class:dark:ring-green-600={lastMatchedPrimary === column.name}
+							class:bg-blue-100={isColumnSelected(column.name, 'primary') &&
+								lastMatchedPrimary !== column.name}
+							class:border-blue-400={isColumnSelected(column.name, 'primary') &&
+								lastMatchedPrimary !== column.name}
+							class:shadow-md={isColumnSelected(column.name, 'primary') &&
+								lastMatchedPrimary !== column.name}
+							class:dark:bg-blue-800={isColumnSelected(column.name, 'primary') &&
+								lastMatchedPrimary !== column.name}
+							class:dark:border-blue-600={isColumnSelected(column.name, 'primary') &&
+								lastMatchedPrimary !== column.name}
+							class:dark:ring-blue-600={isColumnSelected(column.name, 'primary') &&
+								lastMatchedPrimary !== column.name}
+							class:bg-amber-50={selectedComparisonColumn &&
+								!isColumnSelected(column.name, 'primary') &&
+								lastMatchedPrimary !== column.name}
+							class:border-amber-200={selectedComparisonColumn &&
+								!isColumnSelected(column.name, 'primary') &&
+								lastMatchedPrimary !== column.name}
+							class:dark:bg-amber-800={selectedComparisonColumn &&
+								!isColumnSelected(column.name, 'primary') &&
+								lastMatchedPrimary !== column.name}
+							class:dark:border-amber-800={selectedComparisonColumn &&
+								!isColumnSelected(column.name, 'primary') &&
+								lastMatchedPrimary !== column.name}
+							class:bg-white={!isColumnSelected(column.name, 'primary') &&
+								!selectedComparisonColumn &&
+								lastMatchedPrimary !== column.name}
+							class:border-gray-200={!isColumnSelected(column.name, 'primary') &&
+								!selectedComparisonColumn &&
+								lastMatchedPrimary !== column.name}
+							class:dark:bg-gray-800={!isColumnSelected(column.name, 'primary') &&
+								!selectedComparisonColumn &&
+								lastMatchedPrimary !== column.name}
+							class:dark:border-gray-600={!isColumnSelected(column.name, 'primary') &&
+								!selectedComparisonColumn &&
+								lastMatchedPrimary !== column.name}
+							class:hover:bg-gray-100={!isColumnSelected(column.name, 'primary') &&
+								!selectedComparisonColumn &&
+								lastMatchedPrimary !== column.name}
+							class:dark:hover:bg-gray-700={!isColumnSelected(column.name, 'primary') &&
+								!selectedComparisonColumn &&
+								lastMatchedPrimary !== column.name}
+							onclick={() => selectColumn(column.name, 'primary')}
+						>
+								<div class="flex items-center gap-2">
+									<span class="font-medium text-gray-800 dark:text-white">{column.name}</span>
+									<!-- dataType badge -->
+									{#if column.dataType}
+										<span class="ml-2 inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+											{column.dataType}
+										</span>
+									{/if}
+									{#if isColumnUsed(column.name, 'primary')}
+										<span
+											class="ml-2 inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
+										>
+											{getColumnUsageDescription(column.name, 'primary')}
+										</span>
+									{/if}
+								</div>
 
-	let comparisonPairs = $state<ColumnPair[]>([]);
-
-	// Selected columns during mapping
-	let selectedPrimaryColumn = $state<string | null>(null);
-	let selectedComparisonColumn = $state<string | null>(null);
-	let currentMappingType = $state<'id' | 'comparison'>('id');
-	let currentPairIndex = $state<number>(0);
-
-	// Validation state
-	let primaryIdPairValid = $state(false);
-	let formValid = $state(false);
-
-	// Configuration options state
-	let reverseReconciliation = $state(false);
-	let caseSensitive = $state(true);
-	let trimValues = $state(true);
-
-	// Waitlist modal state
-	let showWaitlistModal = $state(false);
-
-	// Match flash animation state
-	let lastMatchedPrimary = $state<string | null>(null);
-	let lastMatchedComparison = $state<string | null>(null);
-
-	onMount(() => {
-		// Get file data from the store
-		const state = get(reconciliationStore);
-		primaryFile = state.primaryFileData;
-		comparisonFile = state.comparisonFileData;
-
-		// If files are missing, redirect back to upload
-		if (!primaryFile) {
-			console.warn('Missing Primary file data, redirecting to upload page');
-			goto('/upload');
-			return;
-		}
-
-		if (!comparisonFile) {
-			console.warn('Missing Comparison file data, redirecting to upload page');
-			goto('/upload');
-			return;
-		}
-	});
-
-	// Validation
-	$effect(() => {
-		primaryIdPairValid = !!primaryIdPair.primaryColumn && !!primaryIdPair.comparisonColumn;
-		validateForm();
-	});
-
-	function validateForm() {
-		// Check for primary ID validity (required)
-		const isPrimaryIdValid = !!primaryIdPair.primaryColumn && !!primaryIdPair.comparisonColumn;
-
-		// Count valid and incomplete comparison pairs
-		const validComparisonPairs = comparisonPairs.filter(
-			(pair) => pair.primaryColumn && pair.comparisonColumn
-		);
-
-		const incompleteComparisonPairs = comparisonPairs.filter(
-			(pair) =>
-				(pair.primaryColumn && !pair.comparisonColumn) ||
-				(!pair.primaryColumn && pair.comparisonColumn)
-		);
-
-		// Check that all custom tolerances have formulas
-		const invalidCustomTolerances = comparisonPairs.some(
-			(pair) => pair.tolerance?.type === 'custom' && !pair.tolerance?.formula?.trim()
-		);
-
-		// Form is valid if:
-		// 1. Primary ID is mapped
-		// 2. There are no incomplete comparison pairs (either both columns set or both null)
-		// 3. All custom tolerances have formulas
-		formValid =
-			isPrimaryIdValid && incompleteComparisonPairs.length === 0 && !invalidCustomTolerances;
-	}
-
-	// Add another comparison pair
-	function addComparisonPair() {
-		const newPairIndex = comparisonPairs.length;
-		comparisonPairs = [...comparisonPairs, { primaryColumn: null, comparisonColumn: null }];
+						{#if lastMatchedPrimary === column.name}
+							<div class="flex items-center gap-1">
+								<span class="text-xs font-bold text-green-600 dark:text-green-300">✓</span>
+								<span class="h-3 w-3 animate-pulse rounded-full bg-green-500"></span>
+							</div>
+						{:else if isColumnSelected(column.name, 'primary')}
+							<div class="flex items-center gap-1">
+								<span class="text-xs font-bold text-blue-600 dark:text-blue-300">✓</span>
+								<span class="h-3 w-3 animate-pulse rounded-full bg-blue-500"></span>
+							</div>
+						{:else if selectedComparisonColumn}
+							<span class="text-xs text-amber-600 dark:text-amber-300">waiting →</span>
+						{/if}
+					</button>
+				{/each}
+	comparisonPairs = [...comparisonPairs, { primaryColumn: null, comparisonColumn: null, tolerance: { type: 'exact_match' }, settings: { caseSensitive: false, trimValues: true } }];
 
 		// Automatically switch to editing the new pair
 		setMappingContext('comparison', newPairIndex);
@@ -179,7 +184,7 @@
 			// Automatically create and move to first comparison pair
 			if (comparisonPairs.length === 0) {
 				// Create the first comparison pair
-				comparisonPairs = [{ primaryColumn: null, comparisonColumn: null }];
+				comparisonPairs = [{ primaryColumn: null, comparisonColumn: null, tolerance: { type: 'exact_match' }, settings: { caseSensitive: false, trimValues: true } }];
 			}
 			setMappingContext('comparison', 0);
 		} else {
@@ -240,9 +245,7 @@
 		const reconciliationConfig: ReconciliationConfig = {
 			primaryIdPair,
 			comparisonPairs: completeComparisonPairs,
-			reverseReconciliation,
-			caseSensitive,
-			trimValues
+			reverseReconciliation
 		};
 
 		// Save the configuration to the store
@@ -311,25 +314,35 @@
 		return text;
 	}
 
-	// Tolerance management functions
-	function setAbsoluteTolerance(pairIndex: number, value: number) {
+	// Tolerance management functions (use explicit, non-null tolerance types)
+	function setExactMatchTolerance(pairIndex: number) {
 		const pair = comparisonPairs[pairIndex];
 		if (pair) {
-			pair.tolerance = {
-				type: 'absolute',
-				value
-			};
+			pair.tolerance = { type: 'exact_match' };
 			comparisonPairs[pairIndex] = pair;
 		}
 	}
 
-	function setRelativeTolerance(pairIndex: number, percentage: number) {
+	function setNumericRangeTolerance(pairIndex: number, value: number) {
 		const pair = comparisonPairs[pairIndex];
 		if (pair) {
-			pair.tolerance = {
-				type: 'relative',
-				percentage
-			};
+			pair.tolerance = { type: 'within_range', value };
+			comparisonPairs[pairIndex] = pair;
+		}
+	}
+
+	function setNumericPercentageTolerance(pairIndex: number, percentage: number) {
+		const pair = comparisonPairs[pairIndex];
+		if (pair) {
+			pair.tolerance = { type: 'within_range_percentage', percentage };
+			comparisonPairs[pairIndex] = pair;
+		}
+	}
+
+	function setStringSimilarityTolerance(pairIndex: number, percentage: number) {
+		const pair = comparisonPairs[pairIndex];
+		if (pair) {
+			pair.tolerance = { type: 'within_percentage_similarity', percentage };
 			comparisonPairs[pairIndex] = pair;
 		}
 	}
@@ -337,18 +350,25 @@
 	function setCustomTolerance(pairIndex: number, formula: string) {
 		const pair = comparisonPairs[pairIndex];
 		if (pair) {
-			pair.tolerance = {
-				type: 'custom',
-				formula
-			};
+			pair.tolerance = { type: 'custom', formula };
 			comparisonPairs[pairIndex] = pair;
 		}
 	}
 
-	function clearTolerance(pairIndex: number) {
+	function setPairCaseSensitive(pairIndex: number, caseSensitive: boolean) {
 		const pair = comparisonPairs[pairIndex];
 		if (pair) {
-			pair.tolerance = null;
+			pair.settings = pair.settings || { caseSensitive: false, trimValues: true };
+			pair.settings.caseSensitive = caseSensitive;
+			comparisonPairs[pairIndex] = pair;
+		}
+	}
+
+	function setPairTrimValues(pairIndex: number, trimValues: boolean) {
+		const pair = comparisonPairs[pairIndex];
+		if (pair) {
+			pair.settings = pair.settings || { caseSensitive: false, trimValues: true };
+			pair.settings.trimValues = trimValues;
 			comparisonPairs[pairIndex] = pair;
 		}
 	}
@@ -385,6 +405,49 @@
 		const rhs = withoutPrimary.replace(/^(<=|>=|!=|==|=|<|>)\s*/, '');
 		return rhs.trim();
 	}
+
+	// Helper: find a column's dataType from the parsed file objects
+	function getColumnDataType(columnName: string | null, fileType: 'primary' | 'comparison'): string | null {
+		if (!columnName) return null;
+		const cols = fileType === 'primary' ? primaryFile?.columns ?? [] : comparisonFile?.columns ?? [];
+		const col = cols.find((c: any) => c.name === columnName);
+		return col?.dataType ?? null;
+	}
+
+	function isNumericType(dt: string | null) {
+		return dt === 'number' || dt === 'date';
+	}
+
+	// Return allowed tolerance options for a given pair index based on mapped column data types
+	function getAllowedToleranceOptions(pairIndex: number) {
+		const pair = comparisonPairs[pairIndex];
+		const primaryDt = getColumnDataType(pair?.primaryColumn ?? null, 'primary');
+		const comparisonDt = getColumnDataType(pair?.comparisonColumn ?? null, 'comparison');
+
+		const bothNumeric = isNumericType(primaryDt) && isNumericType(comparisonDt);
+		const bothString = primaryDt === 'string' && comparisonDt === 'string';
+
+		// Always include exact_match and custom
+		const options: Array<{ value: string; label: string }> = [
+			{ value: 'exact_match', label: 'Exact match' }
+		];
+
+		if (bothNumeric) {
+			options.push({ value: 'within_range', label: 'Within range (fixed amount)' });
+			options.push({ value: 'within_range_percentage', label: 'Within percentage (numeric)' });
+		} else if (bothString) {
+			options.push({ value: 'within_percentage_similarity', label: 'Similarity percentage (text)' });
+		} else {
+			// Mixed types: expose both numeric and similarity options so user can pick appropriate
+			options.push({ value: 'within_range', label: 'Within range (fixed amount)' });
+			options.push({ value: 'within_range_percentage', label: 'Within percentage (numeric)' });
+			options.push({ value: 'within_percentage_similarity', label: 'Similarity percentage (text)' });
+		}
+
+		options.push({ value: 'custom', label: 'Custom Formula' });
+		return options;
+	}
+
 </script>
 
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -469,78 +532,78 @@
 							<button
 								type="button"
 								class="mb-2 flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left transition-all"
-								class:bg-green-100={lastMatchedPrimary === column}
-								class:border-green-400={lastMatchedPrimary === column}
-								class:shadow-lg={lastMatchedPrimary === column}
-								class:ring-2={lastMatchedPrimary === column ||
-									(isColumnSelected(column, 'primary') && lastMatchedPrimary !== column)}
-								class:ring-green-300={lastMatchedPrimary === column}
-								class:ring-blue-300={isColumnSelected(column, 'primary') &&
-									lastMatchedPrimary !== column}
-								class:dark:bg-green-800={lastMatchedPrimary === column}
-								class:dark:border-green-600={lastMatchedPrimary === column}
-								class:dark:ring-green-600={lastMatchedPrimary === column}
-								class:bg-blue-100={isColumnSelected(column, 'primary') &&
-									lastMatchedPrimary !== column}
-								class:border-blue-400={isColumnSelected(column, 'primary') &&
-									lastMatchedPrimary !== column}
-								class:shadow-md={isColumnSelected(column, 'primary') &&
-									lastMatchedPrimary !== column}
-								class:dark:bg-blue-800={isColumnSelected(column, 'primary') &&
-									lastMatchedPrimary !== column}
-								class:dark:border-blue-600={isColumnSelected(column, 'primary') &&
-									lastMatchedPrimary !== column}
-								class:dark:ring-blue-600={isColumnSelected(column, 'primary') &&
-									lastMatchedPrimary !== column}
+								class:bg-green-100={lastMatchedPrimary === column.name}
+								class:border-green-400={lastMatchedPrimary === column.name}
+								class:shadow-lg={lastMatchedPrimary === column.name}
+								class:ring-2={lastMatchedPrimary === column.name ||
+									(isColumnSelected(column.name, 'primary') && lastMatchedPrimary !== column.name)}
+								class:ring-green-300={lastMatchedPrimary === column.name}
+								class:ring-blue-300={isColumnSelected(column.name, 'primary') &&
+									lastMatchedPrimary !== column.name}
+								class:dark:bg-green-800={lastMatchedPrimary === column.name}
+								class:dark:border-green-600={lastMatchedPrimary === column.name}
+								class:dark:ring-green-600={lastMatchedPrimary === column.name}
+								class:bg-blue-100={isColumnSelected(column.name, 'primary') &&
+									lastMatchedPrimary !== column.name}
+								class:border-blue-400={isColumnSelected(column.name, 'primary') &&
+									lastMatchedPrimary !== column.name}
+								class:shadow-md={isColumnSelected(column.name, 'primary') &&
+									lastMatchedPrimary !== column.name}
+								class:dark:bg-blue-800={isColumnSelected(column.name, 'primary') &&
+									lastMatchedPrimary !== column.name}
+								class:dark:border-blue-600={isColumnSelected(column.name, 'primary') &&
+									lastMatchedPrimary !== column.name}
+								class:dark:ring-blue-600={isColumnSelected(column.name, 'primary') &&
+									lastMatchedPrimary !== column.name}
 								class:bg-amber-50={selectedComparisonColumn &&
-									!isColumnSelected(column, 'primary') &&
-									lastMatchedPrimary !== column}
+									!isColumnSelected(column.name, 'primary') &&
+									lastMatchedPrimary !== column.name}
 								class:border-amber-200={selectedComparisonColumn &&
-									!isColumnSelected(column, 'primary') &&
-									lastMatchedPrimary !== column}
+									!isColumnSelected(column.name, 'primary') &&
+									lastMatchedPrimary !== column.name}
 								class:dark:bg-amber-800={selectedComparisonColumn &&
-									!isColumnSelected(column, 'primary') &&
-									lastMatchedPrimary !== column}
+									!isColumnSelected(column.name, 'primary') &&
+									lastMatchedPrimary !== column.name}
 								class:dark:border-amber-800={selectedComparisonColumn &&
-									!isColumnSelected(column, 'primary') &&
-									lastMatchedPrimary !== column}
-								class:bg-white={!isColumnSelected(column, 'primary') &&
+									!isColumnSelected(column.name, 'primary') &&
+									lastMatchedPrimary !== column.name}
+								class:bg-white={!isColumnSelected(column.name, 'primary') &&
 									!selectedComparisonColumn &&
-									lastMatchedPrimary !== column}
-								class:border-gray-200={!isColumnSelected(column, 'primary') &&
+									lastMatchedPrimary !== column.name}
+								class:border-gray-200={!isColumnSelected(column.name, 'primary') &&
 									!selectedComparisonColumn &&
-									lastMatchedPrimary !== column}
-								class:dark:bg-gray-800={!isColumnSelected(column, 'primary') &&
+									lastMatchedPrimary !== column.name}
+								class:dark:bg-gray-800={!isColumnSelected(column.name, 'primary') &&
 									!selectedComparisonColumn &&
-									lastMatchedPrimary !== column}
-								class:dark:border-gray-600={!isColumnSelected(column, 'primary') &&
+									lastMatchedPrimary !== column.name}
+								class:dark:border-gray-600={!isColumnSelected(column.name, 'primary') &&
 									!selectedComparisonColumn &&
-									lastMatchedPrimary !== column}
-								class:hover:bg-gray-100={!isColumnSelected(column, 'primary') &&
+									lastMatchedPrimary !== column.name}
+								class:hover:bg-gray-100={!isColumnSelected(column.name, 'primary') &&
 									!selectedComparisonColumn &&
-									lastMatchedPrimary !== column}
-								class:dark:hover:bg-gray-700={!isColumnSelected(column, 'primary') &&
+									lastMatchedPrimary !== column.name}
+								class:dark:hover:bg-gray-700={!isColumnSelected(column.name, 'primary') &&
 									!selectedComparisonColumn &&
-									lastMatchedPrimary !== column}
-								onclick={() => selectColumn(column, 'primary')}
+									lastMatchedPrimary !== column.name}
+								onclick={() => selectColumn(column.name, 'primary')}
 							>
 								<div>
-									<span class="font-medium text-gray-800 dark:text-white">{column}</span>
-									{#if isColumnUsed(column, 'primary')}
+									<span class="font-medium text-gray-800 dark:text-white">{column.name}</span>
+									{#if isColumnUsed(column.name, 'primary')}
 										<span
 											class="ml-2 inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
 										>
-											{getColumnUsageDescription(column, 'primary')}
+											{getColumnUsageDescription(column.name, 'primary')}
 										</span>
 									{/if}
 								</div>
 
-								{#if lastMatchedPrimary === column}
+								{#if lastMatchedPrimary === column.name}
 									<div class="flex items-center gap-1">
 										<span class="text-xs font-bold text-green-600 dark:text-green-300">✓</span>
 										<span class="h-3 w-3 animate-pulse rounded-full bg-green-500"></span>
 									</div>
-								{:else if isColumnSelected(column, 'primary')}
+								{:else if isColumnSelected(column.name, 'primary')}
 									<div class="flex items-center gap-1">
 										<span class="text-xs font-bold text-blue-600 dark:text-blue-300">✓</span>
 										<span class="h-3 w-3 animate-pulse rounded-full bg-blue-500"></span>
@@ -564,78 +627,86 @@
 							<button
 								type="button"
 								class="mb-2 flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left transition-all"
-								class:bg-green-100={lastMatchedComparison === column}
-								class:border-green-400={lastMatchedComparison === column}
-								class:shadow-lg={lastMatchedComparison === column}
-								class:ring-2={lastMatchedComparison === column ||
-									(isColumnSelected(column, 'comparison') && lastMatchedComparison !== column)}
-								class:ring-green-300={lastMatchedComparison === column}
-								class:ring-purple-300={isColumnSelected(column, 'comparison') &&
-									lastMatchedComparison !== column}
-								class:dark:bg-green-800={lastMatchedComparison === column}
-								class:dark:border-green-600={lastMatchedComparison === column}
-								class:dark:ring-green-600={lastMatchedComparison === column}
-								class:bg-purple-100={isColumnSelected(column, 'comparison') &&
-									lastMatchedComparison !== column}
-								class:border-purple-400={isColumnSelected(column, 'comparison') &&
-									lastMatchedComparison !== column}
-								class:shadow-md={isColumnSelected(column, 'comparison') &&
-									lastMatchedComparison !== column}
-								class:dark:bg-purple-800={isColumnSelected(column, 'comparison') &&
-									lastMatchedComparison !== column}
-								class:dark:border-purple-600={isColumnSelected(column, 'comparison') &&
-									lastMatchedComparison !== column}
-								class:dark:ring-purple-600={isColumnSelected(column, 'comparison') &&
-									lastMatchedComparison !== column}
+								class:bg-green-100={lastMatchedComparison === column.name}
+								class:border-green-400={lastMatchedComparison === column.name}
+								class:shadow-lg={lastMatchedComparison === column.name}
+								class:ring-2={lastMatchedComparison === column.name ||
+									(isColumnSelected(column.name, 'comparison') &&
+										lastMatchedComparison !== column.name)}
+								class:ring-green-300={lastMatchedComparison === column.name}
+								class:ring-purple-300={isColumnSelected(column.name, 'comparison') &&
+									lastMatchedComparison !== column.name}
+								class:dark:bg-green-800={lastMatchedComparison === column.name}
+								class:dark:border-green-600={lastMatchedComparison === column.name}
+								class:dark:ring-green-600={lastMatchedComparison === column.name}
+								class:bg-purple-100={isColumnSelected(column.name, 'comparison') &&
+									lastMatchedComparison !== column.name}
+								class:border-purple-400={isColumnSelected(column.name, 'comparison') &&
+									lastMatchedComparison !== column.name}
+								class:shadow-md={isColumnSelected(column.name, 'comparison') &&
+									lastMatchedComparison !== column.name}
+								class:dark:bg-purple-800={isColumnSelected(column.name, 'comparison') &&
+									lastMatchedComparison !== column.name}
+								class:dark:border-purple-600={isColumnSelected(column.name, 'comparison') &&
+									lastMatchedComparison !== column.name}
+								class:dark:ring-purple-600={isColumnSelected(column.name, 'comparison') &&
+									lastMatchedComparison !== column.name}
 								class:bg-amber-50={selectedPrimaryColumn &&
-									!isColumnSelected(column, 'comparison') &&
-									lastMatchedComparison !== column}
+									!isColumnSelected(column.name, 'comparison') &&
+									lastMatchedComparison !== column.name}
 								class:border-amber-200={selectedPrimaryColumn &&
-									!isColumnSelected(column, 'comparison') &&
-									lastMatchedComparison !== column}
+									!isColumnSelected(column.name, 'comparison') &&
+									lastMatchedComparison !== column.name}
 								class:dark:bg-amber-800={selectedPrimaryColumn &&
-									!isColumnSelected(column, 'comparison') &&
-									lastMatchedComparison !== column}
+									!isColumnSelected(column.name, 'comparison') &&
+									lastMatchedComparison !== column.name}
 								class:dark:border-amber-800={selectedPrimaryColumn &&
-									!isColumnSelected(column, 'comparison') &&
-									lastMatchedComparison !== column}
-								class:bg-white={!isColumnSelected(column, 'comparison') &&
+									!isColumnSelected(column.name, 'comparison') &&
+									lastMatchedComparison !== column.name}
+								class:bg-white={!isColumnSelected(column.name, 'comparison') &&
 									!selectedPrimaryColumn &&
-									lastMatchedComparison !== column}
-								class:border-gray-200={!isColumnSelected(column, 'comparison') &&
+									lastMatchedComparison !== column.name}
+								class:border-gray-200={!isColumnSelected(column.name, 'comparison') &&
 									!selectedPrimaryColumn &&
-									lastMatchedComparison !== column}
-								class:dark:bg-gray-800={!isColumnSelected(column, 'comparison') &&
+									lastMatchedComparison !== column.name}
+								class:dark:bg-gray-800={!isColumnSelected(column.name, 'comparison') &&
 									!selectedPrimaryColumn &&
-									lastMatchedComparison !== column}
-								class:dark:border-gray-600={!isColumnSelected(column, 'comparison') &&
+									lastMatchedComparison !== column.name}
+								class:dark:border-gray-600={!isColumnSelected(column.name, 'comparison') &&
 									!selectedPrimaryColumn &&
-									lastMatchedComparison !== column}
-								class:hover:bg-gray-100={!isColumnSelected(column, 'comparison') &&
+									lastMatchedComparison !== column.name}
+								class:hover:bg-gray-100={!isColumnSelected(column.name, 'comparison') &&
 									!selectedPrimaryColumn &&
-									lastMatchedComparison !== column}
-								class:dark:hover:bg-gray-700={!isColumnSelected(column, 'comparison') &&
+									lastMatchedComparison !== column.name}
+								class:dark:hover:bg-gray-700={!isColumnSelected(column.name, 'comparison') &&
 									!selectedPrimaryColumn &&
-									lastMatchedComparison !== column}
-								onclick={() => selectColumn(column, 'comparison')}
+									lastMatchedComparison !== column.name}
+								onclick={() => selectColumn(column.name, 'comparison')}
 							>
-								<div>
-									<span class="font-medium text-gray-800 dark:text-white">{column}</span>
-									{#if isColumnUsed(column, 'comparison')}
+								<div class="flex items-center gap-2">
+									<span class="font-medium text-gray-800 dark:text-white">{column.name}</span>
+									{#if column.dataType}
+										<span
+											class="ml-2 inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+										>
+											{column.dataType}
+										</span>
+									{/if}
+									{#if isColumnUsed(column.name, 'comparison')}
 										<span
 											class="ml-2 inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
 										>
-											{getColumnUsageDescription(column, 'comparison')}
+											{getColumnUsageDescription(column.name, 'comparison')}
 										</span>
 									{/if}
 								</div>
 
-								{#if lastMatchedComparison === column}
+								{#if lastMatchedComparison === column.name}
 									<div class="flex items-center gap-1">
 										<span class="text-xs font-bold text-green-600 dark:text-green-300">✓</span>
 										<span class="h-3 w-3 animate-pulse rounded-full bg-green-500"></span>
 									</div>
-								{:else if isColumnSelected(column, 'comparison')}
+								{:else if isColumnSelected(column.name, 'comparison')}
 									<div class="flex items-center gap-1">
 										<span class="text-xs font-bold text-purple-600 dark:text-purple-300">✓</span>
 										<span class="h-3 w-3 animate-pulse rounded-full bg-purple-500"></span>
@@ -772,38 +843,38 @@
 														Tolerance Window (optional)
 													</p>
 													<InfoIcon
-														tooltip="Define how much difference is acceptable between columns when matching. Absolute: fixed amount. Relative: percentage. Custom: write your own rule."
+														tooltip="Define how much difference is acceptable when matching: Exact match, within range (fixed amount), within percentage, or a custom formula."
 													/>
 												</div>
 												<div class="space-y-3">
 													<select
 														onchange={(e) => {
 															const value = e.currentTarget.value;
-															if (value === '' || value === 'null') {
-																clearTolerance(index);
-															} else if (value === 'absolute') {
-																setAbsoluteTolerance(index, 0.01);
-															} else if (value === 'relative') {
-																setRelativeTolerance(index, 0.5);
+															if (value === '' || value === 'exact_match') {
+																setExactMatchTolerance(index);
+															} else if (value === 'within_range') {
+																setNumericRangeTolerance(index, 0.01);
+															} else if (value === 'within_range_percentage') {
+																setNumericPercentageTolerance(index, 0.5);
+															} else if (value === 'within_percentage_similarity') {
+																setStringSimilarityTolerance(index, 0.9);
 															} else if (value === 'custom') {
 																setCustomTolerance(index, '');
 															}
 														}}
 														class="w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"
 													>
-														<option value="null" selected={!pair.tolerance}> No Tolerance </option>
-														<option value="absolute" selected={pair.tolerance?.type === 'absolute'}>
-															Absolute (Fixed Difference)
-														</option>
-														<option value="relative" selected={pair.tolerance?.type === 'relative'}>
-															Relative (Percentage-Based)
-														</option>
-														<option value="custom" selected={pair.tolerance?.type === 'custom'}>
-															Custom Formula
-														</option>
+														{#each getAllowedToleranceOptions(index) as opt}
+															<option
+																value={opt.value}
+																selected={pair.tolerance?.type === opt.value}
+															>
+																{opt.label}
+															</option>
+														{/each}
 													</select>
 
-													{#if pair.tolerance?.type === 'absolute'}
+													{#if pair.tolerance?.type === 'within_range'}
 														<div>
 															<div class="flex items-center gap-2">
 																<label
@@ -813,7 +884,7 @@
 																	Tolerance Value
 																</label>
 																<InfoIcon
-																	tooltip="Numbers: the difference can be up to this amount. Example: 0.01 allows amounts like $100.00 and $100.01 to match. Text: similarity score from 0 to 1. Example: 0.9 means very similar text."
+																	tooltip="Numbers: the difference can be up to this amount. Example: 0.01 allows amounts like $100.00 and $100.01 to match."
 																/>
 															</div>
 															<input
@@ -823,14 +894,14 @@
 																placeholder="0.01"
 																value={pair.tolerance.value || ''}
 																onchange={(e) =>
-																	setAbsoluteTolerance(
+																	setNumericRangeTolerance(
 																		index,
 																		parseFloat(e.currentTarget.value) || 0
 																	)}
 																class="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"
 															/>
 														</div>
-													{:else if pair.tolerance?.type === 'relative'}
+													{:else if pair.tolerance?.type === 'within_range_percentage'}
 														<div>
 															<div class="flex items-center gap-2">
 																<label
@@ -840,7 +911,7 @@
 																	Percentage (%)
 																</label>
 																<InfoIcon
-																	tooltip="Numbers: the difference can be up to this percentage of the primary value. Example: 5% means $100 can match with values between $95 and $105. Text: similarity percentage. Example: 90 means 90% of characters must match."
+																	tooltip="Numbers: the difference can be up to this percentage of the primary value. Example: 0.05 (5%) means $100 can match with values between $95 and $105. For text similarity use the Similarity option."
 																/>
 															</div>
 															<input
@@ -850,7 +921,34 @@
 																placeholder="0.5"
 																value={pair.tolerance.percentage || ''}
 																onchange={(e) =>
-																	setRelativeTolerance(
+																	setNumericPercentageTolerance(
+																		index,
+																		parseFloat(e.currentTarget.value) || 0
+																	)}
+																class="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"
+															/>
+														</div>
+													{:else if pair.tolerance?.type === 'within_percentage_similarity'}
+														<div>
+															<div class="flex items-center gap-2">
+																<label
+																	for="tolerance-similarity-{index}"
+																	class="text-xs text-gray-600 dark:text-gray-400"
+																>
+																	Similarity (0-1)
+																</label>
+																<InfoIcon
+																	tooltip="Text similarity score from 0 to 1 (e.g., 0.9 for 90% similarity)."
+																/>
+															</div>
+															<input
+																id="tolerance-similarity-{index}"
+																type="number"
+																step="0.01"
+																placeholder="0.9"
+																value={pair.tolerance.percentage || ''}
+																onchange={(e) =>
+																	setStringSimilarityTolerance(
 																		index,
 																		parseFloat(e.currentTarget.value) || 0
 																	)}
@@ -941,16 +1039,47 @@
 														<p
 															class="rounded bg-blue-50 p-2 text-xs text-blue-700 dark:bg-blue-900 dark:text-blue-200"
 														>
-															{#if pair.tolerance.type === 'absolute'}
-																✓ Absolute tolerance: Fixed difference of {pair.tolerance.value}
-															{:else if pair.tolerance.type === 'relative'}
-																✓ Relative tolerance: {pair.tolerance.percentage}% difference
-																allowed
+															{#if pair.tolerance.type === 'exact_match'}
+																✓ Exact match required
+															{:else if pair.tolerance.type === 'within_range'}
+																✓ Within fixed difference: {pair.tolerance.value}
+															{:else if pair.tolerance.type === 'within_range_percentage'}
+																✓ Within percentage difference: {pair.tolerance.percentage}
+															{:else if pair.tolerance.type === 'within_percentage_similarity'}
+																✓ Text similarity threshold: {pair.tolerance.percentage}
 															{:else if pair.tolerance.type === 'custom'}
 																✓ Custom formula enabled
 															{/if}
 														</p>
 													{/if}
+
+													<!-- Per-pair text comparison settings -->
+													<div class="mt-3 flex items-center gap-4">
+														<label class="inline-flex items-center text-sm">
+															<input
+																type="checkbox"
+																checked={pair.settings?.caseSensitive}
+																onchange={(e) =>
+																	setPairCaseSensitive(index, e.currentTarget.checked)}
+																class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
+															/>
+															<span class="ml-2 text-xs text-gray-700 dark:text-gray-300"
+																>Case Sensitive</span
+															>
+														</label>
+
+														<label class="inline-flex items-center text-sm">
+															<input
+																type="checkbox"
+																checked={pair.settings?.trimValues}
+																onchange={(e) => setPairTrimValues(index, e.currentTarget.checked)}
+																class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
+															/>
+															<span class="ml-2 text-xs text-gray-700 dark:text-gray-300"
+																>Trim Values</span
+															>
+														</label>
+													</div>
 												</div>
 											</div>
 										</div>
@@ -1001,44 +1130,12 @@
 						</div>
 					</div>
 
-					<!-- Case Sensitivity -->
-					<div class="flex items-start">
-						<div class="flex h-5 items-center">
-							<input
-								id="case-sensitive"
-								type="checkbox"
-								bind:checked={caseSensitive}
-								class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:ring-offset-gray-800 dark:focus:ring-blue-600"
-							/>
-						</div>
-						<div class="ml-3 text-sm">
-							<label for="case-sensitive" class="font-medium text-gray-700 dark:text-gray-300">
-								Consider case sensitivity
-							</label>
-							<p class="text-gray-500 dark:text-gray-400">
-								Match text values with exact case (ABC ≠ abc)
-							</p>
-						</div>
-					</div>
-
-					<!-- Trim Values -->
-					<div class="flex items-start">
-						<div class="flex h-5 items-center">
-							<input
-								id="trim-values"
-								type="checkbox"
-								bind:checked={trimValues}
-								class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:ring-offset-gray-800 dark:focus:ring-blue-600"
-							/>
-						</div>
-						<div class="ml-3 text-sm">
-							<label for="trim-values" class="font-medium text-gray-700 dark:text-gray-300">
-								Trim whitespace from values
-							</label>
-							<p class="text-gray-500 dark:text-gray-400">
-								Remove leading and trailing spaces before comparison (" 123 " matches "123")
-							</p>
-						</div>
+					<!-- Per-pair text comparison settings -->
+					<div
+						class="rounded-md border border-gray-100 bg-gray-50 p-3 text-sm text-gray-700 dark:bg-gray-900/30"
+					>
+						Case sensitivity and trimming are configured per comparison pair. Edit each comparison
+						pair to set "Case Sensitive" and "Trim Values" as needed.
 					</div>
 				</div>
 			</div>

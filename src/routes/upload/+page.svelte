@@ -681,7 +681,7 @@
 			<div class="mb-8 w-full p-4 sm:w-1/2 md:w-1/2 lg:w-1/2 xl:w-1/2">
 				<!-- Title Section with Info Icon (Outside Upload Area) -->
 				{#if !primaryFileData.isUploaded}
-					<div class="mb-4 flex items-center justify-center gap-1">
+					<div class="mb-4 flex items-baseline justify-center gap-1">
 						<span class="text-xl font-bold text-white">Primary-File</span>
 						<InfoIcon
 							tooltip="The Primary File is your main reference data - the source of truth you want to compare against."
@@ -891,7 +891,16 @@
 												<th
 													class="min-w-[150px] whitespace-nowrap border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:border-gray-700 dark:text-gray-300"
 												>
-													{column}
+													<div class="flex items-center gap-2">
+														<span>{column.name}</span>
+														{#if column.dataType}
+															<span
+																class="ml-1 inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+															>
+																{column.dataType}
+															</span>
+														{/if}
+													</div>
 												</th>
 											{/each}
 										</tr>
@@ -907,7 +916,7 @@
 													<td
 														class="min-w-[150px] max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-2 text-sm text-gray-600 dark:text-gray-300"
 													>
-														{row[column] || ''}
+														{row[column.name] || ''}
 													</td>
 												{/each}
 											</tr>
@@ -924,7 +933,7 @@
 			<div class="mb-8 w-full p-4 sm:w-1/2 md:w-1/2 lg:w-1/2 xl:w-1/2">
 				<!-- Title Section with Info Icon (Outside Upload Area) -->
 				{#if !comparisonFileData.isUploaded}
-					<div class="mb-4 flex items-center justify-center gap-1">
+					<div class="mb-4 flex items-baseline justify-center gap-1">
 						<span class="text-xl font-bold text-white">Comparison-File</span>
 						<InfoIcon
 							tooltip="The Comparison File is the second dataset you want to compare against your Primary File to identify differences and discrepancies."
@@ -1139,7 +1148,16 @@
 												<th
 													class="min-w-[150px] whitespace-nowrap border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:border-gray-700 dark:text-gray-300"
 												>
-													{column}
+													<div class="flex items-center gap-2">
+														<span>{column.name}</span>
+														{#if column.dataType}
+															<span
+																class="ml-1 inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+															>
+																{column.dataType}
+															</span>
+														{/if}
+													</div>
 												</th>
 											{/each}
 										</tr>
@@ -1155,7 +1173,7 @@
 													<td
 														class="min-w-[150px] max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-2 text-sm text-gray-600 dark:text-gray-300"
 													>
-														{row[column] || ''}
+														{row[column.name] || ''}
 													</td>
 												{/each}
 											</tr>
