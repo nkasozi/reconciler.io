@@ -92,7 +92,7 @@ export const MAX_FREE_TIER_ROWS = 10000;
 /**
  * Infers the data type of a value
  */
-function inferDataType(value: string): ColumnDataType {
+export function inferDataType(value: string): ColumnDataType {
 	if (value === null || value === undefined || value.trim() === '') {
 		return 'string'; // Default to string for empty values
 	}
@@ -104,8 +104,13 @@ function inferDataType(value: string): ColumnDataType {
 		return 'boolean';
 	}
 
-	// Check for number (including decimals and scientific notation)
-	if (!isNaN(Number(trimmed)) && trimmed !== '') {
+	// Check for number (including decimals, scientific notation, and common thousands separators)
+	// Normalize some common formatting (remove commas used as thousand separators, trim spaces)
+	const numericCandidate = trimmed.replace(/,/g, '');
+	// Handle numbers wrapped in parentheses as negative (e.g. (1,000) => -1000)
+	const normalizedCandidate = numericCandidate.replace(/^\((.*)\)$/, '-$1');
+
+	if (!isNaN(Number(normalizedCandidate)) && normalizedCandidate !== '') {
 		return 'number';
 	}
 
