@@ -146,13 +146,13 @@ describe('reconciliation', () => {
 			const configWithNoComparisonPairs: ReconciliationConfig = {
 				primaryIdPair: {
 					primaryColumn: 'ID',
-					comparisonColumn: 'ID'
+					comparisonColumn: 'ID',
+					tolerance: { type: 'exact_match' },
+					settings: { caseSensitive: true, trimValues: true }
 				},
 				comparisonPairs: [],
-				reverseReconciliation: false,
-				caseSensitive: true,
-				trimValues: true
-			} as any;
+				reverseReconciliation: false
+			};
 
 			const result = reconcileData(primaryData, comparisonData, configWithNoComparisonPairs);
 
@@ -178,14 +178,24 @@ describe('tolerance-specific behavior', () => {
 			fileName: 'c',
 			fileType: 'csv'
 		};
-		const config = {
-			primaryIdPair: { primaryColumn: 'id', comparisonColumn: 'id' },
+		const config: ReconciliationConfig = {
+			primaryIdPair: {
+				primaryColumn: 'id',
+				comparisonColumn: 'id',
+				tolerance: { type: 'exact_match' },
+				settings: { caseSensitive: true, trimValues: true }
+			},
 			comparisonPairs: [
-				{ primaryColumn: 'amt', comparisonColumn: 'amt', tolerance: { type: 'absolute', value: 5 } }
+				{
+					primaryColumn: 'amt',
+					comparisonColumn: 'amt',
+					tolerance: { type: 'absolute', value: 5 },
+					settings: { caseSensitive: true, trimValues: true }
+				}
 			]
-		} as any;
+		};
 
-		const res = reconcileData(primary as any, comparison as any, config as any);
+		const res = reconcileData(primary as any, comparison as any, config);
 		expect(res.matches.length).toBe(1);
 		expect(res.matches[0].comparisonResults['amt'].status).toBe('within_tolerance');
 	});
@@ -203,18 +213,24 @@ describe('tolerance-specific behavior', () => {
 			fileName: 'c',
 			fileType: 'csv'
 		};
-		const config = {
-			primaryIdPair: { primaryColumn: 'id', comparisonColumn: 'id' },
+		const config: ReconciliationConfig = {
+			primaryIdPair: {
+				primaryColumn: 'id',
+				comparisonColumn: 'id',
+				tolerance: { type: 'exact_match' },
+				settings: { caseSensitive: true, trimValues: true }
+			},
 			comparisonPairs: [
 				{
 					primaryColumn: 'amt',
 					comparisonColumn: 'amt',
-					tolerance: { type: 'relative', percentage: 10 }
+					tolerance: { type: 'relative', percentage: 10 },
+					settings: { caseSensitive: true, trimValues: true }
 				}
 			]
-		} as any;
+		};
 
-		const res = reconcileData(primary as any, comparison as any, config as any);
+		const res = reconcileData(primary as any, comparison as any, config);
 		expect(res.matches[0].comparisonResults['amt'].status).toBe('within_tolerance');
 	});
 
@@ -231,18 +247,24 @@ describe('tolerance-specific behavior', () => {
 			fileName: 'c',
 			fileType: 'csv'
 		};
-		const config = {
-			primaryIdPair: { primaryColumn: 'id', comparisonColumn: 'id' },
+		const config: ReconciliationConfig = {
+			primaryIdPair: {
+				primaryColumn: 'id',
+				comparisonColumn: 'id',
+				tolerance: { type: 'exact_match' },
+				settings: { caseSensitive: true, trimValues: true }
+			},
 			comparisonPairs: [
 				{
 					primaryColumn: 'name',
 					comparisonColumn: 'name',
-					tolerance: { type: 'relative', value: 0.5 } // 50% similarity threshold (more realistic for abbrevs)
+					tolerance: { type: 'within_percentage_similarity', percentage: 50 },
+					settings: { caseSensitive: true, trimValues: true }
 				}
 			]
-		} as any;
+		};
 
-		const res = reconcileData(primary as any, comparison as any, config as any);
+		const res = reconcileData(primary as any, comparison as any, config);
 		const status = res.matches[0].comparisonResults['name'].status;
 		expect(['within_tolerance', 'partial_match']).toContain(status);
 	});

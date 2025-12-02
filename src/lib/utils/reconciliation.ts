@@ -10,8 +10,8 @@ export type { ParsedFileData };
  */
 export type NumericTolerance =
 	| { type: 'exact_match' }
-	| { type: 'within_range'; value: number } // Fixed difference threshold
-	| { type: 'within_range_percentage'; percentage: number } // Percentage threshold (e.g., 0.5 for 0.5%)
+	| { type: 'absolute'; value: number } // Fixed difference threshold
+	| { type: 'relative'; percentage: number } // Percentage threshold (e.g., 0.5 for 0.5%)
 	| { type: 'custom'; formula: string }; // Mathematical expression with primaryColumnValue and comparisonColumnValue
 
 /**
@@ -42,9 +42,9 @@ export type ColumnPair = {
 	primaryColumn: string | null;
 	comparisonColumn: string | null;
 	// Tolerance configuration for comparisons
-	tolerance?: Tolerance; // Optional - default is exact_match
+	tolerance: Tolerance; // Always required - default is exact_match
 	// Per-pair comparison settings
-	settings?: ColumnPairSettings;
+	settings: ColumnPairSettings;
 };
 
 /**
@@ -56,9 +56,6 @@ export type ReconciliationConfig = {
 	contactEmail?: string;
 	// Reconciliation mode
 	reverseReconciliation?: boolean;
-	// Global comparison settings for backward compatibility
-	caseSensitive?: boolean;
-	trimValues?: boolean;
 };
 
 // Define the result of a comparison between two values
@@ -108,22 +105,6 @@ export function reconcileData(
 	comparisonData: ParsedFileData,
 	config: ReconciliationConfig
 ): ReconciliationResult {
-	// Default comparison settings if not specified globally
-	const defaultSettings: ColumnPairSettings = {
-		caseSensitive: config.caseSensitive ?? false,
-		trimValues: config.trimValues ?? true
-	};
-
-	// Helper function to get settings for a pair, using global defaults if not specified
-	const getSettings = (pair: ColumnPair): ColumnPairSettings => {
-		return pair.settings ?? defaultSettings;
-	};
-
-	// Helper function to get tolerance for a pair, using exact_match as default
-	const getTolerance = (pair: ColumnPair): Tolerance => {
-		return pair.tolerance ?? { type: 'exact_match' };
-	};
-
 	// Handle reverse reconciliation by swapping files and flipping column mappings
 	let actualPrimaryData = primaryData;
 	let actualComparisonData = comparisonData;
@@ -155,7 +136,7 @@ export function reconcileData(
 	// Extract columns for matching
 	const primaryIdColumn = actualConfig.primaryIdPair.primaryColumn;
 	const comparisonIdColumn = actualConfig.primaryIdPair.comparisonColumn;
-	const idPairSettings = getSettings(actualConfig.primaryIdPair);
+	const idPairSettings = actualConfig.primaryIdPair.settings;
 
 	if (!primaryIdColumn || !comparisonIdColumn) {
 		throw new Error('ID columns must be specified for reconciliation');
@@ -210,21 +191,19 @@ export function reconcileData(
 				if (pair.primaryColumn && pair.comparisonColumn) {
 					const primaryValue = primaryRow[pair.primaryColumn];
 					const comparisonValue = comparisonRow[pair.comparisonColumn];
-					const pairSettings = getSettings(pair);
-					const pairTolerance = getTolerance(pair);
 
 					// Compare the values using per-pair settings
 					const isExactMatch = compareValues(
 						primaryValue,
 						comparisonValue,
-						pairSettings.caseSensitive,
-						pairSettings.trimValues
+						pair.settings.caseSensitive,
+						pair.settings.trimValues
 					);
 
 					// Check if within tolerance if exact match failed
 					const isWithinToleranceMatch =
 						!isExactMatch &&
-						isWithinTolerance(primaryValue, comparisonValue, pairTolerance, pairSettings);
+						isWithinTolerance(primaryValue, comparisonValue, pair.tolerance, pair.settings);
 
 					const isMatch = isExactMatch || isWithinToleranceMatch;
 
@@ -234,8 +213,8 @@ export function reconcileData(
 						comparisonValue,
 						isMatch,
 						isExactMatch,
-						pairTolerance,
-						pairSettings
+						pair.tolerance,
+						pair.settings
 					);
 
 					comparisonResults[pair.primaryColumn] = {
@@ -245,7 +224,7 @@ export function reconcileData(
 						difference: calculateDifference(primaryValue, comparisonValue),
 						reason,
 						status,
-						tolerance: pairTolerance
+						tolerance: pair.tolerance
 					};
 
 					if (isMatch) {
@@ -401,22 +380,22 @@ export function evaluateTolerance(
 			return { matches, reason };
 		}
 
-		case 'within_range': {
+		case 'absolute': {
 			if (isNum1 && isNum2) {
 				const diff = Math.abs(num1 - num2);
 				const matches = diff <= tolerance.value;
 				const reason = matches
-					? `Within range tolerance ${tolerance.value}: |${num1} - ${num2}| = ${diff.toFixed(4)}`
-					: `Outside range tolerance ${tolerance.value}: |${num1} - ${num2}| = ${diff.toFixed(4)}`;
+					? `Within absolute tolerance ${tolerance.value}: |${num1} - ${num2}| = ${diff.toFixed(4)}`
+					: `Outside absolute tolerance ${tolerance.value}: |${num1} - ${num2}| = ${diff.toFixed(4)}`;
 				return { matches, reason };
 			}
 			return {
 				matches: false,
-				reason: 'Cannot apply within_range tolerance to non-numeric values'
+				reason: 'Cannot apply absolute tolerance to non-numeric values'
 			};
 		}
 
-		case 'within_range_percentage': {
+		case 'relative': {
 			if (isNum1 && isNum2) {
 				const difference = Math.abs(num1 - num2);
 				const average = Math.abs((num1 + num2) / 2);
@@ -424,13 +403,13 @@ export function evaluateTolerance(
 				const percentDiff = average !== 0 ? (difference / average) * 100 : 0;
 				const matches = difference <= toleranceAmount;
 				const reason = matches
-					? `Within ${tolerance.percentage}% range: ${percentDiff.toFixed(2)}% difference (${num1} vs ${num2})`
-					: `Outside ${tolerance.percentage}% range: ${percentDiff.toFixed(2)}% difference (${num1} vs ${num2})`;
+					? `Within ${tolerance.percentage}% relative tolerance: ${percentDiff.toFixed(2)}% difference (${num1} vs ${num2})`
+					: `Outside ${tolerance.percentage}% relative tolerance: ${percentDiff.toFixed(2)}% difference (${num1} vs ${num2})`;
 				return { matches, reason };
 			}
 			return {
 				matches: false,
-				reason: 'Cannot apply within_range_percentage tolerance to non-numeric values'
+				reason: 'Cannot apply relative tolerance to non-numeric values'
 			};
 		}
 
@@ -688,7 +667,7 @@ export function isWithinTolerance(
 		case 'exact_match':
 			return compareValues(rawValue1, rawValue2, settings.caseSensitive, settings.trimValues);
 
-		case 'within_range': {
+		case 'absolute': {
 			const { num: num1, isNumeric: isNum1 } = parseNumeric(rawValue1);
 			const { num: num2, isNumeric: isNum2 } = parseNumeric(rawValue2);
 			if (isNum1 && isNum2) {
@@ -698,7 +677,7 @@ export function isWithinTolerance(
 			return false;
 		}
 
-		case 'within_range_percentage': {
+		case 'relative': {
 			const { num: num1, isNumeric: isNum1 } = parseNumeric(rawValue1);
 			const { num: num2, isNumeric: isNum2 } = parseNumeric(rawValue2);
 			if (isNum1 && isNum2) {

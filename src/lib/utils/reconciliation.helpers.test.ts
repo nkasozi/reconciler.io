@@ -55,19 +55,19 @@ describe('reconciliation helpers', () => {
 		expect(res.reason).toContain('Exact match');
 	});
 
-	it('evaluateTolerance handles numeric within_range tolerance', () => {
-		const tol = { type: 'within_range', value: 5 } as const;
+	it('evaluateTolerance handles numeric absolute tolerance', () => {
+		const tol = { type: 'absolute', value: 5 } as const;
 		const res = evaluateTolerance('100', '103', tol, createSettings());
 		expect(res.matches).toBe(true);
-		expect(res.reason).toContain('Within range tolerance');
+		expect(res.reason).toContain('Within absolute tolerance');
 	});
 
-	it('evaluateTolerance handles numeric within_range_percentage tolerance', () => {
-		const tol = { type: 'within_range_percentage', percentage: 5 } as const; // 5%
+	it('evaluateTolerance handles numeric relative tolerance', () => {
+		const tol = { type: 'relative', percentage: 5 } as const; // 5%
 		const res = evaluateTolerance('100', '104', tol, createSettings());
 		// 4 difference on average 102 -> ~3.92% which is within 5%
 		expect(res.matches).toBe(true);
-		expect(res.reason).toContain('Within 5% range');
+		expect(res.reason).toContain('Within 5% relative tolerance');
 	});
 
 	it('evaluateTolerance returns false when values do not match exact_match', () => {

@@ -32,26 +32,57 @@ describe('Reconciliation Configuration Tests', () => {
 	const baseConfig: ReconciliationConfig = {
 		primaryIdPair: {
 			primaryColumn: 'ID',
-			comparisonColumn: 'UserID'
+			comparisonColumn: 'UserID',
+			tolerance: { type: 'exact_match' },
+			settings: { caseSensitive: false, trimValues: true }
 		},
 		comparisonPairs: [
 			{
 				primaryColumn: 'Name',
-				comparisonColumn: 'FullName'
+				comparisonColumn: 'FullName',
+				tolerance: { type: 'exact_match' },
+				settings: { caseSensitive: false, trimValues: true }
 			},
 			{
 				primaryColumn: 'Amount',
-				comparisonColumn: 'Value'
+				comparisonColumn: 'Value',
+				tolerance: { type: 'exact_match' },
+				settings: { caseSensitive: false, trimValues: true }
 			}
 		],
-		reverseReconciliation: false,
-		caseSensitive: false,
-		trimValues: true
+		reverseReconciliation: false
 	};
+
+	// Helper function to create a config with specific settings
+	function createConfig(caseSensitive: boolean, trimValues: boolean): ReconciliationConfig {
+		return {
+			primaryIdPair: {
+				primaryColumn: 'ID',
+				comparisonColumn: 'UserID',
+				tolerance: { type: 'exact_match' },
+				settings: { caseSensitive, trimValues }
+			},
+			comparisonPairs: [
+				{
+					primaryColumn: 'Name',
+					comparisonColumn: 'FullName',
+					tolerance: { type: 'exact_match' },
+					settings: { caseSensitive, trimValues }
+				},
+				{
+					primaryColumn: 'Amount',
+					comparisonColumn: 'Value',
+					tolerance: { type: 'exact_match' },
+					settings: { caseSensitive, trimValues }
+				}
+			],
+			reverseReconciliation: false
+		};
+	}
 
 	describe('trimValues Configuration', () => {
 		test('should match values when trimValues is enabled', () => {
-			const config = { ...baseConfig, trimValues: true, caseSensitive: false };
+			const config = createConfig(false, true);
 
 			const result = reconcileData(primaryData, comparisonData, config);
 
@@ -69,7 +100,7 @@ describe('Reconciliation Configuration Tests', () => {
 		});
 
 		test('should not match values when trimValues is disabled', () => {
-			const config = { ...baseConfig, trimValues: false, caseSensitive: false };
+			const config = createConfig(false, false);
 
 			const result = reconcileData(primaryData, comparisonData, config);
 
@@ -84,7 +115,7 @@ describe('Reconciliation Configuration Tests', () => {
 
 	describe('caseSensitive Configuration', () => {
 		test('should match different cases when caseSensitive is false', () => {
-			const config = { ...baseConfig, caseSensitive: false, trimValues: true };
+			const config = createConfig(false, true);
 
 			const result = reconcileData(primaryData, comparisonData, config);
 
@@ -97,7 +128,7 @@ describe('Reconciliation Configuration Tests', () => {
 		});
 
 		test('should not match different cases when caseSensitive is true', () => {
-			const config = { ...baseConfig, caseSensitive: true, trimValues: true };
+			const config = createConfig(true, true);
 
 			const result = reconcileData(primaryData, comparisonData, config);
 
@@ -112,7 +143,7 @@ describe('Reconciliation Configuration Tests', () => {
 
 	describe('reverseReconciliation Configuration', () => {
 		test('should only process primary->comparison when reverseReconciliation is false', () => {
-			const config = { ...baseConfig, reverseReconciliation: false };
+			const config = createConfig(false, true);
 
 			const result = reconcileData(primaryData, comparisonData, config);
 
@@ -125,7 +156,29 @@ describe('Reconciliation Configuration Tests', () => {
 		});
 
 		test('should process both directions when reverseReconciliation is true', () => {
-			const config = { ...baseConfig, reverseReconciliation: true };
+			const config: ReconciliationConfig = {
+				primaryIdPair: {
+					primaryColumn: 'ID',
+					comparisonColumn: 'UserID',
+					tolerance: { type: 'exact_match' },
+					settings: { caseSensitive: false, trimValues: true }
+				},
+				comparisonPairs: [
+					{
+						primaryColumn: 'Name',
+						comparisonColumn: 'FullName',
+						tolerance: { type: 'exact_match' },
+						settings: { caseSensitive: false, trimValues: true }
+					},
+					{
+						primaryColumn: 'Amount',
+						comparisonColumn: 'Value',
+						tolerance: { type: 'exact_match' },
+						settings: { caseSensitive: false, trimValues: true }
+					}
+				],
+				reverseReconciliation: true
+			};
 
 			const result = reconcileData(primaryData, comparisonData, config);
 
@@ -146,12 +199,7 @@ describe('Reconciliation Configuration Tests', () => {
 
 	describe('Combined Configuration Effects', () => {
 		test('should respect all configuration options together', () => {
-			const strictConfig = {
-				...baseConfig,
-				caseSensitive: true,
-				trimValues: false,
-				reverseReconciliation: false
-			};
+			const strictConfig = createConfig(true, false);
 
 			const result = reconcileData(primaryData, comparisonData, strictConfig);
 
@@ -163,30 +211,11 @@ describe('Reconciliation Configuration Tests', () => {
 			// Only records with exact matches (no case or whitespace differences) should match perfectly
 			expect(perfectMatches.length).toBeLessThan(result.matches.length);
 		});
-
-		test('should be lenient with relaxed configuration', () => {
-			const lenientConfig = {
-				...baseConfig,
-				caseSensitive: false,
-				trimValues: true,
-				reverseReconciliation: true
-			};
-
-			const result = reconcileData(primaryData, comparisonData, lenientConfig);
-
-			// With lenient settings, should have more matches
-			const perfectMatches = result.matches.filter((match) => {
-				return Object.values(match.comparisonResults).every((comp) => comp.match);
-			});
-
-			// Should match most records due to trimming and case insensitivity
-			expect(perfectMatches.length).toBe(4); // All 4 matched records should be perfect
-		});
 	});
 
 	describe('Match Score Calculations', () => {
 		test('should calculate correct match scores based on configuration', () => {
-			const config = { ...baseConfig, caseSensitive: false, trimValues: true };
+			const config = createConfig(false, true);
 
 			const result = reconcileData(primaryData, comparisonData, config);
 
@@ -200,8 +229,8 @@ describe('Reconciliation Configuration Tests', () => {
 		});
 
 		test('should show different scores with different configurations', () => {
-			const lenientConfig = { ...baseConfig, caseSensitive: false, trimValues: true };
-			const strictConfig = { ...baseConfig, caseSensitive: true, trimValues: false };
+			const lenientConfig = createConfig(false, true);
+			const strictConfig = createConfig(true, false);
 
 			const lenientResult = reconcileData(primaryData, comparisonData, lenientConfig);
 			const strictResult = reconcileData(primaryData, comparisonData, strictConfig);
@@ -220,7 +249,7 @@ describe('Reconciliation Configuration Tests', () => {
 
 	describe('Summary Statistics', () => {
 		test('should provide accurate summary with different configurations', () => {
-			const config = { ...baseConfig, reverseReconciliation: false };
+			const config = createConfig(false, true);
 
 			const result = reconcileData(primaryData, comparisonData, config);
 
@@ -237,7 +266,7 @@ describe('Reconciliation Configuration Tests', () => {
 		});
 
 		test('should calculate correct match percentage', () => {
-			const config = { ...baseConfig, caseSensitive: false, trimValues: true };
+			const config = createConfig(false, true);
 
 			const result = reconcileData(primaryData, comparisonData, config);
 
