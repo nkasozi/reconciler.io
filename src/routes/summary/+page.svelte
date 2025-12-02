@@ -88,6 +88,10 @@
 	function formatTolerance(tolerance: any): string {
 		if (!tolerance) return 'None';
 
+		if (tolerance.type === 'exact_match') {
+			return 'Exact Match';
+		}
+
 		if (tolerance.type === 'absolute') {
 			// For numbers: interpreted as max absolute difference. For strings: interpreted as similarity threshold when >1.
 			const extra =
@@ -99,6 +103,10 @@
 
 		if (tolerance.type === 'relative') {
 			return `Relative ≤ ${tolerance.percentage}% (difference ≤ ${tolerance.percentage}% of average)`;
+		}
+
+		if (tolerance.type === 'within_percentage_similarity') {
+			return `String Similarity: ≥ ${tolerance.percentage}% match`;
 		}
 
 		if (tolerance.type === 'custom') {

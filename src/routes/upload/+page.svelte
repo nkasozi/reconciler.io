@@ -915,12 +915,11 @@
 													class="min-w-[150px] whitespace-nowrap border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:border-gray-700 dark:text-gray-300"
 												>
 													<div class="flex items-center gap-2">
-														<span>{column.name}</span>
 														{#if column.dataType}
 															<span
 																class="ml-1 inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-200"
 															>
-																[{column.dataType}]
+																{column.name} [{column.dataType}]
 															</span>
 														{/if}
 													</div>
@@ -1172,12 +1171,11 @@
 													class="min-w-[150px] whitespace-nowrap border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:border-gray-700 dark:text-gray-300"
 												>
 													<div class="flex items-center gap-2">
-														<span>{column.name}</span>
 														{#if column.dataType}
 															<span
 																class="ml-1 inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-200"
 															>
-																[{column.dataType}]
+																{column.name} [{column.dataType}]
 															</span>
 														{/if}
 													</div>

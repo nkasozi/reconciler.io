@@ -21,7 +21,9 @@
 	// Mapping state (mirrors ColumnMappingModal defaults)
 	let primaryIdPair = $state<ColumnPair>({
 		primaryColumn: null,
-		comparisonColumn: null
+		comparisonColumn: null,
+		tolerance: { type: 'exact_match' },
+		settings: { caseSensitive: false, trimValues: true }
 	});
 
 	let comparisonPairs = $state<ColumnPair[]>([
@@ -129,7 +131,9 @@
 	function clearPrimaryIdMapping() {
 		primaryIdPair = {
 			primaryColumn: null,
-			comparisonColumn: null
+			comparisonColumn: null,
+			tolerance: { type: 'exact_match' },
+			settings: { caseSensitive: false, trimValues: true }
 		};
 		// Switch to ID mapping mode so next mapping becomes the Primary ID
 		setMappingContext('id');
@@ -180,7 +184,9 @@
 			// Update the ID pair
 			primaryIdPair = {
 				primaryColumn: selectedPrimaryColumn,
-				comparisonColumn: selectedComparisonColumn
+				comparisonColumn: selectedComparisonColumn,
+				tolerance: { type: 'exact_match' },
+				settings: { caseSensitive: false, trimValues: true }
 			};
 
 			// Automatically create and move to first comparison pair
@@ -339,7 +345,7 @@
 	function setNumericRangeTolerance(pairIndex: number, value: number) {
 		const pair = comparisonPairs[pairIndex];
 		if (pair) {
-			pair.tolerance = { type: 'within_range', value };
+			pair.tolerance = { type: 'absolute', value };
 			comparisonPairs[pairIndex] = pair;
 		}
 	}
@@ -347,7 +353,7 @@
 	function setNumericPercentageTolerance(pairIndex: number, percentage: number) {
 		const pair = comparisonPairs[pairIndex];
 		if (pair) {
-			pair.tolerance = { type: 'within_range_percentage', percentage };
+			pair.tolerance = { type: 'relative', percentage };
 			comparisonPairs[pairIndex] = pair;
 		}
 	}
@@ -903,7 +909,7 @@
 														{/each}
 													</select>
 
-													{#if pair.tolerance?.type === 'within_range'}
+													{#if pair.tolerance?.type === 'absolute'}
 														<div>
 															<div class="flex items-center gap-2">
 																<label
@@ -921,7 +927,9 @@
 																type="number"
 																step="0.01"
 																placeholder="0.01"
-																value={pair.tolerance.value || ''}
+																value={pair.tolerance.type === 'absolute'
+																	? pair.tolerance.value || ''
+																	: ''}
 																onchange={(e) =>
 																	setNumericRangeTolerance(
 																		index,
@@ -930,7 +938,7 @@
 																class="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"
 															/>
 														</div>
-													{:else if pair.tolerance?.type === 'within_range_percentage'}
+													{:else if pair.tolerance?.type === 'relative'}
 														<div>
 															<div class="flex items-center gap-2">
 																<label
@@ -948,7 +956,9 @@
 																type="number"
 																step="0.1"
 																placeholder="0.5"
-																value={pair.tolerance.percentage || ''}
+																value={pair.tolerance.type === 'relative'
+																	? pair.tolerance.percentage || ''
+																	: ''}
 																onchange={(e) =>
 																	setNumericPercentageTolerance(
 																		index,
@@ -987,7 +997,10 @@
 													{:else if pair.tolerance?.type === 'custom'}
 														<div>
 															<div class="flex items-center gap-2">
-																<label class="text-xs text-gray-600 dark:text-gray-400">
+																<label
+																	for="formula-builder-{index}"
+																	class="text-xs text-gray-600 dark:text-gray-400"
+																>
 																	Formula Builder
 																</label>
 																<InfoIcon
@@ -1011,7 +1024,10 @@
 																			const label = e.currentTarget.value;
 																			const operator =
 																				operatorMap[label as keyof typeof operatorMap];
-																			const rhs = extractRHS(pair.tolerance?.formula || '');
+																			const rhs =
+																				pair.tolerance?.type === 'custom'
+																					? extractRHS(pair.tolerance?.formula || '')
+																					: '';
 																			setCustomTolerance(
 																				index,
 																				`primaryColumnValue${operator}${rhs}`
@@ -1023,7 +1039,11 @@
 																			<option
 																				value={label}
 																				selected={getOperatorLabel(
-																					getOperator(pair.tolerance?.formula || '')
+																					getOperator(
+																						pair.tolerance?.type === 'custom'
+																							? pair.tolerance?.formula || ''
+																							: ''
+																					)
 																				) === label}
 																			>
 																				{label}
@@ -1035,9 +1055,14 @@
 																	<input
 																		type="text"
 																		placeholder="e.g. comparisonColumnValue * 1.05"
-																		value={extractRHS(pair.tolerance?.formula || '')}
+																		value={pair.tolerance?.type === 'custom'
+																			? extractRHS(pair.tolerance?.formula || '')
+																			: ''}
 																		onchange={(e) => {
-																			const operator = getOperator(pair.tolerance?.formula || '');
+																			const operator =
+																				pair.tolerance?.type === 'custom'
+																					? getOperator(pair.tolerance?.formula || '')
+																					: '';
 																			const rhs = e.currentTarget.value;
 																			setCustomTolerance(
 																				index,
@@ -1070,18 +1095,24 @@
 														>
 															{#if pair.tolerance.type === 'exact_match'}
 																✓ Exact match required
-															{:else if pair.tolerance.type === 'within_range'}
-																✓ Within fixed difference: {pair.tolerance.value}
-															{:else if pair.tolerance.type === 'within_range_percentage'}
-																✓ Within percentage difference: {pair.tolerance.percentage}
+															{:else if pair.tolerance.type === 'absolute'}
+																✓ Within fixed difference: {pair.tolerance.type === 'absolute'
+																	? pair.tolerance.value
+																	: 'N/A'}
+															{:else if pair.tolerance.type === 'relative'}
+																✓ Within percentage difference: {pair.tolerance.type === 'relative'
+																	? pair.tolerance.percentage
+																	: 'N/A'}
 															{:else if pair.tolerance.type === 'within_percentage_similarity'}
-																✓ Text similarity threshold: {pair.tolerance.percentage}
+																✓ Text similarity threshold: {pair.tolerance.type ===
+																'within_percentage_similarity'
+																	? pair.tolerance.percentage
+																	: 'N/A'}
 															{:else if pair.tolerance.type === 'custom'}
 																✓ Custom formula enabled
 															{/if}
 														</p>
 													{/if}
-
 													<!-- Per-pair text comparison settings -->
 													<div class="mt-3 flex items-center gap-4">
 														<label class="inline-flex items-center text-sm">

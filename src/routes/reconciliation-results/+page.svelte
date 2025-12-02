@@ -338,18 +338,21 @@
 
 	function formatTolerance(tolerance: any): string {
 		if (!tolerance) return '';
-		if (tolerance.type === 'absolute') {
-			return `Absolute ≤ ${tolerance.value} (numeric diff ≤ ${tolerance.value}; for strings, threshold = ${
-				tolerance.value > 1 ? (tolerance.value / 100).toFixed(2) : tolerance.value
-			} )`;
+
+		switch (tolerance.type) {
+			case 'exact_match':
+				return 'Exact Match';
+			case 'absolute':
+				return `Absolute: Numeric difference ≤ ${tolerance.value}`;
+			case 'relative':
+				return `Relative: Numeric difference ≤ ${tolerance.percentage}% of average`;
+			case 'within_percentage_similarity':
+				return `String Similarity: ≥ ${tolerance.percentage}% match`;
+			case 'custom':
+				return `Custom Formula: ${tolerance.formula}`;
+			default:
+				return '';
 		}
-		if (tolerance.type === 'relative') {
-			return `Relative ≤ ${tolerance.percentage}% (difference ≤ ${tolerance.percentage}% of average)`;
-		}
-		if (tolerance.type === 'custom') {
-			return `Custom: ${tolerance.formula}`;
-		}
-		return '';
 	}
 
 	// Check if a row is the active one
