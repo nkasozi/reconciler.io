@@ -1,6 +1,11 @@
 import type { ParsedFileData, ColumnDataType } from './fileParser';
 
 /**
+ * Export ParsedFileData for test convenience
+ */
+export type { ParsedFileData };
+
+/**
  * Tolerance types for numeric columns
  */
 export type NumericTolerance =
@@ -37,9 +42,9 @@ export type ColumnPair = {
 	primaryColumn: string | null;
 	comparisonColumn: string | null;
 	// Tolerance configuration for comparisons
-	tolerance: Tolerance; // Always required - default is exact_match
+	tolerance?: Tolerance; // Optional - default is exact_match
 	// Per-pair comparison settings
-	settings: ColumnPairSettings;
+	settings?: ColumnPairSettings;
 };
 
 /**
@@ -50,7 +55,10 @@ export type ReconciliationConfig = {
 	comparisonPairs: ColumnPair[];
 	contactEmail?: string;
 	// Reconciliation mode
-	reverseReconciliation: boolean;
+	reverseReconciliation?: boolean;
+	// Global comparison settings for backward compatibility
+	caseSensitive?: boolean;
+	trimValues?: boolean;
 };
 
 // Define the result of a comparison between two values
@@ -100,6 +108,22 @@ export function reconcileData(
 	comparisonData: ParsedFileData,
 	config: ReconciliationConfig
 ): ReconciliationResult {
+	// Default comparison settings if not specified globally
+	const defaultSettings: ColumnPairSettings = {
+		caseSensitive: config.caseSensitive ?? false,
+		trimValues: config.trimValues ?? true
+	};
+
+	// Helper function to get settings for a pair, using global defaults if not specified
+	const getSettings = (pair: ColumnPair): ColumnPairSettings => {
+		return pair.settings ?? defaultSettings;
+	};
+
+	// Helper function to get tolerance for a pair, using exact_match as default
+	const getTolerance = (pair: ColumnPair): Tolerance => {
+		return pair.tolerance ?? { type: 'exact_match' };
+	};
+
 	// Handle reverse reconciliation by swapping files and flipping column mappings
 	let actualPrimaryData = primaryData;
 	let actualComparisonData = comparisonData;
@@ -131,7 +155,7 @@ export function reconcileData(
 	// Extract columns for matching
 	const primaryIdColumn = actualConfig.primaryIdPair.primaryColumn;
 	const comparisonIdColumn = actualConfig.primaryIdPair.comparisonColumn;
-	const idPairSettings = actualConfig.primaryIdPair.settings;
+	const idPairSettings = getSettings(actualConfig.primaryIdPair);
 
 	if (!primaryIdColumn || !comparisonIdColumn) {
 		throw new Error('ID columns must be specified for reconciliation');
@@ -186,19 +210,21 @@ export function reconcileData(
 				if (pair.primaryColumn && pair.comparisonColumn) {
 					const primaryValue = primaryRow[pair.primaryColumn];
 					const comparisonValue = comparisonRow[pair.comparisonColumn];
+					const pairSettings = getSettings(pair);
+					const pairTolerance = getTolerance(pair);
 
 					// Compare the values using per-pair settings
 					const isExactMatch = compareValues(
 						primaryValue,
 						comparisonValue,
-						pair.settings.caseSensitive,
-						pair.settings.trimValues
+						pairSettings.caseSensitive,
+						pairSettings.trimValues
 					);
 
 					// Check if within tolerance if exact match failed
 					const isWithinToleranceMatch =
 						!isExactMatch &&
-						isWithinTolerance(primaryValue, comparisonValue, pair.tolerance, pair.settings);
+						isWithinTolerance(primaryValue, comparisonValue, pairTolerance, pairSettings);
 
 					const isMatch = isExactMatch || isWithinToleranceMatch;
 
@@ -208,8 +234,8 @@ export function reconcileData(
 						comparisonValue,
 						isMatch,
 						isExactMatch,
-						pair.tolerance,
-						pair.settings
+						pairTolerance,
+						pairSettings
 					);
 
 					comparisonResults[pair.primaryColumn] = {
@@ -219,7 +245,7 @@ export function reconcileData(
 						difference: calculateDifference(primaryValue, comparisonValue),
 						reason,
 						status,
-						tolerance: pair.tolerance
+						tolerance: pairTolerance
 					};
 
 					if (isMatch) {

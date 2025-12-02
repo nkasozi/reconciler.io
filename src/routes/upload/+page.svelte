@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { parseFile, type ParsedFileData, RowLimitExceededError } from '$lib/utils/fileParser';
+	import {
+		parseFile,
+		type ParsedFileData,
+		type FileColumn,
+		RowLimitExceededError
+	} from '$lib/utils/fileParser';
 	import { validateFile, formatFileSize, getPDFPageCount } from '$lib/utils/fileValidation';
 	import { reconciliationStore } from '$lib/stores/reconciliationStore';
 	import { goto } from '$app/navigation';
@@ -413,11 +418,9 @@
 		try {
 			// First scan the document to get scan results
 			const { scanDocument } = await import('$lib/utils/documentScanner');
+			// documentScanner.scanDocument currently accepts limited options; pass only supported keys
 			const scanResult = await scanDocument(file, {
-				useOCR: true,
-				extractTables: true,
-				preprocessImage: true,
-				useGoogleDocumentAI: true // Enable Google Document AI backend processing
+				extractTables: true
 			});
 
 			// Update preview with scan results
@@ -486,7 +489,7 @@
 			// Convert from having headers to no headers
 			// Current first row (header) becomes a regular data row
 			// Generate new column names: Column-1, Column-2, etc.
-			const currentColumns = fileData.parsedData.columns;
+			const currentColumns = fileData.parsedData.columns as FileColumn[];
 			const currentRows = fileData.parsedData.rows;
 
 			console.log(`Converting ${type} file to no-headers mode`);
@@ -494,12 +497,12 @@
 			console.log('Current rows count:', currentRows.length);
 
 			// Generate new auto column names
-			const newColumns = currentColumns.map((_, index) => `Column-${index + 1}`);
+			const newColumnNames = currentColumns.map((_, index) => `Column-${index + 1}`);
 
 			// Create a new first row from the old column names
 			const headerAsRow: Record<string, string> = {};
 			currentColumns.forEach((col, index) => {
-				headerAsRow[newColumns[index]] = col;
+				headerAsRow[newColumnNames[index]] = col.name;
 			});
 
 			// Transform all existing rows to use new column names
@@ -508,7 +511,7 @@
 				...currentRows.map((row) => {
 					const newRow: Record<string, string> = {};
 					currentColumns.forEach((oldCol, index) => {
-						newRow[newColumns[index]] = row[oldCol] || '';
+						newRow[newColumnNames[index]] = row[oldCol.name] || '';
 					});
 					return newRow;
 				})
@@ -516,16 +519,16 @@
 
 			newParsedData = {
 				...fileData.parsedData,
-				columns: newColumns,
+				columns: newColumnNames.map((name) => ({ name, dataType: 'string' as const })),
 				rows: newRows
 			};
 
-			console.log('New columns:', newColumns);
+			console.log('New columns:', newColumnNames);
 			console.log('New rows count:', newRows.length);
 		} else {
 			// Convert from no headers to having headers
 			// First row becomes the header, remove it from data rows
-			const currentColumns = fileData.parsedData.columns;
+			const currentColumns = fileData.parsedData.columns as FileColumn[];
 			const currentRows = fileData.parsedData.rows;
 
 			if (currentRows.length === 0) {
@@ -542,7 +545,7 @@
 
 			// Use values from first row as new column names, but ensure they're valid
 			const newColumns = currentColumns.map((col, index) => {
-				const headerValue = firstRow[col];
+				const headerValue = firstRow[col.name];
 				// Ensure we have a valid column name
 				return headerValue && headerValue.trim() ? headerValue.trim() : `Column-${index + 1}`;
 			});
@@ -558,14 +561,14 @@
 				const newRow: Record<string, string> = {};
 				currentColumns.forEach((oldCol, index) => {
 					const newColName = uniqueColumns[index];
-					newRow[newColName] = row[oldCol] || '';
+					newRow[newColName] = row[oldCol.name] || '';
 				});
 				return newRow;
 			});
 
 			newParsedData = {
 				...fileData.parsedData,
-				columns: uniqueColumns,
+				columns: uniqueColumns.map((name) => ({ name, dataType: 'string' as const })),
 				rows: newRows
 			};
 
@@ -633,6 +636,23 @@
 		} else {
 			showComparisonEditor = false;
 		}
+	}
+
+	// Helper accessors to give the template strongly-typed arrays
+	function getPrimaryColumns(): FileColumn[] {
+		return primaryFileData.parsedData?.columns ?? [];
+	}
+
+	function getPrimaryRows(): Record<string, string>[] {
+		return primaryFileData.parsedData?.rows ?? [];
+	}
+
+	function getComparisonColumns(): FileColumn[] {
+		return comparisonFileData.parsedData?.columns ?? [];
+	}
+
+	function getComparisonRows(): Record<string, string>[] {
+		return comparisonFileData.parsedData?.rows ?? [];
 	}
 
 	function openMappingModal() {
@@ -805,7 +825,10 @@
 									<button
 										type="button"
 										class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm text-white transition-colors hover:bg-blue-700"
-										onclick={() => document.querySelector('input[type=file]')?.click()}
+										onclick={() =>
+											(
+												document.querySelector('input[type=file]') as HTMLInputElement | null
+											)?.click()}
 									>
 										📁 Choose File
 									</button>
@@ -887,7 +910,7 @@
 								<table class="w-auto">
 									<thead class="sticky top-0 z-10">
 										<tr class="bg-gray-50 dark:bg-gray-700">
-											{#each primaryFileData.parsedData.columns as column}
+											{#each getPrimaryColumns() as column}
 												<th
 													class="min-w-[150px] whitespace-nowrap border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:border-gray-700 dark:text-gray-300"
 												>
@@ -897,7 +920,7 @@
 															<span
 																class="ml-1 inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-200"
 															>
-																{column.dataType}
+																[{column.dataType}]
 															</span>
 														{/if}
 													</div>
@@ -906,13 +929,13 @@
 										</tr>
 									</thead>
 									<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-										{#each primaryFileData.parsedData.rows.slice(0, 20) as row, i}
+										{#each getPrimaryRows().slice(0, 20) as row, i}
 											<tr
 												class={i % 2 === 0
 													? 'bg-white dark:bg-gray-800'
 													: 'bg-gray-50 dark:bg-gray-700'}
 											>
-												{#each primaryFileData.parsedData.columns as column}
+												{#each getPrimaryColumns() as column}
 													<td
 														class="min-w-[150px] max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-2 text-sm text-gray-600 dark:text-gray-300"
 													>
@@ -1059,10 +1082,10 @@
 									<button
 										type="button"
 										class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm text-white transition-colors hover:bg-blue-700"
-										onclick={(e) =>
-											e.currentTarget.parentElement?.parentElement
-												?.querySelector('input[type=file]')
-												?.click()}
+										onclick={() =>
+											(
+												document.querySelector('input[type=file]') as HTMLInputElement | null
+											)?.click()}
 									>
 										📁 Choose File
 									</button>
@@ -1144,7 +1167,7 @@
 								<table class="w-auto">
 									<thead class="sticky top-0 z-10">
 										<tr class="bg-gray-50 dark:bg-gray-700">
-											{#each comparisonFileData.parsedData.columns as column}
+											{#each getComparisonColumns() as column}
 												<th
 													class="min-w-[150px] whitespace-nowrap border-b border-gray-200 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:border-gray-700 dark:text-gray-300"
 												>
@@ -1154,7 +1177,7 @@
 															<span
 																class="ml-1 inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-200"
 															>
-																{column.dataType}
+																[{column.dataType}]
 															</span>
 														{/if}
 													</div>
@@ -1163,13 +1186,13 @@
 										</tr>
 									</thead>
 									<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-										{#each comparisonFileData.parsedData.rows.slice(0, 20) as row, i}
+										{#each getComparisonRows().slice(0, 20) as row, i}
 											<tr
 												class={i % 2 === 0
 													? 'bg-white dark:bg-gray-800'
 													: 'bg-gray-50 dark:bg-gray-700'}
 											>
-												{#each comparisonFileData.parsedData.columns as column}
+												{#each getComparisonColumns() as column}
 													<td
 														class="min-w-[150px] max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-2 text-sm text-gray-600 dark:text-gray-300"
 													>
@@ -1337,6 +1360,7 @@
 				<button
 					type="button"
 					class="ml-auto text-red-400 hover:text-red-600"
+					aria-label="Dismiss error"
 					onclick={() => (errorMessage = null)}
 				>
 					<svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
