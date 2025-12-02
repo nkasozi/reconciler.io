@@ -20,16 +20,16 @@
 
 	// Mapping state (mirrors ColumnMappingModal defaults)
 	let primaryIdPair = $state<ColumnPair>({
-		primaryColumn: null,
-		comparisonColumn: null,
+		primaryColumn: '',
+		comparisonColumn: '',
 		tolerance: { type: 'exact_match' },
 		settings: { caseSensitive: false, trimValues: true }
 	});
 
 	let comparisonPairs = $state<ColumnPair[]>([
 		{
-			primaryColumn: null,
-			comparisonColumn: null,
+			primaryColumn: '',
+			comparisonColumn: '',
 			tolerance: { type: 'exact_match' },
 			settings: { caseSensitive: false, trimValues: true }
 		}
@@ -135,8 +135,8 @@
 	// Clear the Primary ID mapping - the next mapping will become the Primary ID
 	function clearPrimaryIdMapping() {
 		primaryIdPair = {
-			primaryColumn: null,
-			comparisonColumn: null,
+			primaryColumn: '',
+			comparisonColumn: '',
 			tolerance: { type: 'exact_match' },
 			settings: { caseSensitive: false, trimValues: true }
 		};
@@ -151,8 +151,8 @@
 			comparisonPairs = [
 				...comparisonPairs,
 				{
-					primaryColumn: null,
-					comparisonColumn: null,
+					primaryColumn: '',
+					comparisonColumn: '',
 					tolerance: { type: 'exact_match' },
 					settings: { caseSensitive: false, trimValues: true }
 				}
@@ -199,8 +199,8 @@
 				// Create the first comparison pair
 				comparisonPairs = [
 					{
-						primaryColumn: null,
-						comparisonColumn: null,
+						primaryColumn: '',
+						comparisonColumn: '',
 						tolerance: { type: 'exact_match' },
 						settings: { caseSensitive: false, trimValues: true }
 					}
@@ -213,14 +213,18 @@
 				if (index === currentPairIndex) {
 					return {
 						...pair,
-						primaryColumn: selectedPrimaryColumn,
-						comparisonColumn: selectedComparisonColumn,
+						primaryColumn: selectedPrimaryColumn ?? '',
+						comparisonColumn: selectedComparisonColumn ?? '',
 						// ensure defaults exist for older or partially-initialized pairs
 						tolerance: pair.tolerance ?? { type: 'exact_match' },
 						settings: pair.settings ?? { caseSensitive: false, trimValues: true }
 					};
 				}
-				return pair;
+				return {
+					...pair,
+					primaryColumn: pair.primaryColumn ?? '',
+					comparisonColumn: pair.comparisonColumn ?? ''
+				};
 			});
 
 			// Automatically advance to the next pair for continued mapping

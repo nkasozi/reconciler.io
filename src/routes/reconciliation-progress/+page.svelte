@@ -23,7 +23,7 @@
 	let estimatedTimeLeft = $state('');
 	let startTime = $state(0);
 	let lastLogTimestamp = $state(0);
-	let stuckDetectionTimeout: number;
+	let stuckDetectionTimeout: ReturnType<typeof setTimeout> | null = null;
 	let hasFailures = $state(false); // Track if there are any failures
 	let failureCount = $state(0); // Count of failures
 
@@ -41,7 +41,7 @@
 	let reverseEstimatedTimeLeft = $state('');
 	let reverseStartTime = $state(0);
 	let reverseLastLogTimestamp = $state(0);
-	let reverseStuckDetectionTimeout: number | null = null;
+	let reverseStuckDetectionTimeout: ReturnType<typeof setTimeout> | null = null;
 	let reverseHasFailures = $state(false); // Track if there are any failures
 	let reverseFailureCount = $state(0); // Count of failures
 
@@ -50,8 +50,15 @@
 
 	// Primary ID and comparison columns
 	let primaryIdPair = $state<ColumnPair>({
-		primaryColumn: null,
-		comparisonColumn: null
+		primaryColumn: '',
+		comparisonColumn: '',
+		tolerance: {
+			type: 'exact_match'
+		},
+		settings: {
+			caseSensitive: false,
+			trimValues: false
+		}
 	});
 	let comparisonPairs = $state<ColumnPair[]>([]);
 
@@ -84,18 +91,14 @@
 	let primaryRows: Record<string, string>[] = [];
 	let comparisonMap = new Map<string, Record<string, string>>();
 
-	// For chunked processing
-	let chunks: Record<string, string>[][] = [];
-	let completedChunks = $state(0);
+	// For reconciliation results storage
 	let reconciliationResults: Array<{
 		row: Record<string, string>;
 		matched: boolean;
 		reasons: any[];
 	} | null> = [];
 
-	// For reverse reconciliation chunked processing
-	let reverseChunks: Record<string, string>[][] = [];
-	let reverseCompletedChunks = $state(0);
+	// For reverse reconciliation results storage
 	let reverseReconciliationResults: Array<{
 		row: Record<string, string>;
 		matched: boolean;
@@ -493,7 +496,23 @@
 
 	// Start reverse reconciliation (comparison file as primary)
 	function startReverseReconciliation() {
-		// We need to get the current store state
+		// Reset the reverse state
+		reverseProcessedRows = 0;
+		reverseMatchingLogs = [];
+		isReverseReconciliationComplete = false;
+		reverseStartTime = Date.now();
+		reverseLastLogTimestamp = reverseStartTime;
+
+		// Clear any existing logs
+		clearReconciliationLogs();
+
+		// Start stuck detection for reverse
+		if (reverseStuckDetectionTimeout) {
+			clearTimeout(reverseStuckDetectionTimeout);
+		}
+		reverseStuckDetectionTimeout = setTimeout(() => checkForStuckProcess('reverse'), 3000);
+
+		// Get the current store state
 		let storeState: any = null;
 		const unsubscribe = reconciliationStore.subscribe((state) => {
 			storeState = state;
@@ -509,35 +528,8 @@
 			return;
 		}
 
-		// Reset the reverse state
-		reverseProcessedRows = 0;
-		reverseMatchingLogs = [];
-		isReverseReconciliationComplete = false;
-		reverseStartTime = Date.now();
-		reverseLastLogTimestamp = reverseStartTime;
-
 		// For reverse reconciliation, swap the files
-		const reversePrimaryRows = storeState.comparisonFileData.rows;
-		reverseTotalRows = reversePrimaryRows.length;
-
-		// Create reverse lookup map (primary file becomes comparison)
-		const reversePrimaryIdColumn = storeState.reconciliationConfig.primaryIdPair.primaryColumn;
-		const reverseComparisonMap = new Map<string, Record<string, string>>();
-
-		if (reversePrimaryIdColumn) {
-			storeState.primaryFileData.rows.forEach((row) => {
-				const id = row[reversePrimaryIdColumn];
-				if (id) {
-					reverseComparisonMap.set(id, row);
-				}
-			});
-		}
-
-		// Start stuck detection for reverse
-		if (reverseStuckDetectionTimeout) {
-			clearTimeout(reverseStuckDetectionTimeout);
-		}
-		reverseStuckDetectionTimeout = setTimeout(() => checkForStuckProcess('reverse'), 3000);
+		reverseTotalRows = storeState.comparisonFileData.rows.length;
 
 		// Add a starting log entry for reverse
 		reverseMatchingLogs = [
@@ -553,125 +545,153 @@
 						primaryFileColumn: 'Reverse Reconciliation Started',
 						comparisonFileColumn: 'Configuration',
 						primaryValue: `Processing ${reverseTotalRows} rows in reverse`,
-						comparisonValue: `Comparison ID: ${storeState.reconciliationConfig.primaryIdPair.comparisonColumn}, Primary ID: ${storeState.reconciliationConfig.primaryIdPair.primaryColumn}`
+						comparisonValue: `Swapping files: Comparison as Primary, Primary as Comparison`
 					}
 				]
 			}
 		];
 		reverseLastLogTimestamp = Date.now();
 
-		// Use the same chunk processing approach
-		const CHUNK_SIZE = 50;
+		// Perform the actual reverse reconciliation using the real reconciliation engine with swapped files
+		try {
+			console.log('Starting reverse reconciliation with tolerance evaluator...');
 
-		// Divide reverse data into chunks
-		reverseChunks = [];
-		for (let i = 0; i < reversePrimaryRows.length; i += CHUNK_SIZE) {
-			reverseChunks.push(reversePrimaryRows.slice(i, i + CHUNK_SIZE));
-		}
+			// Create a swapped config for reverse reconciliation
+			// Swap the ID pair columns
+			const reverseIdPair: ColumnPair = {
+				primaryColumn: storeState.reconciliationConfig.primaryIdPair.comparisonColumn,
+				comparisonColumn: storeState.reconciliationConfig.primaryIdPair.primaryColumn,
+				tolerance: storeState.reconciliationConfig.primaryIdPair.tolerance,
+				settings: storeState.reconciliationConfig.primaryIdPair.settings
+			};
 
-		// Reset reverse progress tracking
-		reverseCompletedChunks = 0;
-		reverseReconciliationResults = new Array(reversePrimaryRows.length);
-
-		// Process reverse chunks
-		const processNextReverseChunks = () => {
-			const chunkIndex = reverseCompletedChunks;
-			if (chunkIndex >= reverseChunks.length) {
-				finishReverseReconciliation();
-				return;
-			}
-
-			const startIndex = chunkIndex * CHUNK_SIZE;
-			const chunk = reverseChunks[chunkIndex];
-
-			// Process the reverse chunk (similar to normal processing but with swapped files)
-			const { results, logs } = processReverseChunk(
-				chunk,
-				startIndex,
-				reverseComparisonMap,
-				storeState.reconciliationConfig
+			// Swap the comparison pairs (swap primary and comparison columns)
+			const reverseComparisonPairs = storeState.reconciliationConfig.comparisonPairs.map(
+				(pair: ColumnPair) => ({
+					primaryColumn: pair.comparisonColumn,
+					comparisonColumn: pair.primaryColumn,
+					tolerance: pair.tolerance,
+					settings: pair.settings
+				})
 			);
 
-			// Update UI with reverse logs
-			const newLogs = logs.map((log, i) => ({
-				timestamp: Date.now() + i + Math.random(),
-				primaryId: log.primaryId,
-				comparisonId: log.comparisonId,
-				matched: log.matched,
-				reasons: log.reasons
+			// Create swapped config
+			const reverseConfig = {
+				primaryIdPair: reverseIdPair,
+				comparisonPairs: reverseComparisonPairs,
+				reverseReconciliation: false // Don't do reverse of reverse
+			};
+
+			// Call reconcileData with swapped files and swapped config
+			const result = reconcileData(
+				storeState.comparisonFileData, // Comparison becomes primary
+				storeState.primaryFileData, // Primary becomes comparison
+				reverseConfig
+			);
+
+			// Get the debug logs that were generated during reverse reconciliation
+			const debugLogs = getReconciliationLogs();
+			console.log('Reverse reconciliation complete! Generated', debugLogs.length, 'debug logs');
+
+			// Convert the reverse reconciliation results into reverseMatchingLogs format
+			const newLogs = result.matches.map((match, index) => ({
+				timestamp: Date.now() + index,
+				primaryId: match.idValues.primary,
+				comparisonId: match.idValues.comparison,
+				matched: match.matchScore === 100,
+				reasons: Object.entries(match.comparisonResults).map(([column, compResult]) => {
+					// Find the swapped column pair configuration for this column
+					const pair = reverseComparisonPairs.find((p: ColumnPair) => p.primaryColumn === column);
+
+					// Get display names from file metadata (swapped for reverse)
+					const primaryColumnName =
+						comparisonFileData?.columns?.find((c: any) => c.name === column)?.name || column;
+					const comparisonColumnName =
+						primaryFileData?.columns?.find((c: any) => c.name === pair?.comparisonColumn)?.name ||
+						pair?.comparisonColumn ||
+						column;
+
+					return {
+						primaryFileRow: `Match ${index + 1}`,
+						comparisonFileRow: `Record ${match.idValues.comparison}`,
+						primaryFileColumn: primaryColumnName,
+						comparisonFileColumn: comparisonColumnName,
+						primaryValue: String(compResult.primaryValue),
+						comparisonValue: String(compResult.comparisonValue),
+						reason: compResult.reason,
+						tolerance: pair?.tolerance,
+						match: compResult.match,
+						status: compResult.status
+					};
+				})
 			}));
 
-			if (newLogs.length > 0) {
-				reverseMatchingLogs = [...newLogs, ...reverseMatchingLogs];
-				if (reverseMatchingLogs.length > 100) {
-					reverseMatchingLogs = reverseMatchingLogs.slice(0, 100);
-				}
-			}
+			// Update logs and results
+			reverseMatchingLogs = [...newLogs.slice(0, 100), ...reverseMatchingLogs];
+			reverseProcessedRows = result.summary.totalPrimaryRows;
+			reverseFailureCount =
+				result.summary.unmatchedPrimaryRows + result.summary.unmatchedComparisonRows;
+			reverseHasFailures = reverseFailureCount > 0;
 
-			// Store reverse results
-			results.forEach((result, i) => {
-				reverseReconciliationResults[startIndex + i] = result;
-			});
+			// Store results for later use
+			reverseReconciliationResults = result.matches.map((match) => ({
+				row: match.primaryRow,
+				matched: match.matchScore === 100,
+				reasons: Object.entries(match.comparisonResults).map(([column, compResult]) => {
+					// Find the swapped column pair configuration for this column
+					const pair = reverseComparisonPairs.find((p: ColumnPair) => p.primaryColumn === column);
 
-			// Update reverse progress
-			reverseCompletedChunks++;
-			reverseProcessedRows = Math.min(reverseCompletedChunks * CHUNK_SIZE, reverseTotalRows);
+					// Get display names from file metadata (swapped for reverse)
+					const primaryColumnName =
+						comparisonFileData?.columns?.find((c: any) => c.name === column)?.name || column;
+					const comparisonColumnName =
+						primaryFileData?.columns?.find((c: any) => c.name === pair?.comparisonColumn)?.name ||
+						pair?.comparisonColumn ||
+						column;
 
-			// Calculate reverse matching speed
-			const elapsedSeconds = (Date.now() - reverseStartTime) / 1000;
-			if (elapsedSeconds > 0.1) {
-				reverseMatchingSpeed = Math.round(reverseProcessedRows / elapsedSeconds);
-				const remainingRows = reverseTotalRows - reverseProcessedRows;
-				if (reverseMatchingSpeed > 0) {
-					const secondsLeft = remainingRows / reverseMatchingSpeed;
-					reverseEstimatedTimeLeft = formatTime(secondsLeft);
-				} else {
-					reverseEstimatedTimeLeft = reverseProcessedRows > 0 ? 'calculating...' : 'starting...';
-				}
-			} else {
-				reverseEstimatedTimeLeft = 'starting reverse reconciliation...';
-			}
+					return {
+						primaryFileColumn: primaryColumnName,
+						comparisonFileColumn: comparisonColumnName,
+						primaryValue: compResult.primaryValue,
+						comparisonValue: compResult.comparisonValue,
+						reason: compResult.reason,
+						tolerance: pair?.tolerance,
+						match: compResult.match,
+						status: compResult.status
+					};
+				})
+			}));
 
-			// Add reverse progress log if needed
-			if (Date.now() - reverseLastLogTimestamp > 1000) {
-				const progressLog = {
-					timestamp: Date.now() + Math.random(),
-					primaryId: 'REVERSE-PROGRESS',
-					comparisonId: 'UPDATE',
-					matched: true,
+			// Finish reverse reconciliation
+			finishReverseReconciliation();
+		} catch (error) {
+			console.error('Reverse reconciliation error:', error);
+			reverseMatchingLogs = [
+				{
+					timestamp: Date.now(),
+					primaryId: 'ERROR',
+					comparisonId: 'ERROR',
+					matched: false,
 					reasons: [
 						{
-							primaryFileRow: 'Reverse Progress Log',
-							comparisonFileRow: 'Update Log',
-							primaryFileColumn: 'Processing',
-							comparisonFileColumn: 'Status',
-							primaryValue: `${reverseProcessedRows} of ${reverseTotalRows} rows (Reverse Chunk ${reverseCompletedChunks}/${reverseChunks.length})`,
-							comparisonValue: `${reverseProgressPercentage}% complete`
+							primaryFileRow: 'Error Log',
+							comparisonFileRow: 'Error Log',
+							primaryFileColumn: 'Reverse Reconciliation Error',
+							comparisonFileColumn: 'Details',
+							primaryValue: error instanceof Error ? error.message : String(error),
+							comparisonValue: 'See browser console for more details'
 						}
 					]
-				};
-				reverseMatchingLogs = [progressLog, ...reverseMatchingLogs];
-				reverseLastLogTimestamp = Date.now();
-			}
-
-			// Process the next reverse chunk
-			setTimeout(processNextReverseChunks, 50); // Slightly offset from normal processing
-		};
+				}
+			];
+			finishReverseReconciliation();
+		}
 
 		// Function to complete reverse reconciliation
 		function finishReverseReconciliation() {
 			isReverseReconciliationComplete = true;
 
-			// Check reverse failures
-			reverseHasFailures = false;
-			reverseFailureCount = 0;
-			for (const result of reverseReconciliationResults) {
-				if (result && !result.matched) {
-					reverseHasFailures = true;
-					reverseFailureCount++;
-				}
-			}
-
+			// Check reverse failures (already counted above)
 			// Add reverse completion log
 			const completionLog = {
 				timestamp: Date.now() + Math.random(),
@@ -699,89 +719,6 @@
 				clearTimeout(reverseStuckDetectionTimeout);
 			}
 		}
-
-		// Start reverse processing
-		processNextReverseChunks();
-	}
-
-	// Process reverse chunk function
-	function processReverseChunk(chunk, startIndex, reverseComparisonMap, config) {
-		const results = [];
-		const logs = [];
-
-		chunk.forEach((primaryRow, index) => {
-			const currentIndex = startIndex + index;
-			const reverseComparisonIdColumn = config.primaryIdPair.comparisonColumn;
-
-			if (!reverseComparisonIdColumn) {
-				console.error('Reverse comparison ID column is not defined');
-				return;
-			}
-
-			const primaryId = primaryRow[reverseComparisonIdColumn];
-			const comparisonRow = reverseComparisonMap.get(primaryId);
-			const idMatched = !!comparisonRow;
-
-			const reasons = [];
-
-			if (!idMatched) {
-				reasons.push({
-					primaryFileRow: `Reverse Row ${currentIndex + 1}`,
-					comparisonFileRow: '(Not found)',
-					primaryFileColumn: reverseComparisonIdColumn,
-					comparisonFileColumn: config.primaryIdPair.primaryColumn,
-					primaryValue: primaryId || '(empty)',
-					comparisonValue: '(No matching record found in reverse)'
-				});
-			} else if (config.comparisonPairs.length > 0) {
-				// Check each mapped column pair for differences (with swapped columns)
-				config.comparisonPairs.forEach((pair) => {
-					if (pair.primaryColumn && pair.comparisonColumn) {
-						// Swap the columns for reverse reconciliation
-						const primaryValue = primaryRow[pair.comparisonColumn];
-						const comparisonValue = comparisonRow[pair.primaryColumn];
-
-						const normalizedPrimaryValue = (primaryValue || '').toString().trim().toLowerCase();
-						const normalizedComparisonValue = (comparisonValue || '')
-							.toString()
-							.trim()
-							.toLowerCase();
-
-						if (normalizedPrimaryValue !== normalizedComparisonValue) {
-							reasons.push({
-								primaryFileRow: `Reverse Row ${currentIndex + 1}`,
-								comparisonFileRow: `Original Row ${Array.from(reverseComparisonMap.keys()).findIndex((id) => id === primaryId) + 1}`,
-								primaryFileColumn: pair.comparisonColumn, // Swapped
-								comparisonFileColumn: pair.primaryColumn, // Swapped
-								primaryValue: primaryValue || '(empty)',
-								comparisonValue: comparisonValue || '(empty)'
-							});
-						}
-					}
-				});
-			}
-
-			results.push({
-				row: primaryRow,
-				matched: idMatched && reasons.length === 0,
-				reasons
-			});
-
-			const shouldLog = reasons.length > 0 || currentIndex % 10 === 0;
-			if (shouldLog) {
-				logs.push({
-					rowIndex: currentIndex,
-					primaryId: primaryId || `Reverse Row ${currentIndex + 1}`,
-					comparisonId: idMatched
-						? comparisonRow[config.primaryIdPair.primaryColumn] || '(ID found but empty)'
-						: '(Not found)',
-					matched: idMatched && reasons.length === 0,
-					reasons
-				});
-			}
-		});
-
-		return { results, logs };
 	}
 
 	function formatTime(seconds: number): string {
@@ -815,13 +752,6 @@
 	function analyzeFailures() {
 		console.log('Analyze failures clicked');
 
-		// If the reconciliation is not fully complete, warn the user
-		if (chunks && completedChunks < chunks.length) {
-			alert(
-				`Reconciliation is only ${Math.round((completedChunks / chunks.length) * 100)}% complete. Analysis will be partial.`
-			);
-		}
-
 		// Prepare the reconciliation results for the analysis page
 		// We need to properly format matched and unmatched records
 		const matches = [];
@@ -837,7 +767,7 @@
 
 			if (comparisonRow) {
 				// Found a matching ID - check if all mapped columns match
-				const comparisonResults = {};
+				const comparisonResults: Record<string, any> = {};
 				let matchCount = 0;
 
 				// Process each mapped column pair
@@ -921,19 +851,7 @@
 	}
 
 	function downloadResults() {
-		console.log(
-			'Download results clicked, completedChunks:',
-			completedChunks,
-			'total chunks:',
-			chunks?.length
-		);
-
-		// If the reconciliation is not fully complete, warn the user
-		if (chunks && completedChunks < chunks.length) {
-			alert(
-				`Reconciliation is only ${Math.round((completedChunks / chunks.length) * 100)}% complete. Results will be partial.`
-			);
-		}
+		console.log('Download results clicked');
 
 		// Prepare the results file with added columns for status and reasons
 		const results = prepareResultsFile();
@@ -1055,7 +973,7 @@
 		return results;
 	}
 
-	function convertToCSV(results) {
+	function convertToCSV(results: any[]) {
 		if (results.length === 0) return '';
 
 		// Get all headers including our added ones
@@ -1086,19 +1004,7 @@
 
 	// Download reverse reconciliation results
 	function downloadReverseResults() {
-		console.log(
-			'Download reverse results clicked, reverseCompletedChunks:',
-			reverseCompletedChunks,
-			'total reverse chunks:',
-			reverseChunks?.length
-		);
-
-		// If the reverse reconciliation is not fully complete, warn the user
-		if (reverseChunks && reverseCompletedChunks < reverseChunks.length) {
-			alert(
-				`Reverse reconciliation is only ${Math.round((reverseCompletedChunks / reverseChunks.length) * 100)}% complete. Results will be partial.`
-			);
-		}
+		console.log('Download reverse results clicked');
 
 		// Prepare the reverse results file
 		const results = prepareReverseResultsFile();
@@ -1206,13 +1112,6 @@
 	// Analyze reverse reconciliation failures
 	function analyzeReverseFailures() {
 		console.log('Analyze reverse failures clicked');
-
-		// If the reverse reconciliation is not fully complete, warn the user
-		if (reverseChunks && reverseCompletedChunks < reverseChunks.length) {
-			alert(
-				`Reverse reconciliation is only ${Math.round((reverseCompletedChunks / reverseChunks.length) * 100)}% complete. Analysis will be partial.`
-			);
-		}
 
 		// For reverse analysis, we could either:
 		// 1. Create a dedicated reverse results page, or

@@ -64,7 +64,7 @@
 			comparisonPairs = config.comparisonPairs || [];
 
 			// Set configuration options
-			reverseReconciliation = config.reverseReconciliation;
+			reverseReconciliation = config.reverseReconciliation ?? false;
 		});
 
 		return unsubscribe;

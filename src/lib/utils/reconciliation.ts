@@ -76,8 +76,8 @@ export type ColumnPairSettings = {
  * Define the column pair type for mapping columns between files
  */
 export type ColumnPair = {
-	primaryColumn: string | null;
-	comparisonColumn: string | null;
+	primaryColumn: string;
+	comparisonColumn: string;
 	// Tolerance configuration for comparisons
 	tolerance: Tolerance; // Always required - default is exact_match
 	// Per-pair comparison settings
