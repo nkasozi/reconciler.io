@@ -46,6 +46,11 @@
 	let lastMatchedPrimary = $state<string | null>(null);
 	let lastMatchedComparison = $state<string | null>(null);
 
+	// Autocomplete state for formula builder
+	let formulaCompletions = $state<string[]>([]);
+	let showFormulaCompletions = $state(false);
+	let activeCompletionIndex = $state(-1);
+
 	// Keep local store snapshot in sync
 	onMount(() => {
 		const unsubscribe = reconciliationStore.subscribe((state) => {
@@ -369,7 +374,8 @@
 	function setCustomTolerance(pairIndex: number, formula: string) {
 		const pair = comparisonPairs[pairIndex];
 		if (pair) {
-			pair.tolerance = { type: 'custom', formula };
+			const formattedFormula = formatFormula(formula);
+			pair.tolerance = { type: 'custom', formula: formattedFormula };
 			comparisonPairs[pairIndex] = pair;
 		}
 	}
@@ -390,6 +396,28 @@
 			pair.settings.trimValues = trimValues;
 			comparisonPairs[pairIndex] = pair;
 		}
+	}
+
+	// Format formula by adding spaces around operators and variable names
+	function formatFormula(formula: string): string {
+		if (!formula) return '';
+
+		// Add spaces around operators
+		let formatted = formula
+			.replace(/([=<>!]+)/g, ' $1 ')
+			.replace(/([+\-*/%])/g, ' $1 ')
+			.replace(/\s+/g, ' ') // Collapse multiple spaces
+			.trim();
+
+		return formatted;
+	}
+
+	// Get autocomplete suggestions for formula variables
+	function getFormulaCompletions(input: string): string[] {
+		const variables = ['primaryColumnValue', 'comparisonColumnValue'];
+		const lowerInput = input.toLowerCase();
+
+		return variables.filter((v) => v.toLowerCase().includes(lowerInput));
 	}
 
 	// Helper functions for custom tolerance formula builder
@@ -1055,6 +1083,7 @@
 																	<input
 																		type="text"
 																		placeholder="e.g. comparisonColumnValue * 1.05"
+																		list="formula-vars-{index}"
 																		value={pair.tolerance?.type === 'custom'
 																			? extractRHS(pair.tolerance?.formula || '')
 																			: ''}
@@ -1071,6 +1100,12 @@
 																		}}
 																		class="flex-1 rounded border border-gray-300 px-2 py-1 font-mono text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"
 																	/>
+																	<datalist id="formula-vars-{index}">
+																		<option value="primaryColumnValue"></option>
+																		<option value="comparisonColumnValue"></option>
+																		<option value="Math.abs"></option>
+																		<option value="Math.round"></option>
+																	</datalist>
 																</div>
 																<p class="text-xs text-gray-500 dark:text-gray-400">
 																	<strong>Example:</strong> Choose 'less than or equal' and enter '100'

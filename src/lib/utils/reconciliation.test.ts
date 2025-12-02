@@ -1,5 +1,11 @@
 import { describe, test, expect } from 'vitest';
-import { reconcileData, type ColumnPair, type ReconciliationConfig } from './reconciliation';
+import {
+	reconcileData,
+	type ColumnPair,
+	type ReconciliationConfig,
+	clearReconciliationLogs,
+	getReconciliationLogs
+} from './reconciliation';
 import type { ParsedFileData, FileColumn } from './fileParser';
 
 /**
@@ -267,5 +273,128 @@ describe('tolerance-specific behavior', () => {
 		const res = reconcileData(primary as any, comparison as any, config);
 		const status = res.matches[0].comparisonResults['name'].status;
 		expect(['within_tolerance', 'partial_match']).toContain(status);
+	});
+
+	describe('Custom Formula Tolerance', () => {
+		test('should use custom formula as primary comparison mechanism', () => {
+			// Scenario: Same file uploaded as both primary and comparison
+			// With custom formula: primaryColumnValue = comparisonColumnValue * 100
+			// This means: 100 should match 1, 200 should match 2, etc.
+			clearReconciliationLogs();
+			const sameData: ParsedFileData = {
+				columns: createColumns(['ID', 'Amount']),
+				rows: [
+					{ ID: '1', Amount: '100' },
+					{ ID: '2', Amount: '200' },
+					{ ID: '3', Amount: '300' }
+				],
+				fileName: 'data.csv',
+				fileType: 'csv'
+			};
+
+			const config: ReconciliationConfig = {
+				primaryIdPair: {
+					primaryColumn: 'ID',
+					comparisonColumn: 'ID',
+					tolerance: { type: 'exact_match' },
+					settings: { caseSensitive: true, trimValues: true }
+				},
+				comparisonPairs: [
+					{
+						primaryColumn: 'Amount',
+						comparisonColumn: 'Amount',
+						// Custom formula: 100 should NOT match 100 (formula says primary should be 100x comparison)
+						tolerance: {
+							type: 'custom',
+							formula: 'primaryColumnValue = comparisonColumnValue * 100'
+						},
+						settings: { caseSensitive: true, trimValues: true }
+					}
+				]
+			};
+
+			const result = reconcileData(sameData, sameData, config);
+			const logs = getReconciliationLogs();
+
+			console.log('=== DEBUG RECONCILIATION LOGS ===');
+			logs.forEach((log) => {
+				console.log(
+					`ID ${log.primaryId}: ${log.columnPair.primary}(${log.primaryValue}) vs ${log.columnPair.comparison}(${log.comparisonValue})`
+				);
+				console.log(`  Formula: ${log.processedFormula}`);
+				console.log(`  Match: ${log.evaluationResult.matches} - ${log.evaluationResult.reason}`);
+			});
+			console.log('=== END DEBUG ===');
+
+			// Since formula is: 100 = 100 * 100 (false), 200 = 200 * 100 (false), etc.
+			// All rows should have matchScore of 0 (no columns match)
+			expect(result.matches.length).toBe(3);
+			result.matches.forEach((match, idx) => {
+				const amountResult = match.comparisonResults['Amount'];
+				console.log(
+					`Match ${idx}: match=${amountResult.match}, status=${amountResult.status}, reason=${amountResult.reason}`
+				);
+				expect(amountResult.match).toBe(false);
+				expect(amountResult.status).toBe('no_match');
+				expect(amountResult.reason).toContain('did not match');
+			});
+			expect(result.matches[0].matchScore).toBe(0);
+		});
+
+		test('should apply custom formula correctly when condition is met', () => {
+			// Scenario: custom formula where values match the condition
+			const data1: ParsedFileData = {
+				columns: createColumns(['ID', 'Amount']),
+				rows: [
+					{ ID: '1', Amount: '100' },
+					{ ID: '2', Amount: '200' }
+				],
+				fileName: 'primary.csv',
+				fileType: 'csv'
+			};
+
+			const data2: ParsedFileData = {
+				columns: createColumns(['ID', 'Amount']),
+				rows: [
+					{ ID: '1', Amount: '1' },
+					{ ID: '2', Amount: '2' }
+				],
+				fileName: 'comparison.csv',
+				fileType: 'csv'
+			};
+
+			const config: ReconciliationConfig = {
+				primaryIdPair: {
+					primaryColumn: 'ID',
+					comparisonColumn: 'ID',
+					tolerance: { type: 'exact_match' },
+					settings: { caseSensitive: true, trimValues: true }
+				},
+				comparisonPairs: [
+					{
+						primaryColumn: 'Amount',
+						comparisonColumn: 'Amount',
+						// Formula: primary should be 100x comparison (100 = 1*100, 200 = 2*100)
+						tolerance: {
+							type: 'custom',
+							formula: 'primaryColumnValue = comparisonColumnValue * 100'
+						},
+						settings: { caseSensitive: true, trimValues: true }
+					}
+				]
+			};
+
+			const result = reconcileData(data1, data2, config);
+
+			// Since formula is: 100 = 1 * 100 (true), 200 = 2 * 100 (true)
+			// All rows should match
+			expect(result.matches.length).toBe(2);
+			result.matches.forEach((match) => {
+				const amountResult = match.comparisonResults['Amount'];
+				expect(amountResult.match).toBe(true);
+				expect(amountResult.status).toBe('within_tolerance');
+			});
+			expect(result.matches[0].matchScore).toBe(100);
+		});
 	});
 });

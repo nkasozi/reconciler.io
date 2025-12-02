@@ -24,8 +24,6 @@
 
 	// Reconciliation configuration options
 	let reverseReconciliation = $state(false);
-	let caseSensitive = $state(true);
-	let trimValues = $state(true);
 
 	onMount(() => {
 		const unsubscribe = reconciliationStore.subscribe((state) => {
@@ -67,8 +65,6 @@
 
 			// Set configuration options
 			reverseReconciliation = config.reverseReconciliation;
-			caseSensitive = config.caseSensitive;
-			trimValues = config.trimValues;
 		});
 
 		return unsubscribe;
@@ -285,6 +281,26 @@
 													)}
 												</p>
 											{/if}
+											<!-- Show pair settings if available -->
+											{#if comparisonPairs.find((p) => p.primaryColumn === mapping.primaryColumn && p.comparisonColumn === mapping.comparisonColumn)?.settings}
+												{@const pairSettings = comparisonPairs.find(
+													(p) =>
+														p.primaryColumn === mapping.primaryColumn &&
+														p.comparisonColumn === mapping.comparisonColumn
+												)?.settings}
+												<div class="mt-2 space-y-1">
+													<p class="text-xs text-gray-300">
+														Case Sensitive: <span class="text-blue-300"
+															>{pairSettings?.caseSensitive ? 'Enabled' : 'Disabled'}</span
+														>
+													</p>
+													<p class="text-xs text-gray-300">
+														Trim Values: <span class="text-blue-300"
+															>{pairSettings?.trimValues ? 'Enabled' : 'Disabled'}</span
+														>
+													</p>
+												</div>
+											{/if}
 										</div>
 									</div>
 								</div>
@@ -343,92 +359,6 @@
 							</div>
 							<div class="text-xs text-gray-500 dark:text-gray-400">
 								{reverseReconciliation ? 'Enabled' : 'Disabled'}
-							</div>
-						</div>
-					</div>
-
-					<div
-						class="flex items-center space-x-3 rounded-md border border-gray-200 bg-gray-50 p-4 dark:border-gray-600 dark:bg-gray-700"
-					>
-						<div class="flex items-center">
-							{#if caseSensitive}
-								<svg
-									class="h-5 w-5 text-green-500"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M5 13l4 4L19 7"
-									></path>
-								</svg>
-							{:else}
-								<svg
-									class="h-5 w-5 text-gray-400"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M6 18L18 6M6 6l12 12"
-									></path>
-								</svg>
-							{/if}
-						</div>
-						<div>
-							<div class="text-sm font-medium text-gray-900 dark:text-white">Case Sensitive</div>
-							<div class="text-xs text-gray-500 dark:text-gray-400">
-								{caseSensitive ? 'Enabled' : 'Disabled'}
-							</div>
-						</div>
-					</div>
-
-					<div
-						class="flex items-center space-x-3 rounded-md border border-gray-200 bg-gray-50 p-4 dark:border-gray-600 dark:bg-gray-700"
-					>
-						<div class="flex items-center">
-							{#if trimValues}
-								<svg
-									class="h-5 w-5 text-green-500"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M5 13l4 4L19 7"
-									></path>
-								</svg>
-							{:else}
-								<svg
-									class="h-5 w-5 text-gray-400"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M6 18L18 6M6 6l12 12"
-									></path>
-								</svg>
-							{/if}
-						</div>
-						<div>
-							<div class="text-sm font-medium text-gray-900 dark:text-white">
-								Trim Whitespace from Values
-							</div>
-							<div class="text-xs text-gray-500 dark:text-gray-400">
-								{trimValues ? 'Enabled' : 'Disabled'}
 							</div>
 						</div>
 					</div>

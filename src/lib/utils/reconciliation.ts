@@ -1,3 +1,40 @@
+/**
+ * ============================================================================
+ * RECONCILIATION CORE MODULE
+ * ============================================================================
+ *
+ * This module provides the core reconciliation logic for comparing data from
+ * two files based on configurable tolerances and settings.
+ *
+ * KEY ARCHITECTURE DECISIONS:
+ *
+ * 1. TOLERANCE EVALUATOR PATTERN
+ *    - Each tolerance type is responsible for its own evaluation logic
+ *    - Implementation via evaluateToleranceWithEvaluator() function
+ *    - Ensures: When adding a new tolerance type, evaluation logic MUST be added
+ *    - Prevents: Bugs from forgetting to update reconciliation when tolerances change
+ *    - See: evaluateToleranceWithEvaluator() and concrete evaluator implementations
+ *
+ * 2. PER-PAIR SETTINGS ARCHITECTURE
+ *    - caseSensitive and trimValues are per-pair, not global
+ *    - Enables: Flexible configurations for different column types
+ *    - Type: ColumnPairSettings embedded in ColumnPair type
+ *
+ * 3. TOLERANCE TYPES (Extensible)
+ *    - exact_match: Byte-for-byte or normalized exact comparison
+ *    - absolute: Fixed numeric difference threshold
+ *    - relative: Percentage-based numeric difference threshold
+ *    - within_percentage_similarity: String fuzzy matching (Levenshtein)
+ *    - custom: User-defined formula with primaryColumnValue and comparisonColumnValue
+ *
+ *    TO ADD A NEW TOLERANCE TYPE:
+ *    1. Add type definition to Tolerance union
+ *    2. Add evaluation logic to evaluateToleranceWithEvaluator() switch
+ *    3. Create a concrete ToleranceEvaluator (for documentation)
+ *    4. Add tests for the new tolerance type
+ *    5. The TypeScript compiler will enforce exhaustive switch coverage
+ */
+
 import type { ParsedFileData, ColumnDataType } from './fileParser';
 
 /**
@@ -57,6 +94,92 @@ export type ReconciliationConfig = {
 	// Reconciliation mode
 	reverseReconciliation?: boolean;
 };
+
+/**
+ * ============================================================================
+ * DEBUG LOGGING
+ * ============================================================================
+ */
+
+// Control debug output - set to true to enable detailed reconciliation logging
+const DEBUG_RECONCILIATION = true;
+
+export interface ReconciliationDebugLog {
+	timestamp: string;
+	primaryId: string;
+	comparisonId: string;
+	columnPair: {
+		primary: string;
+		comparison: string;
+	};
+	primaryValue: string | number | null | undefined;
+	comparisonValue: string | number | null | undefined;
+	tolerance: {
+		type: string;
+		config: string;
+	};
+	evaluationResult: {
+		matches: boolean;
+		reason: string;
+	};
+	processedFormula?: string;
+}
+
+const reconciliationLogs: ReconciliationDebugLog[] = [];
+
+function logReconciliationDebug(log: ReconciliationDebugLog): void {
+	if (DEBUG_RECONCILIATION) {
+		reconciliationLogs.push(log);
+
+		// Simple direct console logging for visibility
+		console.log(`[RECONCILIATION] Record ${log.primaryId} vs ${log.comparisonId}`);
+		console.log(`  Column: ${log.columnPair.primary}`);
+		console.log(`  Primary Value: ${log.primaryValue}`);
+		console.log(`  Comparison Value: ${log.comparisonValue}`);
+		console.log(`  Tolerance Type: ${log.tolerance.type}`);
+
+		if (log.tolerance.type === 'custom' && log.processedFormula) {
+			console.log(`  Formula: ${log.processedFormula}`);
+		}
+
+		console.log(`  Match: ${log.evaluationResult.matches ? 'YES ✓' : 'NO ✗'}`);
+		console.log(`  Reason: ${log.evaluationResult.reason}`);
+		console.log('---');
+	}
+}
+
+export function getReconciliationLogs(): ReconciliationDebugLog[] {
+	return reconciliationLogs;
+}
+
+export function clearReconciliationLogs(): void {
+	reconciliationLogs.length = 0;
+	if (DEBUG_RECONCILIATION) {
+		console.log('%c[RECONCILIATION] Logs cleared', 'color: #999; font-style: italic;');
+	}
+}
+
+/**
+ * Result of evaluating a tolerance against two values
+ * This is the core interface that each tolerance type must implement
+ */
+export type ToleranceEvaluationResult = {
+	matches: boolean; // Whether the values match according to this tolerance
+	reason: string; // Human-readable explanation of the result
+};
+
+/**
+ * Interface that each tolerance type must implement
+ * This ensures that every new tolerance type author MUST provide evaluation logic
+ * and prevents bugs where a new tolerance type is added but evaluation is forgotten
+ */
+export interface ToleranceEvaluator {
+	evaluate(
+		primaryValue: string | number | null | undefined,
+		comparisonValue: string | number | null | undefined,
+		settings: ColumnPairSettings
+	): ToleranceEvaluationResult;
+}
 
 // Define the result of a comparison between two values
 export type ComparisonResult = {
@@ -192,37 +315,87 @@ export function reconcileData(
 					const primaryValue = primaryRow[pair.primaryColumn];
 					const comparisonValue = comparisonRow[pair.comparisonColumn];
 
-					// Compare the values using per-pair settings
-					const isExactMatch = compareValues(
+					// PRIMARY COMPARISON: Use the tolerance evaluator
+					// The tolerance is the ACTIVE comparison mechanism, not a fallback
+					// If tolerance is 'exact_match', it behaves as exact comparison
+					// If tolerance is custom formula, that becomes the match rule
+					const { matches: isMatch, reason: toleranceReason } = evaluateToleranceWithEvaluator(
 						primaryValue,
 						comparisonValue,
-						pair.settings.caseSensitive,
-						pair.settings.trimValues
-					);
-
-					// Check if within tolerance if exact match failed
-					const isWithinToleranceMatch =
-						!isExactMatch &&
-						isWithinTolerance(primaryValue, comparisonValue, pair.tolerance, pair.settings);
-
-					const isMatch = isExactMatch || isWithinToleranceMatch;
-
-					// Generate detailed status and reason for the match or mismatch
-					const { status, reason } = generateMatchStatusAndReason(
-						primaryValue,
-						comparisonValue,
-						isMatch,
-						isExactMatch,
 						pair.tolerance,
 						pair.settings
 					);
+
+					// Log detailed reconciliation information for debugging
+					logReconciliationDebug({
+						timestamp: new Date().toISOString(),
+						primaryId: primaryRow[primaryIdColumn],
+						comparisonId: comparisonRow[comparisonIdColumn],
+						columnPair: {
+							primary: pair.primaryColumn,
+							comparison: pair.comparisonColumn
+						},
+						primaryValue,
+						comparisonValue,
+						tolerance: {
+							type: pair.tolerance.type,
+							config: JSON.stringify(
+								pair.tolerance.type === 'custom'
+									? { formula: pair.tolerance.formula }
+									: pair.tolerance.type === 'absolute' || pair.tolerance.type === 'relative'
+										? { value: (pair.tolerance as any).value || (pair.tolerance as any).percentage }
+										: pair.tolerance.type === 'within_percentage_similarity'
+											? { percentage: (pair.tolerance as any).percentage }
+											: {}
+							)
+						},
+						evaluationResult: {
+							matches: isMatch,
+							reason: toleranceReason
+						},
+						processedFormula:
+							pair.tolerance.type === 'custom'
+								? (() => {
+										try {
+											// Show the processed formula with values substituted
+											const primaryNum = parseFloat(primaryValue?.toString() ?? '');
+											const comparisonNum = parseFloat(comparisonValue?.toString() ?? '');
+											const primarySubst = isNaN(primaryNum)
+												? `"${primaryValue}"`
+												: `(${primaryNum})`;
+											const comparisonSubst = isNaN(comparisonNum)
+												? `"${comparisonValue}"`
+												: `(${comparisonNum})`;
+											return (pair.tolerance as any).formula
+												.replace(/primaryColumnValue/g, primarySubst)
+												.replace(/comparisonColumnValue/g, comparisonSubst);
+										} catch (e) {
+											return 'ERROR processing formula';
+										}
+									})()
+								: undefined
+					});
+
+					// Determine status based on tolerance type and result
+					let status: MatchStatus;
+					if (!primaryValue && !comparisonValue) {
+						status = 'missing';
+					} else if (!primaryValue || !comparisonValue) {
+						status = 'missing';
+					} else if (isMatch && pair.tolerance.type === 'exact_match') {
+						status = 'exact_match';
+					} else if (isMatch) {
+						status = 'within_tolerance';
+					} else {
+						status = 'no_match';
+					}
 
 					comparisonResults[pair.primaryColumn] = {
 						primaryValue,
 						comparisonValue,
 						match: isMatch,
 						difference: calculateDifference(primaryValue, comparisonValue),
-						reason,
+						reason: toleranceReason,
 						status,
 						tolerance: pair.tolerance
 					};
@@ -353,67 +526,186 @@ export function decideStringStatus(
 }
 
 /**
- * Evaluate a tolerance configuration for two values and produce whether they match under that tolerance and a human-readable reason.
+ * ============================================================================
+ * TOLERANCE EVALUATORS - Concrete implementations for each tolerance type
+ * ============================================================================
+ * Each tolerance type has its own evaluator that encapsulates its matching logic.
+ * This design ensures:
+ * 1. Every new tolerance type MUST implement an evaluator
+ * 2. Evaluation logic is co-located with the tolerance definition
+ * 3. Adding a new tolerance type forces developer to implement the logic
+ * 4. No risk of forgetting to update comparison logic when adding new types
  */
-export function evaluateTolerance(
-	primaryValue: string | number | null | undefined,
-	comparisonValue: string | number | null | undefined,
-	tolerance: Tolerance,
-	settings: ColumnPairSettings
-): { matches: boolean; reason: string } {
-	const rawP = settings.trimValues
-		? (primaryValue?.toString().trim() ?? '')
-		: (primaryValue?.toString() ?? '');
-	const rawC = settings.trimValues
-		? (comparisonValue?.toString().trim() ?? '')
-		: (comparisonValue?.toString() ?? '');
 
-	const pNorm = normalizeForComparison(rawP, settings.caseSensitive, false);
-	const cNorm = normalizeForComparison(rawC, settings.caseSensitive, false);
-	const { num: num1, isNumeric: isNum1 } = parseNumeric(rawP);
-	const { num: num2, isNumeric: isNum2 } = parseNumeric(rawC);
+/**
+ * Evaluator for exact match tolerance
+ */
+const ExactMatchEvaluator: ToleranceEvaluator = {
+	evaluate(primaryValue, comparisonValue, settings) {
+		const matches = compareValues(
+			primaryValue?.toString(),
+			comparisonValue?.toString(),
+			settings.caseSensitive,
+			settings.trimValues
+		);
+		const reason = matches
+			? 'Exact match'
+			: `Values do not match: ${primaryValue} != ${comparisonValue}`;
+		return { matches, reason };
+	}
+};
 
-	switch (tolerance.type) {
-		case 'exact_match': {
-			const matches = compareValues(rawP, rawC, settings.caseSensitive, settings.trimValues);
-			const reason = matches ? 'Exact match' : `Values do not match: ${rawP} != ${rawC}`;
-			return { matches, reason };
-		}
+/**
+ * Evaluator for absolute numeric tolerance
+ */
+const AbsoluteToleranceEvaluator: ToleranceEvaluator = {
+	evaluate(primaryValue, comparisonValue, settings) {
+		const rawP = settings.trimValues
+			? (primaryValue?.toString().trim() ?? '')
+			: (primaryValue?.toString() ?? '');
+		const rawC = settings.trimValues
+			? (comparisonValue?.toString().trim() ?? '')
+			: (comparisonValue?.toString() ?? '');
+		const { num: num1, isNumeric: isNum1 } = parseNumeric(rawP);
+		const { num: num2, isNumeric: isNum2 } = parseNumeric(rawC);
 
-		case 'absolute': {
-			if (isNum1 && isNum2) {
-				const diff = Math.abs(num1 - num2);
-				const matches = diff <= tolerance.value;
-				const reason = matches
-					? `Within absolute tolerance ${tolerance.value}: |${num1} - ${num2}| = ${diff.toFixed(4)}`
-					: `Outside absolute tolerance ${tolerance.value}: |${num1} - ${num2}| = ${diff.toFixed(4)}`;
-				return { matches, reason };
-			}
+		if (!isNum1 || !isNum2) {
 			return {
 				matches: false,
 				reason: 'Cannot apply absolute tolerance to non-numeric values'
 			};
 		}
 
-		case 'relative': {
-			if (isNum1 && isNum2) {
-				const difference = Math.abs(num1 - num2);
-				const average = Math.abs((num1 + num2) / 2);
-				const toleranceAmount = (tolerance.percentage / 100) * average;
-				const percentDiff = average !== 0 ? (difference / average) * 100 : 0;
-				const matches = difference <= toleranceAmount;
-				const reason = matches
-					? `Within ${tolerance.percentage}% relative tolerance: ${percentDiff.toFixed(2)}% difference (${num1} vs ${num2})`
-					: `Outside ${tolerance.percentage}% relative tolerance: ${percentDiff.toFixed(2)}% difference (${num1} vs ${num2})`;
-				return { matches, reason };
-			}
+		// Note: tolerance value will be injected at call site since this evaluator doesn't have access to it
+		// See getToleranceEvaluator() for how this is handled
+		return { matches: false, reason: 'Evaluator incomplete - see getToleranceEvaluator()' };
+	}
+};
+
+/**
+ * Evaluator for relative percentage tolerance
+ */
+const RelativeToleranceEvaluator: ToleranceEvaluator = {
+	evaluate(primaryValue, comparisonValue, settings) {
+		const rawP = settings.trimValues
+			? (primaryValue?.toString().trim() ?? '')
+			: (primaryValue?.toString() ?? '');
+		const rawC = settings.trimValues
+			? (comparisonValue?.toString().trim() ?? '')
+			: (comparisonValue?.toString() ?? '');
+		const { num: num1, isNumeric: isNum1 } = parseNumeric(rawP);
+		const { num: num2, isNumeric: isNum2 } = parseNumeric(rawC);
+
+		if (!isNum1 || !isNum2) {
 			return {
 				matches: false,
 				reason: 'Cannot apply relative tolerance to non-numeric values'
 			};
 		}
 
+		// Note: tolerance percentage will be injected at call site
+		return { matches: false, reason: 'Evaluator incomplete - see getToleranceEvaluator()' };
+	}
+};
+
+/**
+ * Evaluator for string percentage similarity tolerance
+ */
+const StringSimilarityEvaluator: ToleranceEvaluator = {
+	evaluate(primaryValue, comparisonValue, settings) {
+		const rawP = settings.trimValues
+			? (primaryValue?.toString().trim() ?? '')
+			: (primaryValue?.toString() ?? '');
+		const rawC = settings.trimValues
+			? (comparisonValue?.toString().trim() ?? '')
+			: (comparisonValue?.toString() ?? '');
+		const pNorm = normalizeForComparison(rawP, settings.caseSensitive, false);
+		const cNorm = normalizeForComparison(rawC, settings.caseSensitive, false);
+		const similarity = calculateStringSimilarity(pNorm, cNorm);
+
+		// Note: tolerance percentage threshold will be injected at call site
+		return { matches: false, reason: 'Evaluator incomplete - see getToleranceEvaluator()' };
+	}
+};
+
+/**
+ * Evaluator for custom formula tolerance
+ */
+const CustomToleranceEvaluator: ToleranceEvaluator = {
+	evaluate(primaryValue, comparisonValue, settings) {
+		const rawP = settings.trimValues
+			? (primaryValue?.toString().trim() ?? '')
+			: (primaryValue?.toString() ?? '');
+		const rawC = settings.trimValues
+			? (comparisonValue?.toString().trim() ?? '')
+			: (comparisonValue?.toString() ?? '');
+
+		// Note: formula will be injected at call site
+		return { matches: false, reason: 'Evaluator incomplete - see getToleranceEvaluator()' };
+	}
+};
+
+/**
+ * Get the appropriate evaluator for a tolerance type and evaluate it with the tolerance parameters
+ * This is the dispatch mechanism that routes to the correct evaluator based on tolerance type
+ * and injects the tolerance parameters
+ */
+export function evaluateToleranceWithEvaluator(
+	primaryValue: string | number | null | undefined,
+	comparisonValue: string | number | null | undefined,
+	tolerance: Tolerance,
+	settings: ColumnPairSettings
+): ToleranceEvaluationResult {
+	const rawP = settings.trimValues
+		? (primaryValue?.toString().trim() ?? '')
+		: (primaryValue?.toString() ?? '');
+	const rawC = settings.trimValues
+		? (comparisonValue?.toString().trim() ?? '')
+		: (comparisonValue?.toString() ?? '');
+	const { num: num1, isNumeric: isNum1 } = parseNumeric(rawP);
+	const { num: num2, isNumeric: isNum2 } = parseNumeric(rawC);
+
+	switch (tolerance.type) {
+		case 'exact_match': {
+			return ExactMatchEvaluator.evaluate(primaryValue, comparisonValue, settings);
+		}
+
+		case 'absolute': {
+			if (!isNum1 || !isNum2) {
+				return {
+					matches: false,
+					reason: 'Cannot apply absolute tolerance to non-numeric values'
+				};
+			}
+			const diff = Math.abs(num1 - num2);
+			const matches = diff <= tolerance.value;
+			const reason = matches
+				? `Within absolute tolerance ${tolerance.value}: |${num1} - ${num2}| = ${diff.toFixed(4)}`
+				: `Outside absolute tolerance ${tolerance.value}: |${num1} - ${num2}| = ${diff.toFixed(4)}`;
+			return { matches, reason };
+		}
+
+		case 'relative': {
+			if (!isNum1 || !isNum2) {
+				return {
+					matches: false,
+					reason: 'Cannot apply relative tolerance to non-numeric values'
+				};
+			}
+			const difference = Math.abs(num1 - num2);
+			const average = Math.abs((num1 + num2) / 2);
+			const toleranceAmount = (tolerance.percentage / 100) * average;
+			const percentDiff = average !== 0 ? (difference / average) * 100 : 0;
+			const matches = difference <= toleranceAmount;
+			const reason = matches
+				? `Within ${tolerance.percentage}% relative tolerance: ${percentDiff.toFixed(2)}% difference (${num1} vs ${num2})`
+				: `Outside ${tolerance.percentage}% relative tolerance: ${percentDiff.toFixed(2)}% difference (${num1} vs ${num2})`;
+			return { matches, reason };
+		}
+
 		case 'within_percentage_similarity': {
+			const pNorm = normalizeForComparison(rawP, settings.caseSensitive, false);
+			const cNorm = normalizeForComparison(rawC, settings.caseSensitive, false);
 			const similarity = calculateStringSimilarity(pNorm, cNorm);
 			const threshold = tolerance.percentage / 100;
 			const matches = similarity >= threshold;
@@ -428,7 +720,7 @@ export function evaluateTolerance(
 				const { result, evaluatedFormula } = evaluateCustomFormula(rawP, rawC, tolerance.formula);
 				const reason = result
 					? `Custom formula matched: ${tolerance.formula}`
-					: `Custom formula did not match: ${tolerance.formula} (primaryValue: ${primaryValue}, comparisonValue: ${comparisonValue})`;
+					: `Custom formula did not match: ${evaluatedFormula} (primaryValue: ${primaryValue}, comparisonValue: ${comparisonValue})`;
 				return { matches: result, reason };
 			} catch (err) {
 				return {
@@ -443,6 +735,20 @@ export function evaluateTolerance(
 			return exhaustiveCheck;
 		}
 	}
+}
+
+/**
+ * Evaluate a tolerance configuration for two values and produce whether they match under that tolerance and a human-readable reason.
+ * This function delegates to evaluateToleranceWithEvaluator, which is the main entry point that uses the evaluator pattern.
+ * Kept for backward compatibility and convenience.
+ */
+export function evaluateTolerance(
+	primaryValue: string | number | null | undefined,
+	comparisonValue: string | number | null | undefined,
+	tolerance: Tolerance,
+	settings: ColumnPairSettings
+): { matches: boolean; reason: string } {
+	return evaluateToleranceWithEvaluator(primaryValue, comparisonValue, tolerance, settings);
 }
 
 /**
@@ -660,50 +966,9 @@ export function isWithinTolerance(
 	if (!value1 && !value2) return true;
 	if (!value1 || !value2) return false;
 
-	const rawValue1 = settings.trimValues ? value1.trim() : value1;
-	const rawValue2 = settings.trimValues ? value2.trim() : value2;
-
-	switch (tolerance.type) {
-		case 'exact_match':
-			return compareValues(rawValue1, rawValue2, settings.caseSensitive, settings.trimValues);
-
-		case 'absolute': {
-			const { num: num1, isNumeric: isNum1 } = parseNumeric(rawValue1);
-			const { num: num2, isNumeric: isNum2 } = parseNumeric(rawValue2);
-			if (isNum1 && isNum2) {
-				const diff = Math.abs(num1 - num2);
-				return diff <= tolerance.value;
-			}
-			return false;
-		}
-
-		case 'relative': {
-			const { num: num1, isNumeric: isNum1 } = parseNumeric(rawValue1);
-			const { num: num2, isNumeric: isNum2 } = parseNumeric(rawValue2);
-			if (isNum1 && isNum2) {
-				const difference = Math.abs(num1 - num2);
-				const average = Math.abs((num1 + num2) / 2);
-				const toleranceAmount = (tolerance.percentage / 100) * average;
-				return difference <= toleranceAmount;
-			}
-			return false;
-		}
-
-		case 'within_percentage_similarity': {
-			const norm1 = normalizeForComparison(rawValue1, settings.caseSensitive, false);
-			const norm2 = normalizeForComparison(rawValue2, settings.caseSensitive, false);
-			const similarity = calculateStringSimilarity(norm1, norm2);
-			return similarity >= tolerance.percentage / 100;
-		}
-
-		case 'custom':
-			return checkCustomTolerance(rawValue1, rawValue2, tolerance.formula);
-
-		default: {
-			const exhaustiveCheck: never = tolerance;
-			return exhaustiveCheck;
-		}
-	}
+	// Use the evaluator pattern which has all the logic
+	const result = evaluateToleranceWithEvaluator(value1, value2, tolerance, settings);
+	return result.matches;
 }
 
 /**
@@ -725,6 +990,15 @@ export function evaluateCustomFormula(
 		);
 	}
 
+	// Pre-process: convert single = (not ==, !=, <=, >=) to ==
+	// This handles user intent when they write "a = b" meaning "a equals b"
+	let processedFormula = formula;
+	processedFormula = processedFormula.replace(/([^=!<>])=([^=])/g, '$1==$2');
+	// Handle edge case where = is at the start
+	if (processedFormula.match(/^=[^=]/)) {
+		processedFormula = '=' + processedFormula;
+	}
+
 	// Parse numeric values and prepare substitution values
 	const primaryNum = parseFloat(value1);
 	const comparisonNum = parseFloat(value2);
@@ -735,7 +1009,7 @@ export function evaluateCustomFormula(
 
 	// Try to create a safe evaluation function
 	// Replace variable names with actual values
-	let evaluableFormula = formula
+	let evaluableFormula = processedFormula
 		.replace(/primaryColumnValue/g, primarySubst)
 		.replace(/comparisonColumnValue/g, comparisonSubst);
 

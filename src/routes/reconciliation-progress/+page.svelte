@@ -3,6 +3,11 @@
 	import { goto } from '$app/navigation';
 	import { reconciliationStore } from '$lib/stores/reconciliationStore';
 	import type { ColumnPair } from '$lib/utils/reconciliation';
+	import {
+		reconcileData,
+		clearReconciliationLogs,
+		getReconciliationLogs
+	} from '$lib/utils/reconciliation';
 
 	// Reconciliation state
 	let primaryFileName = $state('');
@@ -18,7 +23,7 @@
 	let estimatedTimeLeft = $state('');
 	let startTime = $state(0);
 	let lastLogTimestamp = $state(0);
-	let stuckDetectionTimeout: number | null = null;
+	let stuckDetectionTimeout: number;
 	let hasFailures = $state(false); // Track if there are any failures
 	let failureCount = $state(0); // Count of failures
 
@@ -50,6 +55,10 @@
 	});
 	let comparisonPairs = $state<ColumnPair[]>([]);
 
+	// File metadata for getting column display names
+	let primaryFileData: any = null;
+	let comparisonFileData: any = null;
+
 	// For displaying log entries
 	type MatchLog = {
 		timestamp: number;
@@ -63,6 +72,10 @@
 			comparisonFileColumn: string;
 			primaryValue: string;
 			comparisonValue: string;
+			reason?: string;
+			tolerance?: any;
+			match?: boolean;
+			status?: string;
 		}[];
 	};
 
@@ -115,6 +128,10 @@
 			// Set file names
 			primaryFileName = state.primaryFileData.fileName || 'Primary File';
 			comparisonFileName = state.comparisonFileData.fileName || 'Comparison File';
+
+			// Store file data for metadata access
+			primaryFileData = state.primaryFileData;
+			comparisonFileData = state.comparisonFileData;
 
 			// Set total rows (from primary file)
 			totalRows = state.primaryFileData.rows.length;
@@ -239,6 +256,9 @@
 		startTime = Date.now();
 		lastLogTimestamp = startTime;
 
+		// Clear any existing logs
+		clearReconciliationLogs();
+
 		// Start stuck detection
 		if (stuckDetectionTimeout) {
 			clearTimeout(stuckDetectionTimeout);
@@ -275,6 +295,22 @@
 			return;
 		}
 
+		// Get the actual store state with all data
+		let storeState: any = null;
+		const unsubscribe = reconciliationStore.subscribe((state) => {
+			storeState = state;
+		});
+		unsubscribe();
+
+		if (
+			!storeState.primaryFileData ||
+			!storeState.comparisonFileData ||
+			!storeState.reconciliationConfig
+		) {
+			console.error('Missing store data for reconciliation');
+			return;
+		}
+
 		// Add a starting log entry
 		matchingLogs = [
 			{
@@ -296,286 +332,158 @@
 		];
 		lastLogTimestamp = Date.now();
 
-		// Use web workers to parallelize the reconciliation process
-		const CHUNK_SIZE = 50; // Number of rows per chunk
-		const MAX_WORKERS = Math.min(navigator.hardwareConcurrency || 4, 8); // Maximum number of workers
+		// Perform the actual reconciliation using the real reconciliation engine
+		try {
+			console.log('Starting reconciliation with tolerance evaluator...');
+			const result = reconcileData(
+				storeState.primaryFileData,
+				storeState.comparisonFileData,
+				storeState.reconciliationConfig
+			);
 
-		// Creating a simplified processing function that we'll run directly
-		function processChunk(chunk, startIndex) {
-			const results = [];
-			const logs = [];
+			// Get the debug logs that were generated during reconciliation
+			const debugLogs = getReconciliationLogs();
+			console.log('Reconciliation complete! Generated', debugLogs.length, 'debug logs');
 
-			// Process each row in the chunk
-			chunk.forEach((primaryRow, index) => {
-				const currentIndex = startIndex + index;
-				if (!primaryIdPair.primaryColumn) {
-					console.error('Primary ID column is not defined');
-					return;
-				}
+			// Convert the reconciliation results into matchingLogs format
+			const newLogs = result.matches.map((match, index) => ({
+				timestamp: Date.now() + index,
+				primaryId: match.idValues.primary,
+				comparisonId: match.idValues.comparison,
+				matched: match.matchScore === 100,
+				reasons: Object.entries(match.comparisonResults).map(([column, compResult]) => {
+					// Find the column pair configuration for this column
+					const pair = comparisonPairs.find((p) => p.primaryColumn === column);
 
-				const primaryId = primaryRow[primaryIdPair.primaryColumn];
+					// Get display names from file metadata
+					const primaryColumnName =
+						primaryFileData?.columns?.find((c: any) => c.name === column)?.name || column;
+					const comparisonColumnName =
+						comparisonFileData?.columns?.find((c: any) => c.name === pair?.comparisonColumn)
+							?.name ||
+						pair?.comparisonColumn ||
+						column;
 
-				// Try to find a matching comparison row
-				const comparisonRow = comparisonMap.get(primaryId);
-				const idMatched = !!comparisonRow;
+					return {
+						primaryFileRow: `Match ${index + 1}`,
+						comparisonFileRow: `Record ${match.idValues.comparison}`,
+						primaryFileColumn: primaryColumnName,
+						comparisonFileColumn: comparisonColumnName,
+						primaryValue: String(compResult.primaryValue),
+						comparisonValue: String(compResult.comparisonValue),
+						reason: compResult.reason,
+						tolerance: pair?.tolerance,
+						match: compResult.match,
+						status: compResult.status
+					};
+				})
+			}));
 
-				// Check for differences in comparison columns
-				const reasons = [];
+			// Update logs and results
+			matchingLogs = [...newLogs.slice(0, 100), ...matchingLogs];
+			processedRows = result.summary.totalPrimaryRows;
+			failureCount = result.summary.unmatchedPrimaryRows + result.summary.unmatchedComparisonRows;
+			hasFailures = failureCount > 0;
 
-				if (!idMatched) {
-					// No matching ID found in comparison file
-					reasons.push({
-						primaryFileRow: `Row ${currentIndex + 1}`,
-						comparisonFileRow: '(Not found)',
-						primaryFileColumn: primaryIdPair.primaryColumn,
-						comparisonFileColumn: primaryIdPair.comparisonColumn,
-						primaryValue: primaryId || '(empty)',
-						comparisonValue: '(No matching record found)'
-					});
-				} else if (comparisonPairs.length > 0) {
-					// Check each mapped column pair for differences
-					comparisonPairs.forEach((pair) => {
-						if (pair.primaryColumn && pair.comparisonColumn) {
-							const primaryValue = primaryRow[pair.primaryColumn];
-							const comparisonValue = comparisonRow[pair.comparisonColumn];
+			// Store results for later use
+			reconciliationResults = result.matches.map((match) => ({
+				row: match.primaryRow,
+				matched: match.matchScore === 100,
+				reasons: Object.entries(match.comparisonResults).map(([column, compResult]) => {
+					// Find the column pair configuration for this column
+					const pair = comparisonPairs.find((p) => p.primaryColumn === column);
 
-							// Normalize values for comparison
-							const normalizedPrimaryValue = (primaryValue || '').toString().trim().toLowerCase();
-							const normalizedComparisonValue = (comparisonValue || '')
-								.toString()
-								.trim()
-								.toLowerCase();
+					// Get display names from file metadata
+					const primaryColumnName =
+						primaryFileData?.columns?.find((c: any) => c.name === column)?.name || column;
+					const comparisonColumnName =
+						comparisonFileData?.columns?.find((c: any) => c.name === pair?.comparisonColumn)
+							?.name ||
+						pair?.comparisonColumn ||
+						column;
 
-							// If values are different, add a reason
-							if (normalizedPrimaryValue !== normalizedComparisonValue) {
-								reasons.push({
-									primaryFileRow: `Row ${currentIndex + 1}`,
-									comparisonFileRow: `Row ${Array.from(comparisonMap.keys()).findIndex((id) => id === primaryId) + 1}`,
-									primaryFileColumn: pair.primaryColumn,
-									comparisonFileColumn: pair.comparisonColumn,
-									primaryValue: primaryValue || '(empty)',
-									comparisonValue: comparisonValue || '(empty)'
-								});
-							}
+					return {
+						primaryFileColumn: primaryColumnName,
+						comparisonFileColumn: comparisonColumnName,
+						primaryValue: compResult.primaryValue,
+						comparisonValue: compResult.comparisonValue,
+						reason: compResult.reason,
+						tolerance: pair?.tolerance,
+						match: compResult.match,
+						status: compResult.status
+					};
+				})
+			}));
+
+			// Finish reconciliation
+			finishReconciliation();
+		} catch (error) {
+			console.error('Reconciliation error:', error);
+			matchingLogs = [
+				{
+					timestamp: Date.now(),
+					primaryId: 'ERROR',
+					comparisonId: 'ERROR',
+					matched: false,
+					reasons: [
+						{
+							primaryFileRow: 'Error Log',
+							comparisonFileRow: 'Error Log',
+							primaryFileColumn: 'Reconciliation Error',
+							comparisonFileColumn: 'Details',
+							primaryValue: error instanceof Error ? error.message : String(error),
+							comparisonValue: 'See browser console for more details'
 						}
-					});
+					]
 				}
+			];
+			finishReconciliation();
+		}
+	}
 
-				// Save result
-				results.push({
-					row: primaryRow,
-					matched: idMatched && reasons.length === 0,
-					reasons
-				});
+	// Function to complete reconciliation
+	function finishReconciliation() {
+		isReconciliationComplete = true;
 
-				// Only log interesting entries (with differences, or every 10th entry)
-				const shouldLog = reasons.length > 0 || currentIndex % 10 === 0;
-
-				if (shouldLog) {
-					logs.push({
-						rowIndex: currentIndex,
-						primaryId: primaryId || `Row ${currentIndex + 1}`,
-						comparisonId: idMatched
-							? comparisonRow[primaryIdPair.comparisonColumn] || '(ID found but empty)'
-							: '(Not found)',
-						matched: idMatched && reasons.length === 0,
-						reasons
-					});
-				}
-			});
-
-			return { results, logs };
+		// Check if there are any failures in the results and count them
+		hasFailures = false;
+		failureCount = 0;
+		for (const result of reconciliationResults) {
+			if (result && !result.matched) {
+				hasFailures = true;
+				failureCount++;
+			}
 		}
 
-		// Divide data into chunks
-		chunks = [];
-		for (let i = 0; i < primaryRows.length; i += CHUNK_SIZE) {
-			chunks.push(primaryRows.slice(i, i + CHUNK_SIZE));
-		}
-
-		// Reset progress tracking
-		completedChunks = 0;
-		// Reset the results array with the correct size
-		reconciliationResults = new Array(primaryRows.length);
-
-		// Log startup information
-		const startupLog = {
+		// Add completion log
+		const completionLog = {
 			timestamp: Date.now() + Math.random(),
-			primaryId: 'SYSTEM',
-			comparisonId: 'INFO',
+			primaryId: 'COMPLETE',
+			comparisonId: 'COMPLETE',
 			matched: true,
 			reasons: [
 				{
-					primaryFileRow: 'System Log',
-					comparisonFileRow: 'Strategy Log',
-					primaryFileColumn: 'Batch Processing',
-					comparisonFileColumn: 'Configuration',
-					primaryValue: `Using chunk size of ${CHUNK_SIZE}`,
-					comparisonValue: `${chunks.length} chunks to process`
+					primaryFileRow: 'Complete Log',
+					comparisonFileRow: 'Complete Log',
+					primaryFileColumn: 'Reconciliation Complete',
+					comparisonFileColumn: 'Summary',
+					primaryValue: `Processed ${totalRows} rows in ${formatTime((Date.now() - startTime) / 1000)}`,
+					comparisonValue: hasFailures
+						? 'Some mismatches found. You can download the results or analyze failures.'
+						: 'All records match! Click "Download Results" to download the reconciled file'
 				}
 			]
 		};
 
 		// Update reactively
-		matchingLogs = [startupLog];
+		matchingLogs = [completionLog, ...matchingLogs];
 		lastLogTimestamp = Date.now();
-		console.log('Added startup log, matchingLogs length:', matchingLogs.length);
+		console.log('Added completion log, hasFailures:', hasFailures);
 
-		// Process chunks in batches
-		const processNextChunks = () => {
-			// Get the current chunk index
-			const chunkIndex = completedChunks;
-			if (chunkIndex >= chunks.length) {
-				// All chunks are processed
-				finishReconciliation();
-				return;
-			}
-
-			const startIndex = chunkIndex * CHUNK_SIZE;
-			const chunk = chunks[chunkIndex];
-
-			// Process the chunk
-			const { results, logs } = processChunk(chunk, startIndex);
-
-			// Update UI with logs
-			const newLogs = logs.map((log, i) => ({
-				timestamp: Date.now() + i + Math.random(), // Ensure uniqueness with offset + random
-				primaryId: log.primaryId,
-				comparisonId: log.comparisonId,
-				matched: log.matched,
-				reasons: log.reasons
-			}));
-
-			// Update the logs reactively
-			if (newLogs.length > 0) {
-				// timestamps are already unique from the mapping above
-				matchingLogs = [...newLogs, ...matchingLogs];
-
-				// Limit the log to the most recent 100 entries
-				if (matchingLogs.length > 100) {
-					matchingLogs = matchingLogs.slice(0, 100);
-				}
-				console.log('Updated logs:', matchingLogs.length, 'entries');
-			}
-
-			// Store results
-			results.forEach((result, i) => {
-				reconciliationResults[startIndex + i] = result;
-			});
-
-			// Update progress (using the global completedChunks state variable)
-			completedChunks++;
-			processedRows = Math.min(completedChunks * CHUNK_SIZE, totalRows);
-
-			// Calculate matching speed
-			const elapsedSeconds = (Date.now() - startTime) / 1000;
-			// Ensure we don't divide by zero or very small numbers
-			if (elapsedSeconds > 0.1) {
-				matchingSpeed = Math.round(processedRows / elapsedSeconds);
-
-				// Estimate time left
-				const remainingRows = totalRows - processedRows;
-				// Ensure we have a reasonable speed before calculating
-				if (matchingSpeed > 0) {
-					const secondsLeft = remainingRows / matchingSpeed;
-					estimatedTimeLeft = formatTime(secondsLeft);
-				} else {
-					// If speed is zero but we've processed some rows, show a message
-					estimatedTimeLeft =
-						processedRows > 0
-							? 'calculating based on current progress...'
-							: 'starting reconciliation...';
-				}
-			} else {
-				// In the first moment, just show a starting message
-				estimatedTimeLeft = 'starting reconciliation...';
-			}
-
-			// Add progress log if needed
-			if (Date.now() - lastLogTimestamp > 1000) {
-				const progressLog = {
-					timestamp: Date.now() + Math.random(),
-					primaryId: 'PROGRESS',
-					comparisonId: 'UPDATE',
-					matched: true,
-					reasons: [
-						{
-							primaryFileRow: 'Progress Log',
-							comparisonFileRow: 'Update Log',
-							primaryFileColumn: 'Processing',
-							comparisonFileColumn: 'Status',
-							primaryValue: `${processedRows} of ${totalRows} rows (Chunk ${completedChunks}/${chunks.length})`,
-							comparisonValue: `${progressPercentage}% complete`
-						}
-					]
-				};
-
-				// Update reactively
-				matchingLogs = [progressLog, ...matchingLogs];
-				lastLogTimestamp = Date.now();
-				console.log('Added progress log');
-			}
-
-			// Process the next chunk after a short delay
-			setTimeout(processNextChunks, 0);
-		};
-
-		// Function to complete reconciliation
-		function finishReconciliation() {
-			isReconciliationComplete = true;
-
-			// Check if there are any failures in the results and count them
-			hasFailures = false;
-			failureCount = 0;
-			for (const result of reconciliationResults) {
-				if (result && !result.matched) {
-					hasFailures = true;
-					failureCount++;
-				}
-			}
-
-			// Add completion log
-			const completionLog = {
-				timestamp: Date.now() + Math.random(),
-				primaryId: 'COMPLETE',
-				comparisonId: 'COMPLETE',
-				matched: true,
-				reasons: [
-					{
-						primaryFileRow: 'Complete Log',
-						comparisonFileRow: 'Complete Log',
-						primaryFileColumn: 'Reconciliation Complete',
-						comparisonFileColumn: 'Summary',
-						primaryValue: `Processed ${totalRows} rows in ${formatTime((Date.now() - startTime) / 1000)}`,
-						comparisonValue: hasFailures
-							? 'Some mismatches found. You can download the results or analyze failures.'
-							: 'All records match! Click "Download Results" to download the reconciled file'
-					}
-				]
-			};
-
-			// Update reactively
-			matchingLogs = [completionLog, ...matchingLogs];
-			lastLogTimestamp = Date.now();
-			console.log('Added completion log, hasFailures:', hasFailures);
-
-			// Clear stuck detection timeout
-			if (stuckDetectionTimeout) {
-				clearTimeout(stuckDetectionTimeout);
-			}
+		// Clear stuck detection timeout
+		if (stuckDetectionTimeout) {
+			clearTimeout(stuckDetectionTimeout);
 		}
-
-		// Start processing chunks
-		processNextChunks();
-
-		// For backward compatibility with the rest of the code, keep a simulation interval
-		// that just checks if we're done
-		simulationInterval = setInterval(() => {
-			// This is just a fallback check - the actual processing is done by workers
-			if (isReconciliationComplete) {
-				clearInterval(simulationInterval);
-			}
-		}, 250); // Check every 250ms
 	}
 
 	// Get the count of failures in the reconciliation results
@@ -1093,20 +1001,44 @@
 
 			// Format the reason text
 			let reasonText = matched
-				? `Primary File (${result.reasons && result.reasons[0] ? result.reasons[0].primaryFileRow : 'Row'}) and Comparison File match perfectly for all mapped columns`
+				? `Primary File and Comparison File match perfectly for all mapped columns`
 				: '';
 			if (!matched) {
 				if (reasons.length === 0) {
 					reasonText = 'Unknown reason';
 				} else if (reasons[0].comparisonValue === '(No matching record found)') {
-					reasonText = `Primary File (${reasons[0].primaryFileRow}) ID column "${reasons[0].primaryFileColumn}" with value "${reasons[0].primaryValue}" has no matching record in comparison file`;
+					reasonText = `No matching record found in comparison file for ID value "${reasons[0].primaryValue}"`;
 				} else {
-					// Create a detailed formatted string of all differences
+					// Create detailed formatted reasons using all available information
 					reasonText = reasons
-						.map(
-							(reason) =>
-								`Primary File (${reason.primaryFileRow}) column "${reason.primaryFileColumn}" value "${reason.primaryValue}" ≠ Comparison File (${reason.comparisonFileRow}) column "${reason.comparisonFileColumn}" value "${reason.comparisonValue}"`
-						)
+						.map((reason) => {
+							let msg = `Column "${reason.primaryFileColumn}": Primary value "${reason.primaryValue}"`;
+
+							// Add comparison value
+							msg += `, Comparison value "${reason.comparisonValue}"`;
+
+							// Add tolerance information if available
+							if (reason.tolerance) {
+								if (reason.tolerance.type === 'exact_match') {
+									msg += ` [Expected: exact match]`;
+								} else if (reason.tolerance.type === 'absolute') {
+									msg += ` [Expected: within ±${reason.tolerance.value}]`;
+								} else if (reason.tolerance.type === 'relative') {
+									msg += ` [Expected: within ${reason.tolerance.percentage}%]`;
+								} else if (reason.tolerance.type === 'custom') {
+									msg += ` [Formula: ${reason.tolerance.formula}]`;
+								} else if (reason.tolerance.type === 'within_percentage_similarity') {
+									msg += ` [Expected: ${reason.tolerance.percentage}% similar]`;
+								}
+							}
+
+							// Add the evaluation reason from the tolerance evaluator
+							if (reason.reason) {
+								msg += ` — ${reason.reason}`;
+							}
+
+							return msg;
+						})
 						.join('; ');
 				}
 			}
@@ -1506,6 +1438,43 @@
 																	<span class="text-xs text-gray-400">Comparison Value:</span>
 																	<span class="ml-1 text-sm">{reason.comparisonValue}</span>
 																</div>
+																{#if reason.tolerance}
+																	<div>
+																		<span class="text-xs text-gray-400">Tolerance Type:</span>
+																		<span class="ml-1 text-sm">{reason.tolerance.type}</span>
+																	</div>
+																	{#if reason.tolerance.type === 'custom' && reason.tolerance.formula}
+																		<div>
+																			<span class="text-xs text-gray-400">Formula:</span>
+																			<span class="ml-1 text-sm">{reason.tolerance.formula}</span>
+																		</div>
+																	{:else if reason.tolerance.type === 'absolute' && reason.tolerance.value}
+																		<div>
+																			<span class="text-xs text-gray-400">Threshold:</span>
+																			<span class="ml-1 text-sm">±{reason.tolerance.value}</span>
+																		</div>
+																	{:else if reason.tolerance.type === 'relative' && reason.tolerance.percentage}
+																		<div>
+																			<span class="text-xs text-gray-400">Tolerance:</span>
+																			<span class="ml-1 text-sm"
+																				>{reason.tolerance.percentage}%</span
+																			>
+																		</div>
+																	{:else if reason.tolerance.type === 'within_percentage_similarity' && reason.tolerance.percentage}
+																		<div>
+																			<span class="text-xs text-gray-400">Similarity:</span>
+																			<span class="ml-1 text-sm"
+																				>{reason.tolerance.percentage}%</span
+																			>
+																		</div>
+																	{/if}
+																{/if}
+																{#if reason.reason}
+																	<div>
+																		<span class="text-xs text-gray-400">Evaluation Result:</span>
+																		<span class="ml-1 text-sm">{reason.reason}</span>
+																	</div>
+																{/if}
 															</div>
 														</div>
 													{/each}
@@ -1647,6 +1616,43 @@
 																		<span class="text-xs text-gray-400">Comparison Value:</span>
 																		<span class="ml-1 text-sm">{reason.comparisonValue}</span>
 																	</div>
+																	{#if reason.tolerance}
+																		<div>
+																			<span class="text-xs text-gray-400">Tolerance Type:</span>
+																			<span class="ml-1 text-sm">{reason.tolerance.type}</span>
+																		</div>
+																		{#if reason.tolerance.type === 'custom' && reason.tolerance.formula}
+																			<div>
+																				<span class="text-xs text-gray-400">Formula:</span>
+																				<span class="ml-1 text-sm">{reason.tolerance.formula}</span>
+																			</div>
+																		{:else if reason.tolerance.type === 'absolute' && reason.tolerance.value}
+																			<div>
+																				<span class="text-xs text-gray-400">Threshold:</span>
+																				<span class="ml-1 text-sm">±{reason.tolerance.value}</span>
+																			</div>
+																		{:else if reason.tolerance.type === 'relative' && reason.tolerance.percentage}
+																			<div>
+																				<span class="text-xs text-gray-400">Tolerance:</span>
+																				<span class="ml-1 text-sm"
+																					>{reason.tolerance.percentage}%</span
+																				>
+																			</div>
+																		{:else if reason.tolerance.type === 'within_percentage_similarity' && reason.tolerance.percentage}
+																			<div>
+																				<span class="text-xs text-gray-400">Similarity:</span>
+																				<span class="ml-1 text-sm"
+																					>{reason.tolerance.percentage}%</span
+																				>
+																			</div>
+																		{/if}
+																	{/if}
+																	{#if reason.reason}
+																		<div>
+																			<span class="text-xs text-gray-400">Evaluation Result:</span>
+																			<span class="ml-1 text-sm">{reason.reason}</span>
+																		</div>
+																	{/if}
 																</div>
 															</div>
 														{/each}
