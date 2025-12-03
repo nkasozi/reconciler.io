@@ -696,7 +696,7 @@
 															} else if (value === 'within_range_percentage') {
 																setNumericPercentageTolerance(index, 0.5);
 															} else if (value === 'within_percentage_similarity') {
-																setStringSimilarityTolerance(index, 0.9);
+																setStringSimilarityTolerance(index, 90);
 															} else if (value === 'custom') {
 																setCustomTolerance(index, '');
 															}
@@ -736,8 +736,10 @@
 															<div>
 																<input
 																	type="number"
-																	step="0.01"
-																	placeholder="0.9"
+																	step="1"
+																	min="0"
+																	max="100"
+																	placeholder="90"
 																	value={pair.tolerance.percentage || ''}
 																	onchange={(e) => setStringSimilarityTolerance(index, parseFloat(e.currentTarget.value) || 0)}
 																	class="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 dark:border-gray-500 dark:bg-gray-700 dark:text-gray-300"

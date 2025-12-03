@@ -93,6 +93,16 @@
 		validateForm();
 	});
 
+	// Check if any comparison pair uses custom formula tolerance
+	// If so, disable and uncheck reverse reconciliation
+	$effect(() => {
+		const hasCustomFormula = comparisonPairs.some((pair) => pair.tolerance?.type === 'custom');
+
+		if (hasCustomFormula && reverseReconciliation) {
+			reverseReconciliation = false;
+		}
+	});
+
 	function validateForm() {
 		const isPrimaryIdValid = !!primaryIdPair.primaryColumn && !!primaryIdPair.comparisonColumn;
 
@@ -107,6 +117,11 @@
 		);
 
 		formValid = isPrimaryIdValid && incompleteComparisonPairs.length === 0;
+	}
+
+	// Check if reverse reconciliation should be disabled
+	function isReverseReconciliationDisabled(): boolean {
+		return comparisonPairs.some((pair) => pair.tolerance?.type === 'custom');
 	}
 
 	// Column mapping state
@@ -924,7 +939,7 @@
 															} else if (value === 'within_range_percentage') {
 																setNumericPercentageTolerance(index, 0.5);
 															} else if (value === 'within_percentage_similarity') {
-																setStringSimilarityTolerance(index, 0.9);
+																setStringSimilarityTolerance(index, 90);
 															} else if (value === 'custom') {
 																setCustomTolerance(index, '');
 															}
@@ -1006,17 +1021,19 @@
 																	for="tolerance-similarity-{index}"
 																	class="text-xs text-gray-600 dark:text-gray-400"
 																>
-																	Similarity (0-1)
+																	Similarity (%)
 																</label>
 																<InfoIcon
-																	tooltip="Text similarity score from 0 to 1 (e.g., 0.9 for 90% similarity)."
+																	tooltip="Text similarity threshold as a percentage (0-100). For example, 90 means strings need to be at least 90% similar."
 																/>
 															</div>
 															<input
 																id="tolerance-similarity-{index}"
 																type="number"
-																step="0.01"
-																placeholder="0.9"
+																step="1"
+																min="0"
+																max="100"
+																placeholder="90"
 																value={pair.tolerance.percentage || ''}
 																onchange={(e) =>
 																	setStringSimilarityTolerance(
@@ -1213,7 +1230,8 @@
 								id="reverse-reconciliation"
 								type="checkbox"
 								bind:checked={reverseReconciliation}
-								class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:ring-offset-gray-800 dark:focus:ring-blue-600"
+								disabled={isReverseReconciliationDisabled()}
+								class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:ring-offset-gray-800 dark:focus:ring-blue-600 dark:disabled:bg-gray-600"
 							/>
 						</div>
 						<div class="ml-3 text-sm">
@@ -1226,9 +1244,14 @@
 							<p class="text-gray-500 dark:text-gray-400">
 								Check comparison file records against primary file records as well
 							</p>
+							{#if isReverseReconciliationDisabled()}
+								<p class="mt-1 text-xs text-amber-600 dark:text-amber-400">
+									⚠️ Reverse reconciliation is disabled when custom formula tolerance is used in any
+									column pair
+								</p>
+							{/if}
 						</div>
 					</div>
-
 					<!-- Per-pair text comparison settings -->
 					<div
 						class="rounded-md border border-gray-100 bg-gray-50 p-3 text-sm text-gray-700 dark:bg-gray-900/30"

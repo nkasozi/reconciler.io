@@ -707,11 +707,11 @@ export function evaluateToleranceWithEvaluator(
 			const pNorm = normalizeForComparison(rawP, settings.caseSensitive, false);
 			const cNorm = normalizeForComparison(rawC, settings.caseSensitive, false);
 			const similarity = calculateStringSimilarity(pNorm, cNorm);
-			const threshold = tolerance.percentage / 100;
-			const matches = similarity >= threshold;
+			const similarityPercentage = similarity * 100;
+			const matches = similarityPercentage >= tolerance.percentage;
 			const reason = matches
-				? `String similarity ${(similarity * 100).toFixed(1)}% >= ${tolerance.percentage}% (${pNorm} vs ${cNorm})`
-				: `String similarity ${(similarity * 100).toFixed(1)}% < ${tolerance.percentage}% (${pNorm} vs ${cNorm})`;
+				? `String similarity ${similarityPercentage.toFixed(1)}% >= ${tolerance.percentage}% (${pNorm} vs ${cNorm})`
+				: `String similarity ${similarityPercentage.toFixed(1)}% < ${tolerance.percentage}% (${pNorm} vs ${cNorm})`;
 			return { matches, reason };
 		}
 
