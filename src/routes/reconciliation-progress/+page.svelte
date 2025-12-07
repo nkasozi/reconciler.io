@@ -5,6 +5,7 @@
 	import type { ColumnPair } from '$lib/utils/reconciliation';
 	import {
 		reconcileData,
+		reconcileDataStreaming,
 		clearReconciliationLogs,
 		getReconciliationLogs
 	} from '$lib/utils/reconciliation';
@@ -106,15 +107,15 @@
 	} | null> = [];
 
 	onMount(() => {
-		const unsubscribe = reconciliationStore.subscribe((state) => {
-			if (!state.primaryFileData) {
+		const unsubscribe = reconciliationStore.subscribe(async (state) => {
+			if (!state.primaryFile) {
 				// Redirect to upload page if data is missing
 				console.warn('Missing Primary file data, redirecting to upload page');
 				goto('/upload');
 				return;
 			}
 
-			if (!state.comparisonFileData) {
+			if (!state.comparisonFile) {
 				// Redirect to upload page if data is missing
 				console.warn('Missing Comparison file data, redirecting to upload page');
 				goto('/upload');
@@ -129,16 +130,30 @@
 			}
 
 			// Set file names
-			primaryFileName = state.primaryFileData.fileName || 'Primary File';
-			comparisonFileName = state.comparisonFileData.fileName || 'Comparison File';
+			primaryFileName = state.primaryFile.name || 'Primary File';
+			comparisonFileName = state.comparisonFile.name || 'Comparison File';
 
 			// Store file data for metadata access
-			primaryFileData = state.primaryFileData;
-			comparisonFileData = state.comparisonFileData;
+			primaryFileData = null;
+			comparisonFileData = null;
 
-			// Set total rows (from primary file)
-			totalRows = state.primaryFileData.rows.length;
-			primaryRows = state.primaryFileData.rows;
+			// Get total rows from parser if available, otherwise use preview data
+			if (state.primaryFileParser) {
+				try {
+					const count = await state.primaryFileParser.getTotalRowCount();
+					totalRows = count;
+					console.log('Loaded actual primary file row count:', count);
+				} catch (error) {
+					console.error('Error getting total row count:', error);
+					// Fallback to estimate
+					totalRows = 0;
+				}
+			} else {
+				// Fallback to estimate if no parser
+				totalRows = 0;
+			}
+
+			//primaryRows = state.primaryFileData.rows;
 
 			// Get column mapping configuration
 			primaryIdPair = state.reconciliationConfig.primaryIdPair;
@@ -148,20 +163,21 @@
 			isReverseReconciliationEnabled = state.reconciliationConfig.reverseReconciliation === true;
 
 			// Create lookup map for comparison data
-			if (state.comparisonFileData && primaryIdPair.comparisonColumn) {
+			if (state.comparisonFileParser && primaryIdPair.comparisonColumn) {
 				const comparisonIdColumn = primaryIdPair.comparisonColumn;
 				comparisonMap.clear();
-				state.comparisonFileData.rows.forEach((row) => {
+				const rows = await state.comparisonFileParser.getRowIterator();
+				for await (const row of rows) {
 					const id = row[comparisonIdColumn];
 					if (id) {
 						comparisonMap.set(id, row);
 					}
-				});
+				}
 			}
-		});
 
-		// Start the reconciliation process
-		startReconciliation();
+			// Start the reconciliation process now that data is loaded
+			startReconciliation();
+		});
 
 		// Check if reverse reconciliation is enabled and start it too
 		const unsubscribeStore = reconciliationStore.subscribe((state) => {
@@ -185,6 +201,20 @@
 			clearTimeout(stuckDetectionTimeout);
 		}
 	});
+
+	// Helper function to format time estimates
+	function formatTimeEstimate(seconds: number): string {
+		if (!seconds || seconds < 0 || !isFinite(seconds)) {
+			return 'calculating...';
+		}
+		if (seconds < 60) {
+			return Math.round(seconds) + 's';
+		}
+		if (seconds < 3600) {
+			return Math.round(seconds / 60) + 'm';
+		}
+		return Math.round(seconds / 3600) + 'h';
+	}
 
 	// Check if the process might be stuck
 	function checkForStuckProcess(type: 'normal' | 'reverse' = 'normal') {
@@ -269,11 +299,7 @@
 		stuckDetectionTimeout = setTimeout(checkForStuckProcess, 3000);
 
 		// Make sure we have the required configuration
-		if (
-			!primaryIdPair.primaryColumn ||
-			!primaryIdPair.comparisonColumn ||
-			primaryRows.length === 0
-		) {
+		if (!primaryIdPair.primaryColumn || !primaryIdPair.comparisonColumn) {
 			console.error('Missing required data for reconciliation');
 
 			// Add error log entry so it doesn't appear stuck
@@ -305,6 +331,14 @@
 		});
 		unsubscribe();
 
+		console.log('Store state on reconciliation start:', {
+			hasPrimaryFileData: !!storeState.primaryFileData,
+			hasComparisonFileData: !!storeState.comparisonFileData,
+			hasConfig: !!storeState.reconciliationConfig,
+			hasPrimaryParser: !!storeState.primaryFileParser,
+			hasComparisonParser: !!storeState.comparisonFileParser
+		});
+
 		if (
 			!storeState.primaryFileData ||
 			!storeState.comparisonFileData ||
@@ -335,91 +369,49 @@
 		];
 		lastLogTimestamp = Date.now();
 
-		// Perform the actual reconciliation using the real reconciliation engine
+		// Perform the actual reconciliation using streaming or fallback
 		try {
-			console.log('Starting reconciliation with tolerance evaluator...');
-			const result = reconcileData(
-				storeState.primaryFileData,
-				storeState.comparisonFileData,
-				storeState.reconciliationConfig
-			);
+			console.log('Starting reconciliation...');
 
-			// Get the debug logs that were generated during reconciliation
-			const debugLogs = getReconciliationLogs();
-			console.log('Reconciliation complete! Generated', debugLogs.length, 'debug logs');
-
-			// Convert the reconciliation results into matchingLogs format
-			const newLogs = result.matches.map((match, index) => ({
-				timestamp: Date.now() + index,
-				primaryId: match.idValues.primary,
-				comparisonId: match.idValues.comparison,
-				matched: match.matchScore === 100,
-				reasons: Object.entries(match.comparisonResults).map(([column, compResult]) => {
-					// Find the column pair configuration for this column
-					const pair = comparisonPairs.find((p) => p.primaryColumn === column);
-
-					// Get display names from file metadata
-					const primaryColumnName =
-						primaryFileData?.columns?.find((c: any) => c.name === column)?.name || column;
-					const comparisonColumnName =
-						comparisonFileData?.columns?.find((c: any) => c.name === pair?.comparisonColumn)
-							?.name ||
-						pair?.comparisonColumn ||
-						column;
-
-					return {
-						primaryFileRow: `Match ${index + 1}`,
-						comparisonFileRow: `Record ${match.idValues.comparison}`,
-						primaryFileColumn: primaryColumnName,
-						comparisonFileColumn: comparisonColumnName,
-						primaryValue: String(compResult.primaryValue),
-						comparisonValue: String(compResult.comparisonValue),
-						reason: compResult.reason,
-						tolerance: pair?.tolerance,
-						match: compResult.match,
-						status: compResult.status
-					};
-				})
-			}));
-
-			// Update logs and results
-			matchingLogs = [...newLogs.slice(0, 100), ...matchingLogs];
-			processedRows = result.summary.totalPrimaryRows;
-			failureCount = result.summary.unmatchedPrimaryRows + result.summary.unmatchedComparisonRows;
-			hasFailures = failureCount > 0;
-
-			// Store results for later use
-			reconciliationResults = result.matches.map((match) => ({
-				row: match.primaryRow,
-				matched: match.matchScore === 100,
-				reasons: Object.entries(match.comparisonResults).map(([column, compResult]) => {
-					// Find the column pair configuration for this column
-					const pair = comparisonPairs.find((p) => p.primaryColumn === column);
-
-					// Get display names from file metadata
-					const primaryColumnName =
-						primaryFileData?.columns?.find((c: any) => c.name === column)?.name || column;
-					const comparisonColumnName =
-						comparisonFileData?.columns?.find((c: any) => c.name === pair?.comparisonColumn)
-							?.name ||
-						pair?.comparisonColumn ||
-						column;
-
-					return {
-						primaryFileColumn: primaryColumnName,
-						comparisonFileColumn: comparisonColumnName,
-						primaryValue: compResult.primaryValue,
-						comparisonValue: compResult.comparisonValue,
-						reason: compResult.reason,
-						tolerance: pair?.tolerance,
-						match: compResult.match,
-						status: compResult.status
-					};
-				})
-			}));
-
-			// Finish reconciliation
-			finishReconciliation();
+			// Check if we have file parsers for streaming
+			if (storeState.primaryFileParser && storeState.comparisonFileParser) {
+				console.log('Using streaming reconciliation...');
+				console.log('Primary parser:', storeState.primaryFileParser);
+				console.log('Comparison parser:', storeState.comparisonFileParser);
+				// Use an async IIFE to properly await the async reconciliation
+				(async () => {
+					console.log('[ASYNC IIFE] Starting streaming reconciliation...');
+					try {
+						console.log('[ASYNC IIFE] Calling performStreamingReconciliation...');
+						await performStreamingReconciliation(storeState);
+						console.log('[ASYNC IIFE] performStreamingReconciliation completed');
+					} catch (error) {
+						console.error('[ASYNC IIFE] Streaming reconciliation error:', error);
+						matchingLogs = [
+							{
+								timestamp: Date.now(),
+								primaryId: 'ERROR',
+								comparisonId: 'ERROR',
+								matched: false,
+								reasons: [
+									{
+										primaryFileRow: 'Error Log',
+										comparisonFileRow: 'Error Log',
+										primaryFileColumn: 'Streaming Error',
+										comparisonFileColumn: 'Details',
+										primaryValue: error instanceof Error ? error.message : String(error),
+										comparisonValue: 'See browser console for more details'
+									}
+								]
+							}
+						];
+						finishReconciliation();
+					}
+				})();
+			} else {
+				console.log('Streaming parsers not available, using preview data reconciliation...');
+				performPreviewReconciliation(storeState);
+			}
 		} catch (error) {
 			console.error('Reconciliation error:', error);
 			matchingLogs = [
@@ -442,6 +434,196 @@
 			];
 			finishReconciliation();
 		}
+	}
+
+	// Perform streaming reconciliation using file parsers
+	async function performStreamingReconciliation(storeState: any) {
+		try {
+			console.log('Creating streaming reconciliation generator...');
+			console.log('Config:', storeState.reconciliationConfig);
+			const generator = reconcileDataStreaming(
+				storeState.primaryFileParser,
+				storeState.comparisonFileParser,
+				storeState.reconciliationConfig
+			);
+			console.log('Generator created:', generator);
+
+			let matchIndex = 0;
+			console.log('Starting for-await loop...');
+			for await (const result of generator) {
+				matchIndex++;
+				processedRows = matchIndex;
+				console.log(`Processing result ${matchIndex}:`, result.idValues);
+
+				// Add log entry for this match
+				const newLog: any = {
+					timestamp: Date.now(),
+					primaryId: result.idValues.primary,
+					comparisonId: result.idValues.comparison,
+					matched: result.matchScore === 100,
+					reasons: Object.entries(result.comparisonResults).map(([column, compResult]) => {
+						// Find the column pair configuration for this column
+						const pair = comparisonPairs.find((p) => p.primaryColumn === column);
+
+						// Get display names from file metadata
+						const primaryColumnName =
+							primaryFileData?.columns?.find((c: any) => c.name === column)?.name || column;
+						const comparisonColumnName =
+							comparisonFileData?.columns?.find((c: any) => c.name === pair?.comparisonColumn)
+								?.name ||
+							pair?.comparisonColumn ||
+							column;
+
+						return {
+							primaryFileRow: `Match ${matchIndex}`,
+							comparisonFileRow: `Record ${result.idValues.comparison}`,
+							primaryFileColumn: primaryColumnName,
+							comparisonFileColumn: comparisonColumnName,
+							primaryValue: String((compResult as any).primaryValue),
+							comparisonValue: String((compResult as any).comparisonValue),
+							reason: (compResult as any).reason,
+							tolerance: pair?.tolerance,
+							match: (compResult as any).match,
+							status: (compResult as any).status
+						};
+					})
+				};
+
+				// Keep only last 100 logs
+				matchingLogs = [newLog, ...matchingLogs.slice(0, 99)];
+
+				// Track failures
+				if (!result.matchScore || result.matchScore < 100) {
+					failureCount++;
+					hasFailures = true;
+				}
+
+				// Store result
+				reconciliationResults.push({
+					row: result.primaryRow,
+					matched: result.matchScore === 100,
+					reasons: Object.entries(result.comparisonResults).map(([column, compResult]) => {
+						const pair = comparisonPairs.find((p) => p.primaryColumn === column);
+						const primaryColumnName =
+							primaryFileData?.columns?.find((c: any) => c.name === column)?.name || column;
+						const comparisonColumnName =
+							comparisonFileData?.columns?.find((c: any) => c.name === pair?.comparisonColumn)
+								?.name ||
+							pair?.comparisonColumn ||
+							column;
+
+						return {
+							primaryFileColumn: primaryColumnName,
+							comparisonFileColumn: comparisonColumnName,
+							primaryValue: (compResult as any).primaryValue,
+							comparisonValue: (compResult as any).comparisonValue,
+							reason: (compResult as any).reason,
+							tolerance: pair?.tolerance,
+							match: (compResult as any).match,
+							status: (compResult as any).status
+						};
+					})
+				});
+
+				// Update speed and time estimate
+				const elapsedSeconds = (Date.now() - startTime) / 1000;
+				matchingSpeed = matchIndex / elapsedSeconds;
+				const remainingRows = totalRows - matchIndex;
+				const estimatedSecondsLeft = remainingRows / matchingSpeed;
+				estimatedTimeLeft = formatTimeEstimate(estimatedSecondsLeft);
+			}
+
+			console.log(`For-await loop completed. Total results processed: ${matchIndex}`);
+			finishReconciliation();
+		} catch (error) {
+			console.error('Streaming reconciliation error:', error);
+			throw error;
+		}
+	}
+
+	// Fallback to preview data reconciliation
+	function performPreviewReconciliation(storeState: any) {
+		console.log('Starting reconciliation with tolerance evaluator...');
+		const result = reconcileData(
+			storeState.primaryFileData,
+			storeState.comparisonFileData,
+			storeState.reconciliationConfig
+		);
+
+		// Get the debug logs that were generated during reconciliation
+		const debugLogs = getReconciliationLogs();
+		console.log('Reconciliation complete! Generated', debugLogs.length, 'debug logs');
+
+		// Convert the reconciliation results into matchingLogs format
+		const newLogs = result.matches.map((match, index) => ({
+			timestamp: Date.now() + index,
+			primaryId: match.idValues.primary,
+			comparisonId: match.idValues.comparison,
+			matched: match.matchScore === 100,
+			reasons: Object.entries(match.comparisonResults).map(([column, compResult]) => {
+				// Find the column pair configuration for this column
+				const pair = comparisonPairs.find((p) => p.primaryColumn === column);
+
+				// Get display names from file metadata
+				const primaryColumnName =
+					primaryFileData?.columns?.find((c: any) => c.name === column)?.name || column;
+				const comparisonColumnName =
+					comparisonFileData?.columns?.find((c: any) => c.name === pair?.comparisonColumn)?.name ||
+					pair?.comparisonColumn ||
+					column;
+
+				return {
+					primaryFileRow: `Match ${index + 1}`,
+					comparisonFileRow: `Record ${match.idValues.comparison}`,
+					primaryFileColumn: primaryColumnName,
+					comparisonFileColumn: comparisonColumnName,
+					primaryValue: String(compResult.primaryValue),
+					comparisonValue: String(compResult.comparisonValue),
+					reason: compResult.reason,
+					tolerance: pair?.tolerance,
+					match: compResult.match,
+					status: compResult.status
+				};
+			})
+		}));
+
+		// Update logs and results
+		matchingLogs = [...newLogs.slice(0, 100), ...matchingLogs];
+		processedRows = result.summary.totalPrimaryRows;
+		failureCount = result.summary.unmatchedPrimaryRows + result.summary.unmatchedComparisonRows;
+		hasFailures = failureCount > 0;
+
+		// Store results for later use
+		reconciliationResults = result.matches.map((match) => ({
+			row: match.primaryRow,
+			matched: match.matchScore === 100,
+			reasons: Object.entries(match.comparisonResults).map(([column, compResult]) => {
+				// Find the column pair configuration for this column
+				const pair = comparisonPairs.find((p) => p.primaryColumn === column);
+
+				// Get display names from file metadata
+				const primaryColumnName =
+					primaryFileData?.columns?.find((c: any) => c.name === column)?.name || column;
+				const comparisonColumnName =
+					comparisonFileData?.columns?.find((c: any) => c.name === pair?.comparisonColumn)?.name ||
+					pair?.comparisonColumn ||
+					column;
+
+				return {
+					primaryFileColumn: primaryColumnName,
+					comparisonFileColumn: comparisonColumnName,
+					primaryValue: compResult.primaryValue,
+					comparisonValue: compResult.comparisonValue,
+					reason: compResult.reason,
+					tolerance: pair?.tolerance,
+					match: compResult.match,
+					status: compResult.status
+				};
+			})
+		}));
+
+		// Finish reconciliation
+		finishReconciliation();
 	}
 
 	// Function to complete reconciliation
@@ -528,9 +710,30 @@
 			return;
 		}
 
-		// For reverse reconciliation, swap the files
-		reverseTotalRows = storeState.comparisonFileData.rows.length;
+		// For reverse reconciliation, get total rows from parser if available
+		if (storeState.comparisonFileParser) {
+			storeState.comparisonFileParser
+				.getTotalRowCount()
+				.then((count: number) => {
+					reverseTotalRows = count;
+					console.log('Loaded comparison file row count for reverse:', count);
+					performReverseReconciliation(storeState);
+				})
+				.catch((error: any) => {
+					console.error('Error getting comparison row count:', error);
+					// Fallback to preview data
+					reverseTotalRows = storeState.comparisonFileData.rows.length;
+					performReverseReconciliation(storeState);
+				});
+		} else {
+			// Fallback to preview data if no parser
+			reverseTotalRows = storeState.comparisonFileData.rows.length;
+			performReverseReconciliation(storeState);
+		}
+	}
 
+	// Perform reverse reconciliation
+	function performReverseReconciliation(storeState: any) {
 		// Add a starting log entry for reverse
 		reverseMatchingLogs = [
 			{

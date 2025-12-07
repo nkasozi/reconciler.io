@@ -14,82 +14,26 @@
 		}
 
 		// Prepare the results
-		const primaryData = data.primaryFileData;
-		if (!primaryData || !primaryData.rows) {
-			alert('Primary file data is missing');
+		const primaryFile = data.primaryFile;
+		if (!primaryFile) {
+			alert('Primary file is missing');
 			return;
 		}
 
-		// Create results with status and reasons (including per-column status/reason/tolerance)
-		const results = primaryData.rows.map((row) => {
-			// Find the reconciliation result for this row
-			const idColumnName = data.reconciliationConfig?.primaryIdPair.primaryColumn;
-			if (!idColumnName)
-				return {
-					...row,
-					__ReconciliationStatus: 'Error',
-					__ReconciliationReason: 'Missing configuration'
-				};
-
-			const id = row[idColumnName];
-			const matchResult = data.reconciliationResult!.matches.find((m) => m.idValues.primary === id);
-
-			let status = 'Not Found';
-			let reason = 'No matching record in comparison file';
-
-			if (matchResult) {
-				if (matchResult.matchScore === 100) {
-					status = 'Match';
-					reason = 'All fields match';
-				} else {
-					status = 'Partial Match';
-
-					// Create detailed per-column entries
-					for (const [col, result] of Object.entries(matchResult.comparisonResults)) {
-						const keyStatus = `__${col}_status`;
-						const keyReason = `__${col}_reason`;
-						const keyTol = `__${col}_tolerance`;
-						// assign into res below
-						// will set into res object after it's created
-						// find tolerance from config if present
-						const pair = data.reconciliationConfig?.comparisonPairs.find(
-							(p) => p.primaryColumn === col
-						);
-						const tolStr = pair?.tolerance ? formatTolerance(pair.tolerance) : '';
-						if (!result.match) {
-							reason =
-								(reason ? reason + '; ' : '') +
-								`${col}: ${result.primaryValue} ≠ ${result.comparisonValue}`;
-						}
-						// store into a temp map on the matchResult for later use
-						// We'll set per-column values on the returned object below
-						(matchResult as any).__perColumn = (matchResult as any).__perColumn || {};
-						(matchResult as any).__perColumn[keyStatus] =
-							result.status || (result.match ? 'Match' : 'Mismatch');
-						(matchResult as any).__perColumn[keyReason] = result.reason || '';
-						(matchResult as any).__perColumn[keyTol] = tolStr;
-					}
-				}
-			}
-
-			const resObj: Record<string, any> = {
-				...row,
-				__ReconciliationStatus: status,
-				__ReconciliationReason: reason
+		// Create results array from matches
+		const results = data.reconciliationResult.matches.map((match: RowMatchResult) => {
+			return {
+				id: match.idValues.primary,
+				status: match.matchScore === 100 ? 'Matched' : 'Partial Match',
+				matchScore: match.matchScore
 			};
-			// merge per-column details if present
-			if (matchResult && (matchResult as any).__perColumn) {
-				Object.assign(resObj, (matchResult as any).__perColumn);
-			}
-
-			return resObj;
 		});
 
 		// Convert to CSV
-		const headers = Object.keys(results[0]);
+		const headers = ['id', 'status', 'matchScore'];
 		let csvContent = headers.join(',') + '\n';
 
-		results.forEach((row) => {
+		results.forEach((row: any) => {
 			const values = headers.map((header) => {
 				// row is a Record so index signature allowed
 				const val = (row as Record<string, any>)[header] || '';
@@ -153,20 +97,18 @@
 
 	onMount(() => {
 		const unsubscribe = reconciliationStore.subscribe((state) => {
-			if (!state.primaryFileData) {
-				console.log('Missing primaryFileData in reconciliation store state');
-				errorMessage =
-					'PrimaryFileData is missing. Please go back and complete the previous steps.';
+			if (!state.primaryFile) {
+				console.log('Missing primaryFile in reconciliation store state');
+				errorMessage = 'PrimaryFile is missing. Please go back and complete the previous steps.';
 				setTimeout(() => {
 					goto('/upload');
 				}, 2000);
 				return;
 			}
 
-			if (!state.comparisonFileData) {
-				console.log('Missing comparisonFileData in reconciliation store state');
-				errorMessage =
-					'ComparisonFileData is missing. Please go back and complete the previous steps.';
+			if (!state.comparisonFile) {
+				console.log('Missing comparisonFile in reconciliation store state');
+				errorMessage = 'ComparisonFile is missing. Please go back and complete the previous steps.';
 				setTimeout(() => {
 					goto('/upload');
 				}, 2000);
@@ -191,9 +133,9 @@
 				return;
 			}
 
-			// Load the data and results
-			primaryData = state.primaryFileData.rows;
-			comparisonData = state.comparisonFileData.rows;
+			// Load the results
+			primaryData = [];
+			comparisonData = [];
 			primaryIdColumn = state.reconciliationConfig.primaryIdPair.primaryColumn;
 			comparisonIdColumn = state.reconciliationConfig.primaryIdPair.comparisonColumn;
 			comparisonPairs = state.reconciliationConfig.comparisonPairs;

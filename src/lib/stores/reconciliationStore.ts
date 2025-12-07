@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import type { ParsedFileData } from '../utils/fileParser';
+import type { ParsedFileData, StreamingFileParser } from '../utils/fileParser';
 import type { ReconciliationConfig, ReconciliationResult } from '../utils/reconciliation';
 
 // Define contact information type
@@ -10,9 +10,13 @@ export interface ContactInfo {
 
 // Initial state of the store
 const initialState = {
-	// Files data
-	primaryFileData: null as ParsedFileData | null,
-	comparisonFileData: null as ParsedFileData | null,
+	// File references (not parsed data!)
+	primaryFile: null as File | null,
+	comparisonFile: null as File | null,
+
+	// File parsers (these handle caching internally)
+	primaryFileParser: null as StreamingFileParser | null,
+	comparisonFileParser: null as StreamingFileParser | null,
 
 	// Configuration
 	reconciliationConfig: null as ReconciliationConfig | null,
@@ -36,14 +40,24 @@ const { subscribe, set, update } = store;
 export const reconciliationStore = {
 	subscribe,
 
-	// Set primary file data
-	setPrimaryFileData: (data: ParsedFileData) => {
-		update((state) => ({ ...state, primaryFileData: data }));
+	// Set primary file (File object only, no parsed data)
+	setPrimaryFile: (file: File) => {
+		update((state) => ({ ...state, primaryFile: file }));
 	},
 
-	// Set comparison file data
-	setComparisonFileData: (data: ParsedFileData) => {
-		update((state) => ({ ...state, comparisonFileData: data }));
+	// Set comparison file (File object only, no parsed data)
+	setComparisonFile: (file: File) => {
+		update((state) => ({ ...state, comparisonFile: file }));
+	},
+
+	// Set primary file parser
+	setPrimaryFileParser: (parser: StreamingFileParser) => {
+		update((state) => ({ ...state, primaryFileParser: parser }));
+	},
+
+	// Set comparison file parser
+	setComparisonFileParser: (parser: StreamingFileParser) => {
+		update((state) => ({ ...state, comparisonFileParser: parser }));
 	},
 
 	// Set reconciliation configuration

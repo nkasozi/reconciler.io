@@ -27,14 +27,14 @@
 
 	onMount(() => {
 		const unsubscribe = reconciliationStore.subscribe((state) => {
-			if (!state.primaryFileData) {
-				console.log('Missing state.primaryFileData');
+			if (!state.primaryFile) {
+				console.log('Missing state.primaryFile');
 				// Redirect to upload page if any required data is missing
 				goto('/upload');
 				return;
 			}
-			if (!state.comparisonFileData) {
-				console.log('Missing state.comparisonFileData');
+			if (!state.comparisonFile) {
+				console.log('Missing state.comparisonFile');
 				// Redirect to upload page if any required data is missing
 				goto('/upload');
 				return;
@@ -47,8 +47,8 @@
 			}
 
 			// Set file names
-			primaryFileName = state.primaryFileData.fileName || 'Primary File';
-			comparisonFileName = state.comparisonFileData.fileName || 'Comparison File';
+			primaryFileName = state.primaryFile.name || 'Primary File';
+			comparisonFileName = state.comparisonFile.name || 'Comparison File';
 
 			// Set column mappings
 			const config = state.reconciliationConfig;

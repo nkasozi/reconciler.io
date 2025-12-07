@@ -2,15 +2,17 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { reconciliationStore } from '$lib/stores/reconciliationStore';
-	import type { ParsedFileData } from '$lib/utils/fileParser';
+	import type { ParsedFileData, FileColumn } from '$lib/utils/fileParser';
 	import type { ColumnPair, ReconciliationConfig } from '$lib/utils/reconciliation';
 	import { get } from 'svelte/store';
 	import WaitlistModal from '$lib/components/WaitlistModal.svelte';
 	import InfoIcon from '$lib/components/InfoIcon.svelte';
 
 	// Get file data from the store
-	let primaryFile = $state<ParsedFileData | null>(null);
-	let comparisonFile = $state<ParsedFileData | null>(null);
+	let primaryFile = $state<File | null>(null);
+	let comparisonFile = $state<File | null>(null);
+	let primaryColumns = $state<FileColumn[]>([]);
+	let comparisonColumns = $state<FileColumn[]>([]);
 
 	// UI state
 	let reverseReconciliation = $state(false);
@@ -55,13 +57,53 @@
 	onMount(() => {
 		const unsubscribe = reconciliationStore.subscribe((state) => {
 			// If either file is missing, send user back to upload
-			if (!state.primaryFileData || !state.comparisonFileData) {
+			if (!state.primaryFile || !state.comparisonFile) {
 				goto('/upload');
 				return;
 			}
 
-			primaryFile = state.primaryFileData;
-			comparisonFile = state.comparisonFileData;
+			primaryFile = state.primaryFile;
+			comparisonFile = state.comparisonFile;
+
+			// Load columns from cached metadata first (instant return if warm)
+			// Fall back to async load only if cache isn't ready yet
+			if (state.primaryFileParser) {
+				const cached = state.primaryFileParser.getCachedMetadata();
+				if (cached?.columns) {
+					// Cache is warm - use it immediately
+					primaryColumns = cached.columns;
+				} else {
+					// Cache not ready yet - load asynchronously without blocking
+					state.primaryFileParser
+						.getColumns()
+						.then((cols) => {
+							primaryColumns = cols;
+						})
+						.catch((error) => {
+							console.error('Error loading primary columns:', error);
+							primaryColumns = [];
+						});
+				}
+			}
+
+			if (state.comparisonFileParser) {
+				const cached = state.comparisonFileParser.getCachedMetadata();
+				if (cached?.columns) {
+					// Cache is warm - use it immediately
+					comparisonColumns = cached.columns;
+				} else {
+					// Cache not ready yet - load asynchronously without blocking
+					state.comparisonFileParser
+						.getColumns()
+						.then((cols) => {
+							comparisonColumns = cols;
+						})
+						.catch((error) => {
+							console.error('Error loading comparison columns:', error);
+							comparisonColumns = [];
+						});
+				}
+			}
 
 			// If config exists, hydrate mapping defaults
 			if (state.reconciliationConfig) {
@@ -478,9 +520,8 @@
 		fileType: 'primary' | 'comparison'
 	): string | null {
 		if (!columnName) return null;
-		const cols =
-			fileType === 'primary' ? (primaryFile?.columns ?? []) : (comparisonFile?.columns ?? []);
-		const col = cols.find((c: any) => c.name === columnName);
+		const cols = fileType === 'primary' ? primaryColumns : comparisonColumns;
+		const col = cols.find((c: FileColumn) => c.name === columnName);
 		return col?.dataType ?? null;
 	}
 
@@ -603,7 +644,7 @@
 						Primary File Columns
 					</h3>
 					<div class="max-h-[50vh] overflow-y-auto rounded-md bg-white p-4 shadow dark:bg-gray-800">
-						{#each primaryFile.columns as column}
+						{#each primaryColumns as column}
 							<button
 								type="button"
 								class="mb-2 flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left transition-all"
@@ -705,7 +746,7 @@
 						Comparison File Columns
 					</h3>
 					<div class="max-h-[50vh] overflow-y-auto rounded-md bg-white p-4 shadow dark:bg-gray-800">
-						{#each comparisonFile.columns as column}
+						{#each comparisonColumns as column}
 							<button
 								type="button"
 								class="mb-2 flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-left transition-all"

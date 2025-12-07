@@ -4,7 +4,11 @@
 		parseFile,
 		type ParsedFileData,
 		type FileColumn,
-		RowLimitExceededError
+		type StreamingFileParser,
+		RowLimitExceededError,
+		getCSVStreamingParser,
+		getExcelStreamingParser,
+		getPDFStreamingParser
 	} from '$lib/utils/fileParser';
 	import { validateFile, formatFileSize, getPDFPageCount } from '$lib/utils/fileValidation';
 	import { reconciliationStore } from '$lib/stores/reconciliationStore';
@@ -72,6 +76,16 @@
 	// Header row state - tracks whether files have no header row (should generate column names)
 	let primaryFileHasNoHeaders = $state(false);
 	let comparisonFileHasNoHeaders = $state(false);
+
+	// Actual total row counts from parsers (not preview data)
+	let primaryTotalRows = $state(0);
+	let comparisonTotalRows = $state(0);
+
+	// Cached metadata from parsers
+	let primaryColumnCount = $state(0);
+	let comparisonColumnCount = $state(0);
+	let primaryColumns = $state<FileColumn[]>([]);
+	let comparisonColumns = $state<FileColumn[]>([]);
 
 	// Typewriter effect state
 	let currentText = $state('');
@@ -248,6 +262,24 @@
 			const parsedData = await parseFile(file);
 			console.log(`Parsed ${type} file data:`, parsedData);
 
+			// Create a streaming parser for the file
+			let parser: StreamingFileParser | null = null;
+			try {
+				const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
+				if (fileExtension === 'csv') {
+					parser = getCSVStreamingParser(file);
+				} else if (['xlsx', 'xls'].includes(fileExtension)) {
+					parser = getExcelStreamingParser(file);
+				} else if (fileExtension === 'pdf') {
+					parser = getPDFStreamingParser(file);
+				}
+				console.log(`Created ${fileExtension} streaming parser`);
+			} catch (error) {
+				console.error('Error creating streaming parser:', error);
+				// Parser creation failing shouldn't block the reconciliation
+				// The reconciliation will just fall back to preview data
+			}
+
 			// Update state with parsed data
 			if (type === 'primary') {
 				primaryFileData = {
@@ -261,9 +293,16 @@
 				primaryFileHasNoHeaders = false;
 
 				// Store in the global store
-				reconciliationStore.setPrimaryFileData(parsedData);
-
-				// Save to localStorage as backup
+				if (primaryFileData.file) {
+					reconciliationStore.setPrimaryFile(primaryFileData.file);
+				}
+				if (parser) {
+					reconciliationStore.setPrimaryFileParser(parser);
+				} else {
+					primaryTotalRows = parsedData.rows.length;
+					primaryColumns = parsedData.columns;
+					primaryColumnCount = parsedData.columns.length;
+				} // Save to localStorage as backup
 				try {
 					localStorage.setItem('primary_file_data', JSON.stringify(parsedData));
 				} catch (error) {
@@ -281,9 +320,16 @@
 				comparisonFileHasNoHeaders = false;
 
 				// Store in the global store
-				reconciliationStore.setComparisonFileData(parsedData);
-
-				// Save to localStorage as backup
+				if (comparisonFileData.file) {
+					reconciliationStore.setComparisonFile(comparisonFileData.file);
+				}
+				if (parser) {
+					reconciliationStore.setComparisonFileParser(parser);
+				} else {
+					comparisonTotalRows = parsedData.rows.length;
+					comparisonColumns = parsedData.columns;
+					comparisonColumnCount = parsedData.columns.length;
+				} // Save to localStorage as backup
 				try {
 					localStorage.setItem('comparison_file_data', JSON.stringify(parsedData));
 				} catch (error) {
@@ -584,9 +630,9 @@
 			};
 			primaryFileHasNoHeaders = hasNoHeaders;
 			// Update store
-			reconciliationStore.setPrimaryFileData(newParsedData);
-
-			// Update localStorage backup
+			if (primaryFileData.file) {
+				reconciliationStore.setPrimaryFile(primaryFileData.file);
+			} // Update localStorage backup
 			try {
 				localStorage.setItem('primary_file_data', JSON.stringify(newParsedData));
 			} catch (error) {
@@ -599,9 +645,9 @@
 			};
 			comparisonFileHasNoHeaders = hasNoHeaders;
 			// Update store
-			reconciliationStore.setComparisonFileData(newParsedData);
-
-			// Update localStorage backup
+			if (comparisonFileData.file) {
+				reconciliationStore.setComparisonFile(comparisonFileData.file);
+			} // Update localStorage backup
 			try {
 				localStorage.setItem('comparison_file_data', JSON.stringify(newParsedData));
 			} catch (error) {
@@ -668,12 +714,17 @@
 			try {
 				// Set the data in the store (don't reset - just update)
 				console.log('Setting primary file data in store');
-				reconciliationStore.setPrimaryFileData(primaryFileData.parsedData);
+				if (primaryFileData.file) {
+					reconciliationStore.setPrimaryFile(primaryFileData.file);
+				}
 
 				console.log('Setting comparison file data in store');
-				reconciliationStore.setComparisonFileData(comparisonFileData.parsedData);
+				if (comparisonFileData.file) {
+					reconciliationStore.setComparisonFile(comparisonFileData.file);
+				}
 
-				// Navigate to column mapping page
+				// Note: Parsers are already created and cached during file upload (in parseFile()).
+				// They are reused from the store without recreation.				// Navigate to column mapping page
 				goto('/column-selection');
 			} catch (error) {
 				console.error('Error preparing for column mapping:', error);
@@ -720,8 +771,12 @@
 									Primary File: <span class="font-medium">{primaryFileData.file?.name || ''}</span>
 								</h3>
 								<p class="mt-1 text-sm text-gray-700 dark:text-gray-300">
-									{primaryFileData.parsedData.rows.length.toLocaleString()} rows, {primaryFileData
-										.parsedData.columns.length} columns
+									{(
+										primaryTotalRows ||
+										primaryFileData.parsedData?.rows.length ||
+										0
+									).toLocaleString()} rows,
+									{primaryColumnCount} columns
 								</p>
 								<!-- Header checkbox -->
 								<div
@@ -865,9 +920,8 @@
 								<!-- Processing state -->
 								<div class="upload-progress">
 									<div class="processing-text">
-										{isProcessingScan ? 'Processing scan...' : 'Processing...'}<span
-											class="cursor-blink">▶</span
-										>
+										Processing, please wait...
+										<span class="cursor-blink">▶</span>
 									</div>
 									<div class="progress-bar">
 										<div class="progress-fill" style="width: {primaryFileData.progress}%"></div>
@@ -976,8 +1030,9 @@
 									>
 								</h3>
 								<p class="mt-1 text-sm text-gray-700 dark:text-gray-300">
-									{comparisonFileData.parsedData.rows.length.toLocaleString()} rows, {comparisonFileData
-										.parsedData.columns.length} columns
+									{(
+										comparisonTotalRows || comparisonFileData.parsedData.rows.length
+									).toLocaleString()} rows, {comparisonColumnCount} columns
 								</p>
 								<!-- Header checkbox -->
 								<div
@@ -1121,9 +1176,8 @@
 								<!-- Processing state -->
 								<div class="upload-progress">
 									<div class="processing-text">
-										{isProcessingScan ? 'Processing scan...' : 'Processing...'}<span
-											class="cursor-blink">▶</span
-										>
+										Processing, please wait...
+										<span class="cursor-blink">▶</span>
 									</div>
 									<div class="progress-bar">
 										<div class="progress-fill" style="width: {comparisonFileData.progress}%"></div>
@@ -1244,7 +1298,7 @@
 					{#if primaryFileData.parsedData}
 						<div class="mb-1">
 							<b>Primary Columns:</b>
-							{primaryFileData.parsedData.columns.length}
+							{primaryColumnCount}
 						</div>
 						<div class="mb-1"><b>Primary Rows:</b> {primaryFileData.parsedData.rows.length}</div>
 					{/if}
@@ -1261,7 +1315,7 @@
 					{#if comparisonFileData.parsedData}
 						<div class="mb-1">
 							<b>Comparison Columns:</b>
-							{comparisonFileData.parsedData.columns.length}
+							{comparisonColumnCount}
 						</div>
 						<div class="mb-1">
 							<b>Comparison Rows:</b>

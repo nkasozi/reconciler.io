@@ -20,7 +20,7 @@ export interface FileValidationOptions {
 export const DEFAULT_VALIDATION_LIMITS = {
 	// File size limits (PDFs have no size limit - only page count limits)
 	maxImageSizeMB: 35, // Google Document AI limit for images
-	maxCSVSizeMB: 50, // Reasonable limit for CSV files (processed client-side)
+	maxCSVSizeMB: 1024, // 1GB limit for CSV files (processed client-side)
 
 	// Page limits (PDFs only)
 	maxPDFPages: 15, // Conservative limit (Document AI supports up to 30 in imageless mode)
@@ -255,8 +255,8 @@ export function isValidFileType(file: File): boolean {
 export function isValidFileSize(file: File): boolean {
 	const maxSize =
 		file.type === 'application/pdf'
-			? DEFAULT_VALIDATION_LIMITS.maxPDFSizeMB
-			: DEFAULT_VALIDATION_LIMITS.maxImageSizeMB;
+			? DEFAULT_VALIDATION_LIMITS.maxCSVSizeMB * 2
+			: DEFAULT_VALIDATION_LIMITS.maxCSVSizeMB;
 	const fileSizeMB = file.size / (1024 * 1024);
 	return fileSizeMB <= maxSize;
 }

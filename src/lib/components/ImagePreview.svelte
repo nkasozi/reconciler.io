@@ -104,7 +104,7 @@
 				class="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				{#if isProcessing}
-					Processing...<span class="cursor-blink">▶</span>
+					Processing, please wait...<span class="cursor-blink">▶</span>
 				{:else}
 					Use This Scan
 				{/if}

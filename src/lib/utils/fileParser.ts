@@ -1,4 +1,5 @@
 import { scanDocument, type DocumentScanResult } from './documentScanner';
+import Papa from 'papaparse';
 
 /**
  * Data type detected for a column
@@ -23,6 +24,194 @@ export type ParsedFileData = {
 	fileType: string;
 	scanResult?: DocumentScanResult;
 };
+
+/**
+ * Base class for streaming file parsers
+ * Loads file data once and caches internally (not in Svelte state)
+ * This prevents redundant file reads while keeping state minimal
+ */
+export abstract class StreamingFileParser {
+	protected file: File;
+	protected columns: FileColumn[] = [];
+	protected columnNames: string[] = [];
+	protected totalRowCount: number = 0;
+
+	// Cache: loaded data is stored here, NOT in Svelte state
+	protected cachedData: Record<string, string>[] | null = null;
+	protected cacheInitialized = false;
+
+	// Cached metadata
+	private metadataCache: {
+		columns: FileColumn[] | null;
+		columnNames: string[] | null;
+		totalRowCount: number | null;
+		fileName: string;
+	} | null = null;
+
+	constructor(file: File) {
+		this.file = file;
+	}
+
+	/**
+	 * Ensure data is loaded and cached
+	 * This is called internally by all methods to guarantee one-time load
+	 */
+	protected abstract ensureDataLoaded(): Promise<void>;
+
+	/**
+	 * Get the first X rows of the file without loading the entire file into memory
+	 */
+	abstract getFirstXRows(maxRows: number): Promise<Record<string, string>[]>;
+
+	/**
+	 * Get an async iterable for processing rows one at a time
+	 */
+	abstract getRowIterator(): AsyncIterable<Record<string, string>>;
+
+	/**
+	 * Get the total number of rows in the file
+	 */
+	abstract getTotalRowCount(): Promise<number>;
+
+	/**
+	 * Get column information
+	 */
+	async getColumns(): Promise<FileColumn[]> {
+		if (!this.cacheInitialized) {
+			await this.ensureDataLoaded();
+		}
+		return this.columns;
+	}
+
+	/**
+	 * Get column names
+	 */
+	async getColumnNames(): Promise<string[]> {
+		if (!this.cacheInitialized) {
+			await this.ensureDataLoaded();
+		}
+		return this.columnNames;
+	}
+
+	/**
+	 * Get filename
+	 */
+	getFileName(): string {
+		return this.file.name;
+	}
+
+	/**
+	 * Get cached metadata (columns, columnNames, totalRowCount, fileName)
+	 * Returns immediately if data is loaded, null if not yet loaded
+	 */
+	getCachedMetadata(): {
+		columns: FileColumn[] | null;
+		columnNames: string[] | null;
+		totalRowCount: number | null;
+		fileName: string;
+	} | null {
+		if (!this.cacheInitialized) {
+			return null;
+		}
+
+		return {
+			columns: this.columns,
+			columnNames: this.columnNames,
+			totalRowCount: this.totalRowCount,
+			fileName: this.file.name
+		};
+	}
+
+	/**
+	 * Clear cache if needed
+	 */
+	clearCache(): void {
+		this.cachedData = null;
+		this.cacheInitialized = false;
+	}
+}
+
+/**
+ * CSV file parser with streaming support
+ */
+export class StreamingCSVParser extends StreamingFileParser {
+	private loadPromise: Promise<void> | null = null;
+
+	/**
+	 * Load the entire CSV file once and cache it
+	 */
+	protected async ensureDataLoaded(): Promise<void> {
+		if (this.cacheInitialized) {
+			return;
+		}
+
+		// If already loading, wait for it
+		if (this.loadPromise) {
+			return this.loadPromise;
+		}
+
+		// Start loading
+		this.loadPromise = new Promise<void>((resolve, reject) => {
+			const rowBuffer: Record<string, string>[] = [];
+			let headerParsed = false;
+
+			Papa.parse(this.file, {
+				header: true,
+				dynamicTyping: false,
+				skipEmptyLines: true,
+				worker: true,
+				step: (row) => {
+					if (!headerParsed) {
+						const rowData = row.data as Record<string, string>;
+						this.columnNames = Object.keys(rowData).map((k) => k.trim());
+						this.columns = createFileColumns(this.columnNames, []);
+						headerParsed = true;
+					}
+
+					const rowData = row.data as Record<string, string>;
+					const normalizedRow: Record<string, string> = {};
+					Object.entries(rowData).forEach(([key, value]) => {
+						const trimmedKey = key.trim();
+						normalizedRow[trimmedKey] = String(value ?? '');
+					});
+
+					const hasContent = Object.values(normalizedRow).some((val) => val && val.trim() !== '');
+					if (hasContent) {
+						rowBuffer.push(normalizedRow);
+					}
+				},
+				complete: () => {
+					this.cachedData = rowBuffer;
+					this.totalRowCount = rowBuffer.length;
+					this.cacheInitialized = true;
+					resolve();
+				},
+				error: (error) => {
+					reject(new Error(`Failed to parse CSV file: ${error.message}`));
+				}
+			});
+		});
+
+		return this.loadPromise;
+	}
+
+	async getFirstXRows(maxRows: number): Promise<Record<string, string>[]> {
+		await this.ensureDataLoaded();
+		return (this.cachedData || []).slice(0, maxRows);
+	}
+
+	async *getRowIterator(): AsyncIterable<Record<string, string>> {
+		await this.ensureDataLoaded();
+		for (const row of this.cachedData || []) {
+			yield row;
+		}
+	}
+
+	async getTotalRowCount(): Promise<number> {
+		await this.ensureDataLoaded();
+		return this.totalRowCount;
+	}
+}
 
 /**
  * Determines the file type based on extension or MIME type
@@ -176,6 +365,7 @@ function createFileColumns(columnNames: string[], rows: Record<string, string>[]
 
 /**
  * Main function to parse any supported file type
+ * Returns only the first 20 rows to avoid memory issues with large files
  */
 export async function parseFile(file: File): Promise<ParsedFileData> {
 	const fileType = getFileType(file);
@@ -183,7 +373,7 @@ export async function parseFile(file: File): Promise<ParsedFileData> {
 	switch (fileType) {
 		case 'csv':
 		case 'txt':
-			return await parseCSV(file);
+			return await parseCSVStreaming(file);
 		case 'excel':
 			return await parseExcel(file);
 		case 'pdf':
@@ -198,6 +388,205 @@ export async function parseFile(file: File): Promise<ParsedFileData> {
 		default:
 			throw new Error(`Unsupported file type: ${fileType}`);
 	}
+}
+
+/**
+ * Parse CSV file using streaming to only load first 20 rows for display
+ */
+async function parseCSVStreaming(file: File): Promise<ParsedFileData> {
+	const parser = new StreamingCSVParser(file);
+	const rows = await parser.getFirstXRows(20);
+
+	if (rows.length === 0) {
+		throw new Error('CSV file is empty or has no data rows');
+	}
+
+	const columns = await parser.getColumns();
+
+	return {
+		columns,
+		rows,
+		fileName: file.name,
+		fileType: 'csv'
+	};
+}
+
+/**
+ * Excel file parser with streaming support
+ */
+export class StreamingExcelParser extends StreamingFileParser {
+	private allRows: Record<string, string>[] = [];
+	private loadPromise: Promise<void> | null = null;
+
+	protected async ensureDataLoaded(): Promise<void> {
+		if (this.cacheInitialized) return;
+		if (this.loadPromise) return this.loadPromise;
+
+		this.loadPromise = new Promise(async (resolve, reject) => {
+			try {
+				const xlsx = await import('xlsx');
+				const arrayBuffer = await this.file.arrayBuffer();
+				const workbook = xlsx.read(arrayBuffer, { type: 'array' });
+				const firstSheetName = workbook.SheetNames[0];
+				const worksheet = workbook.Sheets[firstSheetName];
+				const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+
+				if (jsonData.length === 0) {
+					throw new Error('Excel file is empty');
+				}
+
+				// Extract column names (first row)
+				this.columnNames = (jsonData[0] as any[]).map((col) => String(col).trim());
+				this.columns = createFileColumns(this.columnNames, []);
+
+				// Extract data rows
+				for (let i = 1; i < jsonData.length; i++) {
+					const rowArray = jsonData[i] as any[];
+					if (!rowArray || rowArray.length === 0) continue;
+
+					const rowData: Record<string, string> = {};
+					this.columnNames.forEach((column, index) => {
+						rowData[column] = index < rowArray.length ? String(rowArray[index] ?? '') : '';
+					});
+
+					// Check if row has any content
+					const hasContent = Object.values(rowData).some((val) => val && String(val).trim() !== '');
+					if (hasContent) {
+						this.allRows.push(rowData);
+					}
+				}
+
+				this.cachedData = this.allRows;
+				this.cacheInitialized = true;
+				this.totalRowCount = this.allRows.length;
+				resolve();
+			} catch (error) {
+				this.cacheInitialized = true;
+				reject(error);
+			}
+		});
+
+		return this.loadPromise;
+	}
+
+	async getFirstXRows(maxRows: number): Promise<Record<string, string>[]> {
+		await this.ensureDataLoaded();
+		return (this.cachedData || this.allRows).slice(0, maxRows);
+	}
+
+	async *getRowIterator(): AsyncIterable<Record<string, string>> {
+		await this.ensureDataLoaded();
+		for (const row of this.cachedData || this.allRows) {
+			yield row;
+		}
+	}
+
+	async getTotalRowCount(): Promise<number> {
+		await this.ensureDataLoaded();
+		return this.totalRowCount;
+	}
+}
+
+/**
+ * PDF file parser with streaming support
+ */
+export class StreamingPDFParser extends StreamingFileParser {
+	private allRows: Record<string, string>[] = [];
+	private loadPromise: Promise<void> | null = null;
+
+	protected async ensureDataLoaded(): Promise<void> {
+		if (this.cacheInitialized) return;
+		if (this.loadPromise) return this.loadPromise;
+
+		this.loadPromise = (async () => {
+			try {
+				const scanResult = await scanDocument(this.file);
+
+				if (scanResult.columns && scanResult.rows && scanResult.rows.length > 0) {
+					this.columnNames = scanResult.columns;
+					this.columns = createFileColumns(this.columnNames, scanResult.rows);
+					this.allRows = scanResult.rows;
+					this.totalRowCount = scanResult.rows.length;
+					this.cachedData = this.allRows;
+					this.cacheInitialized = true;
+					return;
+				}
+
+				// If no table data, try to create columns from text
+				const textLines = scanResult.text.split('\n').filter((line) => line.trim().length > 0);
+				const firstLine = textLines[0] || '';
+				const possibleColumns = firstLine.split(/\s{2,}|\t/);
+
+				this.columnNames =
+					possibleColumns.length > 1 && possibleColumns.every((col) => col.length < 50)
+						? possibleColumns
+						: ['Extracted Text'];
+
+				this.columns = createFileColumns(this.columnNames, []);
+
+				// Create rows from text lines
+				for (let i = 1; i < textLines.length; i++) {
+					const values = textLines[i].split(/\s{2,}|\t/);
+					const rowData: Record<string, string> = {};
+
+					this.columnNames.forEach((column, index) => {
+						rowData[column] = index < values.length ? values[index] : '';
+					});
+
+					this.allRows.push(rowData);
+				}
+
+				this.totalRowCount = this.allRows.length;
+				this.cachedData = this.allRows;
+				this.cacheInitialized = true;
+			} catch (error) {
+				this.cacheInitialized = true;
+				throw new Error(
+					`Failed to parse PDF: ${error instanceof Error ? error.message : 'Unknown error'}`
+				);
+			}
+		})();
+
+		return this.loadPromise;
+	}
+
+	async getFirstXRows(maxRows: number): Promise<Record<string, string>[]> {
+		await this.ensureDataLoaded();
+		return (this.cachedData || this.allRows).slice(0, maxRows);
+	}
+
+	async *getRowIterator(): AsyncIterable<Record<string, string>> {
+		await this.ensureDataLoaded();
+		for (const row of this.cachedData || this.allRows) {
+			yield row;
+		}
+	}
+
+	async getTotalRowCount(): Promise<number> {
+		await this.ensureDataLoaded();
+		return this.totalRowCount;
+	}
+}
+
+/**
+ * Get streaming parser for a CSV file for row-by-row iteration
+ */
+export function getCSVStreamingParser(file: File): StreamingCSVParser {
+	return new StreamingCSVParser(file);
+}
+
+/**
+ * Get streaming parser for an Excel file
+ */
+export function getExcelStreamingParser(file: File): StreamingExcelParser {
+	return new StreamingExcelParser(file);
+}
+
+/**
+ * Get streaming parser for a PDF file
+ */
+export function getPDFStreamingParser(file: File): StreamingPDFParser {
+	return new StreamingPDFParser(file);
 }
 
 /**
@@ -218,115 +607,6 @@ function createPlaceholderData(file: File, fileType: string): ParsedFileData {
 		fileName: file.name,
 		fileType: fileType
 	};
-}
-
-/**
- * Parses CSV file content
- */
-async function parseCSV(file: File): Promise<ParsedFileData> {
-	return new Promise((resolve, reject) => {
-		const reader = new FileReader();
-
-		reader.onload = (event) => {
-			try {
-				const csvText = event.target?.result as string;
-				if (!csvText) {
-					throw new Error('Failed to read CSV file');
-				}
-
-				// Split into lines and handle various newline types
-				const lines = csvText.split(/\r\n|\n|\r/);
-
-				if (lines.length === 0) {
-					throw new Error('CSV file is empty');
-				}
-
-				// Get a rough estimate of row count (excluding header and empty lines)
-				const estimatedRowCount = lines.filter((line) => line.trim() !== '').length - 1;
-
-				// Check if file exceeds row limit
-				if (estimatedRowCount > MAX_FREE_TIER_ROWS) {
-					throw new RowLimitExceededError(estimatedRowCount);
-				}
-
-				// Parse header row
-				const columnNames = parseCSVLine(lines[0]);
-
-				// Parse data rows
-				const rows: Record<string, string>[] = [];
-				for (let i = 1; i < lines.length; i++) {
-					if (lines[i].trim() === '') continue; // Skip empty lines
-
-					const values = parseCSVLine(lines[i]);
-					const rowData: Record<string, string> = {};
-
-					columnNames.forEach((column, index) => {
-						rowData[column] = index < values.length ? values[index] : '';
-					});
-
-					rows.push(rowData);
-
-					// Check row limit during parsing
-					if (rows.length > MAX_FREE_TIER_ROWS) {
-						throw new RowLimitExceededError(estimatedRowCount);
-					}
-				}
-
-				resolve({
-					columns: createFileColumns(columnNames, rows),
-					rows,
-					fileName: file.name,
-					fileType: 'csv'
-				});
-			} catch (error) {
-				reject(error);
-			}
-		};
-
-		reader.onerror = () => {
-			reject(new Error('Error reading file'));
-		};
-
-		reader.readAsText(file);
-	});
-}
-
-/**
- * Parses a single CSV line, handling quotes correctly
- */
-function parseCSVLine(line: string): string[] {
-	const result: string[] = [];
-	let current = '';
-	let inQuotes = false;
-
-	for (let i = 0; i < line.length; i++) {
-		const char = line[i];
-		const nextChar = i < line.length - 1 ? line[i + 1] : '';
-
-		if (char === '"' && !inQuotes) {
-			// Start of quoted field
-			inQuotes = true;
-		} else if (char === '"' && inQuotes && nextChar === '"') {
-			// Escaped quote inside quoted field
-			current += '"';
-			i++; // Skip the next quote
-		} else if (char === '"' && inQuotes) {
-			// End of quoted field
-			inQuotes = false;
-		} else if (char === ',' && !inQuotes) {
-			// End of field
-			result.push(current);
-			current = '';
-		} else {
-			// Normal character
-			current += char;
-		}
-	}
-
-	// Add the last field
-	result.push(current);
-
-	return result;
 }
 
 /**
@@ -357,11 +637,6 @@ async function parseExcel(file: File): Promise<ParsedFileData> {
 				const range = xlsx.utils.decode_range(worksheet['!ref'] || 'A1:A1');
 				const estimatedRowCount = range.e.r; // End row index (0-based)
 
-				// Check for row limit before full processing
-				if (estimatedRowCount > MAX_FREE_TIER_ROWS) {
-					throw new RowLimitExceededError(estimatedRowCount);
-				}
-
 				// Convert to JSON
 				const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
 
@@ -387,11 +662,6 @@ async function parseExcel(file: File): Promise<ParsedFileData> {
 					});
 
 					rows.push(rowData);
-
-					// Check row limit during parsing in case our estimate was off
-					if (rows.length > MAX_FREE_TIER_ROWS) {
-						throw new RowLimitExceededError(rows.length);
-					}
 				}
 
 				resolve({
@@ -423,11 +693,6 @@ async function parsePDF(file: File): Promise<ParsedFileData> {
 
 		// If we have table data, use it directly (already in the correct format)
 		if (scanResult.columns && scanResult.rows && scanResult.rows.length > 0) {
-			// Check row limit
-			if (scanResult.rows.length > MAX_FREE_TIER_ROWS) {
-				throw new RowLimitExceededError(scanResult.rows.length);
-			}
-
 			return {
 				columns: createFileColumns(scanResult.columns, scanResult.rows),
 				rows: scanResult.rows,
@@ -461,7 +726,7 @@ async function parsePDF(file: File): Promise<ParsedFileData> {
 			}
 		} else {
 			// Single column - put each line as a row
-			for (let i = 0; i < Math.min(textLines.length, MAX_FREE_TIER_ROWS); i++) {
+			for (let i = 0; i < textLines.length; i++) {
 				rows.push({ Content: textLines[i] });
 			}
 		}
@@ -519,7 +784,7 @@ async function parseImage(file: File): Promise<ParsedFileData> {
 
 		if (columnNames.length > 1) {
 			// Multi-column format
-			for (let i = 1; i < Math.min(textLines.length, MAX_FREE_TIER_ROWS + 1); i++) {
+			for (let i = 1; i < textLines.length; i++) {
 				const values = textLines[i].split(/\s{2,}|\t/);
 				const rowData: Record<string, string> = {};
 
@@ -531,7 +796,7 @@ async function parseImage(file: File): Promise<ParsedFileData> {
 			}
 		} else {
 			// Single column - each line is a row
-			for (let i = 0; i < Math.min(textLines.length, MAX_FREE_TIER_ROWS); i++) {
+			for (let i = 0; i < textLines.length; i++) {
 				rows.push({ 'Extracted Text': textLines[i] });
 			}
 		}

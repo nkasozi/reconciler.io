@@ -1066,3 +1066,108 @@ function calculateDifference(
 
 	return 'Text differs';
 }
+
+/**
+ * Streaming reconciliation that processes rows one at a time from file parsers
+ * This is memory-efficient for large files
+ */
+export async function* reconcileDataStreaming(
+	primaryParser: any, // StreamingFileParser
+	comparisonParser: any, // StreamingFileParser
+	config: ReconciliationConfig
+): AsyncIterable<RowMatchResult> {
+	// Get columns and create lookup map for comparison rows first
+	const comparisonColumns = comparisonParser.getColumnNames();
+	const comparisonIdColumn = config.primaryIdPair.comparisonColumn;
+	const idPairSettings = config.primaryIdPair.settings;
+
+	// Build index of comparison rows by ID (we need to load all comparison rows for matching)
+	const comparisonRowsMap = new Map<string, Record<string, string>>();
+	for await (const row of comparisonParser.getRowIterator()) {
+		const idValue = row[comparisonIdColumn];
+		if (idValue) {
+			const keyValue = normalizeForComparison(
+				idValue,
+				idPairSettings.caseSensitive,
+				idPairSettings.trimValues
+			);
+			comparisonRowsMap.set(keyValue, row);
+		}
+	}
+
+	// Now iterate through primary rows and compare
+	const primaryIdColumn = config.primaryIdPair.primaryColumn;
+	const trackedComparisonIds = new Set<string>();
+
+	for await (const primaryRow of primaryParser.getRowIterator()) {
+		const primaryIdValue = primaryRow[primaryIdColumn];
+		if (!primaryIdValue) continue;
+
+		const primaryKeyValue = normalizeForComparison(
+			primaryIdValue,
+			idPairSettings.caseSensitive,
+			idPairSettings.trimValues
+		);
+
+		trackedComparisonIds.add(primaryKeyValue);
+
+		// Find matching comparison row
+		const comparisonRow = comparisonRowsMap.get(primaryKeyValue);
+
+		if (!comparisonRow) {
+			// No match found - yield as unmatched row
+			yield {
+				primaryRow,
+				comparisonRow: {} as Record<string, string>,
+				idValues: {
+					primary: primaryIdValue,
+					comparison: 'NOT_FOUND'
+				},
+				comparisonResults: {},
+				matchScore: 0
+			};
+			continue;
+		}
+
+		// Compare all column pairs
+		const comparisonResults: Record<string, ComparisonResult> = {};
+		let matchScore = 0;
+		let totalPairs = config.comparisonPairs.length;
+
+		for (const pair of config.comparisonPairs) {
+			const primaryColValue = primaryRow[pair.primaryColumn] || '';
+			const comparisonColValue = comparisonRow[pair.comparisonColumn] || '';
+
+			const result = evaluateToleranceWithEvaluator(
+				primaryColValue,
+				comparisonColValue,
+				pair.tolerance,
+				pair.settings
+			);
+
+			comparisonResults[pair.primaryColumn] = {
+				primaryValue: primaryColValue,
+				comparisonValue: comparisonColValue,
+				match: result.matches,
+				reason: result.reason,
+				status: result.matches ? 'exact_match' : 'no_match',
+				tolerance: pair.tolerance
+			};
+
+			if (result.matches) {
+				matchScore += 100;
+			}
+		}
+
+		yield {
+			primaryRow,
+			comparisonRow,
+			idValues: {
+				primary: primaryIdValue,
+				comparison: primaryKeyValue
+			},
+			comparisonResults,
+			matchScore: totalPairs > 0 ? Math.round(matchScore / totalPairs) : 0
+		};
+	}
+}
