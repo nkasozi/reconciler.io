@@ -1076,32 +1076,45 @@ export async function* reconcileDataStreaming(
 	comparisonParser: any, // StreamingFileParser
 	config: ReconciliationConfig
 ): AsyncIterable<RowMatchResult> {
-	// Get columns and create lookup map for comparison rows first
-	const comparisonColumns = comparisonParser.getColumnNames();
+	console.log('[Streaming Reconciliation] Starting TRUE STREAMING mode...');
+	console.log(
+		'[Streaming Reconciliation] Each primary row will be compared against ALL comparison rows'
+	);
+
 	const comparisonIdColumn = config.primaryIdPair.comparisonColumn;
+	const primaryIdColumn = config.primaryIdPair.primaryColumn;
 	const idPairSettings = config.primaryIdPair.settings;
 
-	// Build index of comparison rows by ID (we need to load all comparison rows for matching)
-	const comparisonRowsMap = new Map<string, Record<string, string>>();
-	for await (const row of comparisonParser.getRowIterator()) {
-		const idValue = row[comparisonIdColumn];
-		if (idValue) {
-			const keyValue = normalizeForComparison(
-				idValue,
-				idPairSettings.caseSensitive,
-				idPairSettings.trimValues
-			);
-			comparisonRowsMap.set(keyValue, row);
+	let primaryRowCount = 0;
+
+	// Get primary file iterator
+	const primaryIterator = primaryParser.getRowIterator();
+	console.log('[Streaming Reconciliation] Got primary file iterator');
+
+	// Process each primary row
+	for await (const primaryRow of primaryIterator) {
+		primaryRowCount++;
+
+		if (primaryRowCount === 1) {
+			console.log('[Streaming Reconciliation] *** FIRST PRIMARY ROW RECEIVED ***');
 		}
-	}
 
-	// Now iterate through primary rows and compare
-	const primaryIdColumn = config.primaryIdPair.primaryColumn;
-	const trackedComparisonIds = new Set<string>();
+		if (primaryRowCount % 1000 === 0) {
+			console.log(`[Streaming Reconciliation] *** Processing primary row ${primaryRowCount} ***`);
+		}
 
-	for await (const primaryRow of primaryParser.getRowIterator()) {
 		const primaryIdValue = primaryRow[primaryIdColumn];
-		if (!primaryIdValue) continue;
+
+		if (!primaryIdValue) {
+			console.log(
+				`[Streaming Reconciliation] Skipping primary row ${primaryRowCount}: missing primary ID`
+			);
+			continue;
+		}
+
+		console.log(
+			`[Streaming Reconciliation] [PrimaryFile] Reconciling primary row ${primaryRowCount}: ID=${primaryIdValue}`
+		);
 
 		const primaryKeyValue = normalizeForComparison(
 			primaryIdValue,
@@ -1109,13 +1122,92 @@ export async function* reconcileDataStreaming(
 			idPairSettings.trimValues
 		);
 
-		trackedComparisonIds.add(primaryKeyValue);
+		// Get comparison file iterator for THIS primary row
+		const comparisonIterator = comparisonParser.getRowIterator();
+		let comparisonRowCount = 0;
+		let foundMatch = false;
 
-		// Find matching comparison row
-		const comparisonRow = comparisonRowsMap.get(primaryKeyValue);
+		// Compare this primary row against ALL comparison rows
+		for await (const comparisonRow of comparisonIterator) {
+			comparisonRowCount++;
 
-		if (!comparisonRow) {
-			// No match found - yield as unmatched row
+			const comparisonIdValue = comparisonRow[comparisonIdColumn];
+
+			if (!comparisonIdValue) {
+				continue;
+			}
+
+			const comparisonKeyValue = normalizeForComparison(
+				comparisonIdValue,
+				idPairSettings.caseSensitive,
+				idPairSettings.trimValues
+			);
+
+			// Check if IDs match
+			if (primaryKeyValue === comparisonKeyValue) {
+				console.log(
+					`[Streaming Reconciliation] [ComparisonFile] Row ${comparisonRowCount}: ID MATCH FOUND! Primary=${primaryIdValue} vs Comparison=${comparisonIdValue}`
+				);
+
+				// Compare all column pairs for this match
+				const comparisonResults: Record<string, ComparisonResult> = {};
+				let matchScore = 0;
+				let totalPairs = config.comparisonPairs.length;
+
+				for (const pair of config.comparisonPairs) {
+					const primaryColValue = primaryRow[pair.primaryColumn] || '';
+					const comparisonColValue = comparisonRow[pair.comparisonColumn] || '';
+
+					const result = evaluateToleranceWithEvaluator(
+						primaryColValue,
+						comparisonColValue,
+						pair.tolerance,
+						pair.settings
+					);
+
+					comparisonResults[pair.primaryColumn] = {
+						primaryValue: primaryColValue,
+						comparisonValue: comparisonColValue,
+						match: result.matches,
+						reason: result.reason,
+						status: result.matches ? 'exact_match' : 'no_match',
+						tolerance: pair.tolerance
+					};
+
+					if (result.matches) {
+						matchScore += 100;
+					}
+				}
+
+				const finalScore = totalPairs > 0 ? Math.round(matchScore / totalPairs) : 0;
+
+				console.log(
+					`[Streaming Reconciliation] *** YIELDING RESULT: Primary Row ${primaryRowCount} matched with Comparison Row ${comparisonRowCount}, Score: ${finalScore} ***`
+				);
+
+				// Yield the match result immediately
+				yield {
+					primaryRow,
+					comparisonRow,
+					idValues: {
+						primary: primaryIdValue,
+						comparison: comparisonKeyValue
+					},
+					comparisonResults,
+					matchScore: finalScore
+				};
+
+				foundMatch = true;
+				break; // Move to next primary row once we find a match
+			}
+		}
+
+		// If no match found in comparison file
+		if (!foundMatch) {
+			console.log(
+				`[Streaming Reconciliation] *** YIELDING NO-MATCH RESULT: Primary Row ${primaryRowCount} (ID: ${primaryIdValue}) not found in comparison file ***`
+			);
+
 			yield {
 				primaryRow,
 				comparisonRow: {} as Record<string, string>,
@@ -1126,48 +1218,10 @@ export async function* reconcileDataStreaming(
 				comparisonResults: {},
 				matchScore: 0
 			};
-			continue;
 		}
-
-		// Compare all column pairs
-		const comparisonResults: Record<string, ComparisonResult> = {};
-		let matchScore = 0;
-		let totalPairs = config.comparisonPairs.length;
-
-		for (const pair of config.comparisonPairs) {
-			const primaryColValue = primaryRow[pair.primaryColumn] || '';
-			const comparisonColValue = comparisonRow[pair.comparisonColumn] || '';
-
-			const result = evaluateToleranceWithEvaluator(
-				primaryColValue,
-				comparisonColValue,
-				pair.tolerance,
-				pair.settings
-			);
-
-			comparisonResults[pair.primaryColumn] = {
-				primaryValue: primaryColValue,
-				comparisonValue: comparisonColValue,
-				match: result.matches,
-				reason: result.reason,
-				status: result.matches ? 'exact_match' : 'no_match',
-				tolerance: pair.tolerance
-			};
-
-			if (result.matches) {
-				matchScore += 100;
-			}
-		}
-
-		yield {
-			primaryRow,
-			comparisonRow,
-			idValues: {
-				primary: primaryIdValue,
-				comparison: primaryKeyValue
-			},
-			comparisonResults,
-			matchScore: totalPairs > 0 ? Math.round(matchScore / totalPairs) : 0
-		};
 	}
+
+	console.log(
+		`[Streaming Reconciliation] *** COMPLETED *** Total primary rows processed: ${primaryRowCount}`
+	);
 }

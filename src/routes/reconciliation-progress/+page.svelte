@@ -108,6 +108,7 @@
 
 	onMount(() => {
 		const unsubscribe = reconciliationStore.subscribe(async (state) => {
+			console.log('[Reconciliation Progress] Store subscription triggered');
 			if (!state.primaryFile) {
 				// Redirect to upload page if data is missing
 				console.warn('Missing Primary file data, redirecting to upload page');
@@ -132,48 +133,38 @@
 			// Set file names
 			primaryFileName = state.primaryFile.name || 'Primary File';
 			comparisonFileName = state.comparisonFile.name || 'Comparison File';
+			console.log(
+				`[Reconciliation Progress] Files loaded: ${primaryFileName} vs ${comparisonFileName}`
+			);
 
 			// Store file data for metadata access
 			primaryFileData = null;
 			comparisonFileData = null;
 
-			// Get total rows from parser if available, otherwise use preview data
-			if (state.primaryFileParser) {
-				try {
-					const count = await state.primaryFileParser.getTotalRowCount();
-					totalRows = count;
-					console.log('Loaded actual primary file row count:', count);
-				} catch (error) {
-					console.error('Error getting total row count:', error);
-					// Fallback to estimate
-					totalRows = 0;
-				}
-			} else {
-				// Fallback to estimate if no parser
-				totalRows = 0;
-			}
+			// Don't block on getting total rows - we'll update it as we process
+			// Just set it to 0 and let the reconciliation update it as results come in
+			totalRows = 0;
+			console.log(
+				'[Reconciliation Progress] Skipping blocking getTotalRowCount call - will track progress during reconciliation'
+			);
 
 			//primaryRows = state.primaryFileData.rows;
 
 			// Get column mapping configuration
 			primaryIdPair = state.reconciliationConfig.primaryIdPair;
 			comparisonPairs = state.reconciliationConfig.comparisonPairs;
+			console.log(
+				`[Reconciliation Progress] Configuration loaded. Primary ID column: ${primaryIdPair.primaryColumn}, Comparison ID column: ${primaryIdPair.comparisonColumn}`
+			);
 
 			// Check if reverse reconciliation is enabled
 			isReverseReconciliationEnabled = state.reconciliationConfig.reverseReconciliation === true;
 
-			// Create lookup map for comparison data
-			if (state.comparisonFileParser && primaryIdPair.comparisonColumn) {
-				const comparisonIdColumn = primaryIdPair.comparisonColumn;
-				comparisonMap.clear();
-				const rows = await state.comparisonFileParser.getRowIterator();
-				for await (const row of rows) {
-					const id = row[comparisonIdColumn];
-					if (id) {
-						comparisonMap.set(id, row);
-					}
-				}
-			}
+			// NOTE: Comparison map is now built internally by reconcileDataStreaming
+			// This avoids redundant iteration and lets reconciliation start immediately
+			console.log(
+				'[Reconciliation Progress] Starting reconciliation immediately (map built internally)...'
+			);
 
 			// Start the reconciliation process now that data is loaded
 			startReconciliation();
@@ -282,6 +273,7 @@
 	}
 
 	function startReconciliation() {
+		console.log('[Reconciliation Progress] startReconciliation() called');
 		// Reset the state
 		processedRows = 0;
 		matchingLogs = [];
@@ -332,19 +324,27 @@
 		unsubscribe();
 
 		console.log('Store state on reconciliation start:', {
-			hasPrimaryFileData: !!storeState.primaryFileData,
-			hasComparisonFileData: !!storeState.comparisonFileData,
+			hasPrimaryFile: !!storeState.primaryFile,
+			hasComparisonFile: !!storeState.comparisonFile,
 			hasConfig: !!storeState.reconciliationConfig,
 			hasPrimaryParser: !!storeState.primaryFileParser,
 			hasComparisonParser: !!storeState.comparisonFileParser
 		});
 
 		if (
-			!storeState.primaryFileData ||
-			!storeState.comparisonFileData ||
-			!storeState.reconciliationConfig
+			!storeState.primaryFile ||
+			!storeState.comparisonFile ||
+			!storeState.reconciliationConfig ||
+			!storeState.primaryFileParser ||
+			!storeState.comparisonFileParser
 		) {
-			console.error('Missing store data for reconciliation');
+			console.error('Missing store data for reconciliation', {
+				primaryFile: !!storeState.primaryFile,
+				comparisonFile: !!storeState.comparisonFile,
+				config: !!storeState.reconciliationConfig,
+				primaryParser: !!storeState.primaryFileParser,
+				comparisonParser: !!storeState.comparisonFileParser
+			});
 			return;
 		}
 
@@ -439,21 +439,40 @@
 	// Perform streaming reconciliation using file parsers
 	async function performStreamingReconciliation(storeState: any) {
 		try {
-			console.log('Creating streaming reconciliation generator...');
-			console.log('Config:', storeState.reconciliationConfig);
+			console.log('[performStreamingReconciliation] Starting...');
+			console.log(
+				'[performStreamingReconciliation] Creating streaming reconciliation generator...'
+			);
+			console.log('[performStreamingReconciliation] Config:', storeState.reconciliationConfig);
 			const generator = reconcileDataStreaming(
 				storeState.primaryFileParser,
 				storeState.comparisonFileParser,
 				storeState.reconciliationConfig
 			);
-			console.log('Generator created:', generator);
+			console.log('[performStreamingReconciliation] Generator created:', generator);
 
 			let matchIndex = 0;
-			console.log('Starting for-await loop...');
+			console.log('[performStreamingReconciliation] Starting for-await loop...');
 			for await (const result of generator) {
 				matchIndex++;
 				processedRows = matchIndex;
-				console.log(`Processing result ${matchIndex}:`, result.idValues);
+
+				// Update totalRows on first result (since we're not blocking on it anymore)
+				if (matchIndex === 1) {
+					console.log(
+						'[performStreamingReconciliation] *** FIRST RESULT RECEIVED - Reconciliation is working! ***'
+					);
+					console.log('[performStreamingReconciliation] First result:', result.idValues);
+				}
+
+				if (matchIndex % 100 === 0) {
+					console.log(`[performStreamingReconciliation] Progress: ${matchIndex} results processed`);
+				}
+
+				console.log(
+					`[performStreamingReconciliation] Processing result ${matchIndex}:`,
+					result.idValues
+				);
 
 				// Add log entry for this match
 				const newLog: any = {

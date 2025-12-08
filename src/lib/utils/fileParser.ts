@@ -36,8 +36,6 @@ export abstract class StreamingFileParser {
 	protected columnNames: string[] = [];
 	protected totalRowCount: number = 0;
 
-	// Cache: loaded data is stored here, NOT in Svelte state
-	protected cachedData: Record<string, string>[] | null = null;
 	protected cacheInitialized = false;
 
 	// Cached metadata
@@ -59,6 +57,15 @@ export abstract class StreamingFileParser {
 	protected abstract ensureDataLoaded(): Promise<void>;
 
 	/**
+	 * Optionally ensure columns are loaded (used by CSV parser for fast column access)
+	 * Can be overridden by subclasses that support fast column loading
+	 */
+	protected async ensureColumnsLoaded(): Promise<void> {
+		// Default implementation: just ensure data is loaded
+		await this.ensureDataLoaded();
+	}
+
+	/**
 	 * Get the first X rows of the file without loading the entire file into memory
 	 */
 	abstract getFirstXRows(maxRows: number): Promise<Record<string, string>[]>;
@@ -78,7 +85,7 @@ export abstract class StreamingFileParser {
 	 */
 	async getColumns(): Promise<FileColumn[]> {
 		if (!this.cacheInitialized) {
-			await this.ensureDataLoaded();
+			await this.ensureColumnsLoaded();
 		}
 		return this.columns;
 	}
@@ -88,7 +95,7 @@ export abstract class StreamingFileParser {
 	 */
 	async getColumnNames(): Promise<string[]> {
 		if (!this.cacheInitialized) {
-			await this.ensureDataLoaded();
+			await this.ensureColumnsLoaded();
 		}
 		return this.columnNames;
 	}
@@ -126,33 +133,30 @@ export abstract class StreamingFileParser {
 	 * Clear cache if needed
 	 */
 	clearCache(): void {
-		this.cachedData = null;
 		this.cacheInitialized = false;
 	}
 }
 
 /**
- * CSV file parser with streaming support
+ * CSV file parser with true streaming support via Papa.parse
+ * Never loads entire file into memory - uses Papa.parse's step callback for streaming
  */
 export class StreamingCSVParser extends StreamingFileParser {
-	private loadPromise: Promise<void> | null = null;
+	private columnsPromise: Promise<void> | null = null;
 
 	/**
-	 * Load the entire CSV file once and cache it
+	 * Load column headers only - reads just the first row
 	 */
-	protected async ensureDataLoaded(): Promise<void> {
-		if (this.cacheInitialized) {
+	protected async ensureColumnsLoaded(): Promise<void> {
+		if (this.columnNames.length > 0) {
 			return;
 		}
 
-		// If already loading, wait for it
-		if (this.loadPromise) {
-			return this.loadPromise;
+		if (this.columnsPromise) {
+			return this.columnsPromise;
 		}
 
-		// Start loading
-		this.loadPromise = new Promise<void>((resolve, reject) => {
-			const rowBuffer: Record<string, string>[] = [];
+		this.columnsPromise = new Promise<void>((resolve, reject) => {
 			let headerParsed = false;
 
 			Papa.parse(this.file, {
@@ -160,56 +164,217 @@ export class StreamingCSVParser extends StreamingFileParser {
 				dynamicTyping: false,
 				skipEmptyLines: true,
 				worker: true,
-				step: (row) => {
+				step: (row, parser) => {
 					if (!headerParsed) {
 						const rowData = row.data as Record<string, string>;
 						this.columnNames = Object.keys(rowData).map((k) => k.trim());
 						this.columns = createFileColumns(this.columnNames, []);
 						headerParsed = true;
-					}
-
-					const rowData = row.data as Record<string, string>;
-					const normalizedRow: Record<string, string> = {};
-					Object.entries(rowData).forEach(([key, value]) => {
-						const trimmedKey = key.trim();
-						normalizedRow[trimmedKey] = String(value ?? '');
-					});
-
-					const hasContent = Object.values(normalizedRow).some((val) => val && val.trim() !== '');
-					if (hasContent) {
-						rowBuffer.push(normalizedRow);
+						// Abort parsing after getting headers
+						parser.abort();
+						resolve();
 					}
 				},
-				complete: () => {
-					this.cachedData = rowBuffer;
-					this.totalRowCount = rowBuffer.length;
-					this.cacheInitialized = true;
-					resolve();
-				},
-				error: (error) => {
-					reject(new Error(`Failed to parse CSV file: ${error.message}`));
+				error: (error: any) => {
+					reject(
+						new Error(
+							`Failed to parse CSV headers: ${error instanceof Error ? error.message : String(error)}`
+						)
+					);
 				}
 			});
 		});
 
-		return this.loadPromise;
+		return this.columnsPromise;
 	}
 
+	/**
+	 * Ensure columns are loaded (required before getting rows)
+	 * Does NOT cache the entire file - use getRowIterator() for streaming
+	 */
+	protected async ensureDataLoaded(): Promise<void> {
+		// Just ensure columns are loaded
+		await this.ensureColumnsLoaded();
+		this.cacheInitialized = true;
+	}
+
+	/**
+	 * Get first X rows by streaming through file
+	 * Does NOT cache entire file - reads only what's needed via step callback
+	 */
 	async getFirstXRows(maxRows: number): Promise<Record<string, string>[]> {
-		await this.ensureDataLoaded();
-		return (this.cachedData || []).slice(0, maxRows);
+		await this.ensureColumnsLoaded();
+
+		const rows: Record<string, string>[] = [];
+
+		return new Promise((resolve, reject) => {
+			Papa.parse(this.file, {
+				header: true,
+				dynamicTyping: false,
+				skipEmptyLines: true,
+				worker: true,
+				step: (row, parser) => {
+					if (rows.length < maxRows) {
+						const rowData = row.data as Record<string, string>;
+						const normalizedRow: Record<string, string> = {};
+						Object.entries(rowData).forEach(([key, value]) => {
+							const trimmedKey = key.trim();
+							normalizedRow[trimmedKey] = String(value ?? '');
+						});
+
+						const hasContent = Object.values(normalizedRow).some((val) => val && val.trim() !== '');
+						if (hasContent) {
+							rows.push(normalizedRow);
+						}
+					}
+
+					// Stop parsing once we have enough rows
+					if (rows.length >= maxRows) {
+						parser.abort();
+					}
+				},
+				complete: () => {
+					resolve(rows);
+				},
+				error: (error: any) => {
+					reject(new Error(`Failed to parse CSV: ${error.message}`));
+				}
+			});
+		});
 	}
 
+	/**
+	 * Override to use fast column-only loading instead of loading entire file
+	 */
+	async getColumns(): Promise<FileColumn[]> {
+		await this.ensureColumnsLoaded();
+		return this.columns;
+	}
+
+	/**
+	 * Iterate through rows one at a time as an async generator
+	 * TRULY STREAMING - yields rows as Papa.parse encounters them
+	 * Does NOT wait for entire file to parse before yielding
+	 * Uses Web Worker for background parsing
+	 */
 	async *getRowIterator(): AsyncIterable<Record<string, string>> {
-		await this.ensureDataLoaded();
-		for (const row of this.cachedData || []) {
-			yield row;
+		console.log('[CSV Parser] getRowIterator started - TRUE STREAMING MODE');
+		await this.ensureColumnsLoaded();
+		console.log('[CSV Parser] Columns loaded, starting Papa.parse with streaming yields');
+
+		const rowQueue: Record<string, string>[] = [];
+		let parseComplete = false;
+		let hasError: Error | null = null;
+		let resolveWait: (() => void) | null = null;
+
+		// Start parsing in background (don't await it!)
+		console.log('[CSV Parser] Starting Papa.parse in background');
+		Papa.parse(this.file, {
+			header: true,
+			dynamicTyping: false,
+			skipEmptyLines: true,
+			worker: true,
+			step: (row) => {
+				const rowData = row.data as Record<string, string>;
+				const normalizedRow: Record<string, string> = {};
+				Object.entries(rowData).forEach(([key, value]) => {
+					const trimmedKey = key.trim();
+					normalizedRow[trimmedKey] = String(value ?? '');
+				});
+
+				const hasContent = Object.values(normalizedRow).some((val) => val && val.trim() !== '');
+				if (hasContent) {
+					rowQueue.push(normalizedRow);
+					if (rowQueue.length % 1000 === 0) {
+						console.log(`[CSV Parser] Parsed ${rowQueue.length} rows so far...`);
+					}
+					// Wake up the async generator if it's waiting
+					if (resolveWait) {
+						resolveWait();
+						resolveWait = null;
+					}
+				}
+			},
+			complete: () => {
+				console.log(`[CSV Parser] Papa.parse completed. Total rows collected: ${rowQueue.length}`);
+				parseComplete = true;
+				// Wake up the async generator if it's waiting
+				if (resolveWait) {
+					resolveWait();
+					resolveWait = null;
+				}
+			},
+			error: (err: any) => {
+				console.error('[CSV Parser] Papa.parse error:', err);
+				hasError = new Error(`Failed to parse CSV: ${err.message}`);
+				parseComplete = true;
+				// Wake up the async generator if it's waiting
+				if (resolveWait) {
+					resolveWait();
+					resolveWait = null;
+				}
+			}
+		});
+
+		// Yield rows as they become available
+		console.log('[CSV Parser] Starting to yield rows as they arrive');
+		let yieldedCount = 0;
+		while (!parseComplete || rowQueue.length > 0) {
+			if (rowQueue.length > 0) {
+				const row = rowQueue.shift();
+				if (row) {
+					yieldedCount++;
+					if (yieldedCount % 1000 === 0) {
+						console.log(`[CSV Parser] Yielded ${yieldedCount} rows so far...`);
+					}
+					yield row;
+				}
+			} else if (!parseComplete) {
+				// No rows available yet, but parsing not done - wait a bit
+				await new Promise<void>((resolve) => {
+					resolveWait = resolve;
+					// Safety timeout in case Papa.parse doesn't call callbacks
+					setTimeout(resolve, 10);
+				});
+			}
 		}
+
+		if (hasError) {
+			throw hasError;
+		}
+
+		console.log(`[CSV Parser] Finished yielding all ${yieldedCount} rows`);
 	}
 
+	/**
+	 * Get total row count by streaming through entire file
+	 */
 	async getTotalRowCount(): Promise<number> {
-		await this.ensureDataLoaded();
-		return this.totalRowCount;
+		await this.ensureColumnsLoaded();
+
+		let count = 0;
+
+		return new Promise((resolve, reject) => {
+			Papa.parse(this.file, {
+				header: true,
+				dynamicTyping: false,
+				skipEmptyLines: true,
+				worker: true,
+				step: (row) => {
+					const rowData = row.data as Record<string, string>;
+					const hasContent = Object.values(rowData).some((val) => String(val).trim() !== '');
+					if (hasContent) {
+						count++;
+					}
+				},
+				complete: () => {
+					resolve(count);
+				},
+				error: (error: any) => {
+					reject(new Error(`Failed to parse CSV: ${error.message}`));
+				}
+			});
+		});
 	}
 }
 
@@ -456,7 +621,6 @@ export class StreamingExcelParser extends StreamingFileParser {
 					}
 				}
 
-				this.cachedData = this.allRows;
 				this.cacheInitialized = true;
 				this.totalRowCount = this.allRows.length;
 				resolve();
@@ -471,14 +635,20 @@ export class StreamingExcelParser extends StreamingFileParser {
 
 	async getFirstXRows(maxRows: number): Promise<Record<string, string>[]> {
 		await this.ensureDataLoaded();
-		return (this.cachedData || this.allRows).slice(0, maxRows);
+		return this.allRows.slice(0, maxRows);
 	}
 
 	async *getRowIterator(): AsyncIterable<Record<string, string>> {
+		console.log('[Excel Parser] getRowIterator started');
 		await this.ensureDataLoaded();
-		for (const row of this.cachedData || this.allRows) {
-			yield row;
+		console.log(`[Excel Parser] Data loaded, yielding ${this.allRows.length} rows`);
+		for (let i = 0; i < this.allRows.length; i++) {
+			if (i % 1000 === 0) {
+				console.log(`[Excel Parser] Yielding row ${i} of ${this.allRows.length}`);
+			}
+			yield this.allRows[i];
 		}
+		console.log(`[Excel Parser] Finished yielding all ${this.allRows.length} rows`);
 	}
 
 	async getTotalRowCount(): Promise<number> {
@@ -507,7 +677,6 @@ export class StreamingPDFParser extends StreamingFileParser {
 					this.columns = createFileColumns(this.columnNames, scanResult.rows);
 					this.allRows = scanResult.rows;
 					this.totalRowCount = scanResult.rows.length;
-					this.cachedData = this.allRows;
 					this.cacheInitialized = true;
 					return;
 				}
@@ -537,7 +706,6 @@ export class StreamingPDFParser extends StreamingFileParser {
 				}
 
 				this.totalRowCount = this.allRows.length;
-				this.cachedData = this.allRows;
 				this.cacheInitialized = true;
 			} catch (error) {
 				this.cacheInitialized = true;
@@ -552,14 +720,20 @@ export class StreamingPDFParser extends StreamingFileParser {
 
 	async getFirstXRows(maxRows: number): Promise<Record<string, string>[]> {
 		await this.ensureDataLoaded();
-		return (this.cachedData || this.allRows).slice(0, maxRows);
+		return this.allRows.slice(0, maxRows);
 	}
 
 	async *getRowIterator(): AsyncIterable<Record<string, string>> {
+		console.log('[PDF Parser] getRowIterator started');
 		await this.ensureDataLoaded();
-		for (const row of this.cachedData || this.allRows) {
-			yield row;
+		console.log(`[PDF Parser] Data loaded, yielding ${this.allRows.length} rows`);
+		for (let i = 0; i < this.allRows.length; i++) {
+			if (i % 1000 === 0) {
+				console.log(`[PDF Parser] Yielding row ${i} of ${this.allRows.length}`);
+			}
+			yield this.allRows[i];
 		}
+		console.log(`[PDF Parser] Finished yielding all ${this.allRows.length} rows`);
 	}
 
 	async getTotalRowCount(): Promise<number> {

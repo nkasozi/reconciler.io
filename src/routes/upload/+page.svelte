@@ -298,6 +298,11 @@
 				}
 				if (parser) {
 					reconciliationStore.setPrimaryFileParser(parser);
+					// Warm the column cache (fast - just reads headers)
+					// This allows column-selection page to get columns instantly
+					parser.getColumns().catch((error: any) => {
+						console.error('Error caching primary columns:', error);
+					});
 				} else {
 					primaryTotalRows = parsedData.rows.length;
 					primaryColumns = parsedData.columns;
@@ -325,6 +330,11 @@
 				}
 				if (parser) {
 					reconciliationStore.setComparisonFileParser(parser);
+					// Warm the column cache (fast - just reads headers)
+					// This allows column-selection page to get columns instantly
+					parser.getColumns().catch((error: any) => {
+						console.error('Error caching comparison columns:', error);
+					});
 				} else {
 					comparisonTotalRows = parsedData.rows.length;
 					comparisonColumns = parsedData.columns;
