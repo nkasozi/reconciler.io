@@ -3,6 +3,9 @@
 	import { goto } from '$app/navigation';
 	import { reconciliationStore } from '$lib/stores/reconciliationStore';
 	import type { ColumnPair, RowMatchResult } from '$lib/utils/reconciliation';
+	import FailureAnalysis from '$lib/components/FailureAnalysis.svelte';
+	import { getFailureAnalyzer } from '$lib/utils/failureAnalyzer';
+	import { getReconciliationDB } from '$lib/utils/indexedDB';
 
 	// Function to download reconciliation results as CSV
 	function downloadResults() {
@@ -94,6 +97,8 @@
 
 	// Filter state
 	let filterStatus = $state<string>('failures');
+	let showFailureAnalysis = $state(false);
+	let resultStoreName = $state<string | null>(null);
 
 	onMount(() => {
 		const unsubscribe = reconciliationStore.subscribe((state) => {
@@ -238,6 +243,35 @@
 	// Navigate to previous failure
 	function prevFailure() {
 		navigateToFailure(currentFailureIndex - 1);
+	}
+
+	// Analyze failures using new failure analyzer
+	async function runFailureAnalysis() {
+		try {
+			showFailureAnalysis = true;
+			reconciliationStore.setFailureAnalysisAnalyzing(true);
+
+			const state = reconciliationStore.getSnapshot();
+
+			// We need to get the result store name - it should be in state or we can generate it
+			// For now, we'll use a derived name based on the primary file store
+			const resStoreName = state.resultStoreName || `results-${state.primaryFileStoreName}`;
+
+			const analyzer = getFailureAnalyzer(); // Run analysis
+			const failures = await analyzer.analyzeFailures(
+				resStoreName,
+				state.primaryFileStoreName || '',
+				state.comparisonFileStoreName || ''
+			);
+
+			const summary = analyzer.generateSummary(failures);
+
+			// Update store
+			reconciliationStore.updateFailureAnalysis(failures, summary);
+		} catch (error) {
+			console.error('Failure analysis error:', error);
+			reconciliationStore.setError(`Failed to analyze failures: ${error}`);
+		}
 	}
 
 	// Scroll to a specific row
@@ -787,6 +821,48 @@
 		{/if}
 	</div>
 </div>
+
+<!-- Failure Analysis Modal/Section -->
+{#if showFailureAnalysis}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+		<div
+			class="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-lg bg-white p-6 shadow-xl dark:bg-gray-900"
+		>
+			<div class="mb-4 flex items-center justify-between">
+				<h2 class="text-2xl font-bold text-gray-900 dark:text-white">Failure Analysis</h2>
+				<button
+					onclick={() => (showFailureAnalysis = false)}
+					class="rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-gray-800"
+				>
+					✕
+				</button>
+			</div>
+			<FailureAnalysis
+				failures={$reconciliationStore.failureAnalysisState.failures}
+				summary={$reconciliationStore.failureAnalysisState.summary}
+				isLoading={$reconciliationStore.failureAnalysisState.isAnalyzing}
+				onExport={async () => {
+					// Export failures as CSV
+					const analyzer = getFailureAnalyzer();
+					const csv = analyzer.exportToCSV($reconciliationStore.failureAnalysisState.failures);
+					const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+					const url = URL.createObjectURL(blob);
+					const link = document.createElement('a');
+					link.setAttribute('href', url);
+					link.setAttribute(
+						'download',
+						`failure-analysis-${new Date().toISOString().slice(0, 10)}.csv`
+					);
+					link.style.visibility = 'hidden';
+					document.body.appendChild(link);
+					link.click();
+					document.body.removeChild(link);
+					URL.revokeObjectURL(url);
+				}}
+			/>
+		</div>
+	</div>
+{/if}
 
 <style>
 	/* Add smooth scrolling to tables */

@@ -1,5 +1,12 @@
 import { scanDocument, type DocumentScanResult } from './documentScanner';
 import Papa from 'papaparse';
+import type {
+	IndexedDBConfig,
+	FileDumpProgress,
+	FileDumpResult,
+	FileDumpProgressCallback
+} from './indexedDB/types';
+import { dumpCSVToIndexedDB } from './indexedDB/fileDumper';
 
 /**
  * Data type detected for a column
@@ -79,6 +86,15 @@ export abstract class StreamingFileParser {
 	 * Get the total number of rows in the file
 	 */
 	abstract getTotalRowCount(): Promise<number>;
+
+	/**
+	 * Begin dumping file data to IndexedDB
+	 * Creates a new table/store and bulk inserts records in background
+	 */
+	abstract beginFileDumpToIndexedDB(
+		config: IndexedDBConfig,
+		onProgress?: FileDumpProgressCallback
+	): Promise<FileDumpResult>;
 
 	/**
 	 * Get column information
@@ -376,6 +392,16 @@ export class StreamingCSVParser extends StreamingFileParser {
 			});
 		});
 	}
+
+	/**
+	 * Begin dumping CSV file to IndexedDB for reconciliation
+	 */
+	async beginFileDumpToIndexedDB(
+		config: IndexedDBConfig,
+		onProgress?: FileDumpProgressCallback
+	): Promise<FileDumpResult> {
+		return dumpCSVToIndexedDB(this.file, config, onProgress);
+	}
 }
 
 /**
@@ -655,6 +681,18 @@ export class StreamingExcelParser extends StreamingFileParser {
 		await this.ensureDataLoaded();
 		return this.totalRowCount;
 	}
+
+	/**
+	 * Begin dumping Excel file to IndexedDB for reconciliation
+	 */
+	async beginFileDumpToIndexedDB(
+		config: IndexedDBConfig,
+		onProgress?: FileDumpProgressCallback
+	): Promise<FileDumpResult> {
+		// For Excel, we convert to CSV format and use the CSV dumper
+		// This is a simplified implementation
+		throw new Error('Excel file dumping to IndexedDB not yet implemented');
+	}
 }
 
 /**
@@ -739,6 +777,18 @@ export class StreamingPDFParser extends StreamingFileParser {
 	async getTotalRowCount(): Promise<number> {
 		await this.ensureDataLoaded();
 		return this.totalRowCount;
+	}
+
+	/**
+	 * Begin dumping PDF file to IndexedDB for reconciliation
+	 */
+	async beginFileDumpToIndexedDB(
+		config: IndexedDBConfig,
+		onProgress?: FileDumpProgressCallback
+	): Promise<FileDumpResult> {
+		// For PDF, we would need to implement a similar dumper
+		// This is a simplified implementation
+		throw new Error('PDF file dumping to IndexedDB not yet implemented');
 	}
 }
 

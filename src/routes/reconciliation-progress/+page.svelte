@@ -6,9 +6,12 @@
 	import {
 		reconcileData,
 		reconcileDataStreaming,
+		reconcileDataIndexedDB,
 		clearReconciliationLogs,
 		getReconciliationLogs
 	} from '$lib/utils/reconciliation';
+	import { BatchReconciler, type BatchReconciliationProgress } from '$lib/utils/batchReconciler';
+	import { ReconciliationDatabase } from '$lib/utils/indexedDB/database';
 
 	// Reconciliation state
 	let primaryFileName = $state('');
@@ -48,6 +51,45 @@
 
 	// Check if reverse reconciliation is enabled
 	let isReverseReconciliationEnabled = $state(false);
+
+	// File insertion progress state (shown while files are still being dumped to IndexedDB)
+	let primaryInsertionProgress = $state({
+		storeName: null as string | null,
+		totalRecords: 0,
+		insertedRecords: 0,
+		percentage: 0,
+		recordsPerSecond: 0,
+		estimatedTimeRemaining: 0
+	});
+
+	let comparisonInsertionProgress = $state({
+		storeName: null as string | null,
+		totalRecords: 0,
+		insertedRecords: 0,
+		percentage: 0,
+		recordsPerSecond: 0,
+		estimatedTimeRemaining: 0
+	});
+
+	// Derived state to determine if files are still being inserted
+	let isInsertingFiles = $derived(
+		primaryInsertionProgress.percentage < 100 || comparisonInsertionProgress.percentage < 100
+	);
+
+	// Batch reconciliation state
+	let useBatchReconciliation = $state(false); // Use IndexedDB batch reconciliation if store names are available
+	let batchProgress = $state<BatchReconciliationProgress>({
+		totalRecords: 0,
+		processedRecords: 0,
+		currentBatch: 0,
+		percentage: 0,
+		recordsPerSecond: 0,
+		estimatedTimeRemaining: 0,
+		mode: 'sequential',
+		isActive: false
+	});
+	let batchReconciler: BatchReconciler | null = null;
+	let reconciliationDatabase: ReconciliationDatabase | null = null;
 
 	// Primary ID and comparison columns
 	let primaryIdPair = $state<ColumnPair>({
@@ -107,7 +149,9 @@
 	} | null> = [];
 
 	onMount(() => {
-		const unsubscribe = reconciliationStore.subscribe(async (state) => {
+		console.log('[Reconciliation Progress] Component mounted - initializing');
+
+		const unsubscribe = reconciliationStore.subscribe((state) => {
 			console.log('[Reconciliation Progress] Store subscription triggered');
 			if (!state.primaryFile) {
 				// Redirect to upload page if data is missing
@@ -160,26 +204,53 @@
 			// Check if reverse reconciliation is enabled
 			isReverseReconciliationEnabled = state.reconciliationConfig.reverseReconciliation === true;
 
+			// Track file insertion progress from store
+			if (state.primaryFileInsertionProgress) {
+				primaryInsertionProgress = {
+					storeName: state.primaryFileInsertionProgress.storeName,
+					totalRecords: state.primaryFileInsertionProgress.totalRecords,
+					insertedRecords: state.primaryFileInsertionProgress.insertedRecords,
+					percentage: state.primaryFileInsertionProgress.percentage,
+					recordsPerSecond: state.primaryFileInsertionProgress.recordsPerSecond,
+					estimatedTimeRemaining: state.primaryFileInsertionProgress.estimatedTimeRemaining
+				};
+			}
+
+			if (state.comparisonFileInsertionProgress) {
+				comparisonInsertionProgress = {
+					storeName: state.comparisonFileInsertionProgress.storeName,
+					totalRecords: state.comparisonFileInsertionProgress.totalRecords,
+					insertedRecords: state.comparisonFileInsertionProgress.insertedRecords,
+					percentage: state.comparisonFileInsertionProgress.percentage,
+					recordsPerSecond: state.comparisonFileInsertionProgress.recordsPerSecond,
+					estimatedTimeRemaining: state.comparisonFileInsertionProgress.estimatedTimeRemaining
+				};
+			}
+
+			// Only start reconciliation once files are fully inserted (comparison file must be at 100%)
+			// Primary file can continue inserting while reconciliation proceeds
+			if (comparisonInsertionProgress.percentage === 100 && !isReconciliationComplete) {
+				console.log(
+					'[Reconciliation Progress] Comparison file fully inserted. Starting reconciliation...'
+				);
+				// Start the reconciliation process now that comparison file is loaded
+				startReconciliation();
+			}
+
 			// NOTE: Comparison map is now built internally by reconcileDataStreaming
 			// This avoids redundant iteration and lets reconciliation start immediately
-			console.log(
-				'[Reconciliation Progress] Starting reconciliation immediately (map built internally)...'
-			);
+			console.log('[Reconciliation Progress] Monitoring file insertion progress...');
 
-			// Start the reconciliation process now that data is loaded
-			startReconciliation();
-		});
-
-		// Check if reverse reconciliation is enabled and start it too
-		const unsubscribeStore = reconciliationStore.subscribe((state) => {
+			// Check if reverse reconciliation is enabled and start it
 			if (state.reconciliationConfig?.reverseReconciliation) {
+				console.log('[Reconciliation Progress] Reverse reconciliation enabled');
 				startReverseReconciliation();
 			}
 		});
+		console.log('[Reconciliation Progress] onMount complete, subscriptions active');
 
 		return () => {
 			unsubscribe();
-			unsubscribeStore();
 		};
 	});
 
@@ -373,9 +444,68 @@
 		try {
 			console.log('Starting reconciliation...');
 
-			// Check if we have file parsers for streaming
-			if (storeState.primaryFileParser && storeState.comparisonFileParser) {
-				console.log('Using streaming reconciliation...');
+			// Check if IndexedDB stores are available (new architecture)
+			const hasIndexedDBStores =
+				storeState.primaryFileStoreName && storeState.comparisonFileStoreName;
+
+			if (hasIndexedDBStores) {
+				console.log('[Reconciliation] Using IndexedDB batch reconciliation...');
+				console.log(`[Reconciliation] Primary store: ${storeState.primaryFileStoreName}`);
+				console.log(`[Reconciliation] Comparison store: ${storeState.comparisonFileStoreName}`);
+				useBatchReconciliation = true;
+
+				// Initialize database and batch reconciler
+				reconciliationDatabase = new ReconciliationDatabase();
+				batchReconciler = new BatchReconciler({
+					batchSize: 100,
+					mode: 'sequential',
+					concurrencyLimit: 2,
+					onProgress: (progress: BatchReconciliationProgress) => {
+						batchProgress = progress;
+						processedRows = progress.processedRecords;
+						matchingSpeed = progress.recordsPerSecond;
+						estimatedTimeLeft = formatTimeEstimate(progress.estimatedTimeRemaining);
+
+						if (processedRows % 500 === 0) {
+							console.log(
+								`[Batch Reconciliation] Progress: ${progress.percentage}% (${progress.processedRecords}/${progress.totalRecords})`
+							);
+						}
+					}
+				});
+
+				// Use an async IIFE to properly await the async reconciliation
+				(async () => {
+					console.log('[Batch IIFE] Starting batch reconciliation...');
+					try {
+						console.log('[Batch IIFE] Calling performBatchReconciliation...');
+						await performBatchReconciliation(storeState);
+						console.log('[Batch IIFE] performBatchReconciliation completed');
+					} catch (error) {
+						console.error('[Batch IIFE] Batch reconciliation error:', error);
+						matchingLogs = [
+							{
+								timestamp: Date.now(),
+								primaryId: 'ERROR',
+								comparisonId: 'ERROR',
+								matched: false,
+								reasons: [
+									{
+										primaryFileRow: 'Error Log',
+										comparisonFileRow: 'Error Log',
+										primaryFileColumn: 'Batch Reconciliation Error',
+										comparisonFileColumn: 'Details',
+										primaryValue: error instanceof Error ? error.message : String(error),
+										comparisonValue: 'See browser console for more details'
+									}
+								]
+							}
+						];
+						finishReconciliation();
+					}
+				})();
+			} else if (storeState.primaryFileParser && storeState.comparisonFileParser) {
+				console.log('Using streaming reconciliation (fallback)...');
 				console.log('Primary parser:', storeState.primaryFileParser);
 				console.log('Comparison parser:', storeState.comparisonFileParser);
 				// Use an async IIFE to properly await the async reconciliation
@@ -433,6 +563,118 @@
 				}
 			];
 			finishReconciliation();
+		}
+	}
+
+	/**
+	 * Perform batch reconciliation using IndexedDB stores with O(1) lookups
+	 */
+	async function performBatchReconciliation(storeState: any) {
+		try {
+			console.log('[performBatchReconciliation] Starting...');
+
+			if (!batchReconciler || !reconciliationDatabase) {
+				throw new Error('Batch reconciler or database not initialized');
+			}
+
+			const generator = batchReconciler.reconcileBatches(
+				reconciliationDatabase,
+				storeState.primaryFileStoreName,
+				storeState.comparisonFileStoreName,
+				storeState.reconciliationConfig
+			);
+
+			console.log('[performBatchReconciliation] Generator created, starting iteration...');
+
+			let matchIndex = 0;
+			for await (const result of generator) {
+				matchIndex++;
+				processedRows = matchIndex;
+
+				if (matchIndex === 1) {
+					console.log(
+						'[performBatchReconciliation] *** FIRST RESULT RECEIVED - Batch reconciliation working! ***'
+					);
+					console.log('[performBatchReconciliation] First result:', result.idValues);
+				}
+
+				if (matchIndex % 500 === 0) {
+					console.log(`[performBatchReconciliation] Progress: ${matchIndex} results processed`);
+				}
+
+				// Add log entry for this match
+				const newLog: any = {
+					timestamp: Date.now(),
+					primaryId: result.idValues.primary,
+					comparisonId: result.idValues.comparison,
+					matched: result.matchScore === 100,
+					reasons: Object.entries(result.comparisonResults).map(([column, compResult]) => {
+						const pair = comparisonPairs.find((p) => p.primaryColumn === column);
+						const primaryColumnName =
+							primaryFileData?.columns?.find((c: any) => c.name === column)?.name || column;
+						const comparisonColumnName =
+							comparisonFileData?.columns?.find((c: any) => c.name === pair?.comparisonColumn)
+								?.name ||
+							pair?.comparisonColumn ||
+							column;
+
+						return {
+							primaryFileRow: `Batch Result ${matchIndex}`,
+							comparisonFileRow: `Record ${result.idValues.comparison}`,
+							primaryFileColumn: primaryColumnName,
+							comparisonFileColumn: comparisonColumnName,
+							primaryValue: String((compResult as any).primaryValue),
+							comparisonValue: String((compResult as any).comparisonValue),
+							reason: (compResult as any).reason,
+							tolerance: pair?.tolerance,
+							match: (compResult as any).match,
+							status: (compResult as any).status
+						};
+					})
+				};
+
+				// Keep only last 100 logs
+				matchingLogs = [newLog, ...matchingLogs.slice(0, 99)];
+
+				// Track failures
+				if (!result.matchScore || result.matchScore < 100) {
+					failureCount++;
+					hasFailures = true;
+				}
+
+				// Store result
+				reconciliationResults.push({
+					row: result.primaryRow,
+					matched: result.matchScore === 100,
+					reasons: Object.entries(result.comparisonResults).map(([column, compResult]) => {
+						const pair = comparisonPairs.find((p) => p.primaryColumn === column);
+						const primaryColumnName =
+							primaryFileData?.columns?.find((c: any) => c.name === column)?.name || column;
+						const comparisonColumnName =
+							comparisonFileData?.columns?.find((c: any) => c.name === pair?.comparisonColumn)
+								?.name ||
+							pair?.comparisonColumn ||
+							column;
+
+						return {
+							primaryFileColumn: primaryColumnName,
+							comparisonFileColumn: comparisonColumnName,
+							primaryValue: (compResult as any).primaryValue,
+							comparisonValue: (compResult as any).comparisonValue,
+							reason: (compResult as any).reason,
+							tolerance: pair?.tolerance,
+							match: (compResult as any).match,
+							status: (compResult as any).status
+						};
+					})
+				});
+			}
+
+			console.log(`[performBatchReconciliation] Completed. Total results: ${matchIndex}`);
+			finishReconciliation();
+		} catch (error) {
+			console.error('[performBatchReconciliation] Error:', error);
+			throw error;
 		}
 	}
 
@@ -1363,259 +1605,272 @@
 		/>
 	</div>
 
-	<div class="container mx-auto max-w-5xl px-4 py-4 md:py-8">
-		<h1 class="mb-6 text-center text-3xl font-bold text-white">
+	<div class="container mx-auto max-w-5xl px-2 py-2 sm:px-4 sm:py-4 md:py-8">
+		<h1 class="mb-4 text-center text-2xl font-bold text-white sm:mb-6 sm:text-3xl">
 			{#if isReconciliationComplete}
 				<span class="text-blue-400">Reconciliation Complete</span>
+			{:else if isInsertingFiles}
+				<span class="text-yellow-400">Preparing Files for Reconciliation...</span>
 			{:else}
 				<span class="text-white">Reconciliation in Progress...</span>
 			{/if}
 		</h1>
 
 		<!-- Files info -->
-		<div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-			<div class="rounded-lg bg-gray-800 p-4 shadow-md shadow-gray-800">
-				<h2 class="mb-2 text-lg font-semibold text-white">Primary File</h2>
-				<p class="text-sm text-gray-300">{primaryFileName}</p>
+		<div class="mb-4 grid grid-cols-1 gap-3 sm:mb-6 sm:gap-4 md:grid-cols-2">
+			<div class="rounded-lg bg-gray-800 p-3 shadow-md shadow-gray-800 sm:p-4">
+				<h2 class="mb-2 text-base font-semibold text-white sm:text-lg">Primary File</h2>
+				<p class="truncate text-xs text-gray-300 sm:text-sm">{primaryFileName}</p>
 			</div>
 
-			<div class="rounded-lg bg-gray-800 p-4 shadow-md shadow-gray-800">
-				<h2 class="mb-2 text-lg font-semibold text-white">Comparison File</h2>
-				<p class="text-sm text-gray-300">{comparisonFileName}</p>
-			</div>
-		</div>
-
-		<!-- Progress section -->
-		<div
-			class="mb-6 rounded-lg border-l-4 border-blue-500 bg-gray-800 p-6 shadow-md shadow-gray-800"
-		>
-			<div class="mb-4 flex items-center justify-between">
-				<h2 class="text-xl font-semibold text-white">Reconciliation Progress</h2>
-				<span class="text-lg font-bold text-blue-400">{progressPercentage}%</span>
-			</div>
-
-			<!-- Progress bar -->
-			<div class="mb-4 h-5 overflow-hidden rounded-full bg-gray-700">
-				<div
-					class="h-full rounded-full bg-blue-500 transition-all duration-500 ease-out"
-					style="width: {progressPercentage}%"
-				></div>
-			</div>
-
-			<!-- Progress details -->
-			<div class="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-				<div class="text-center">
-					<p class="text-sm text-white">Processed</p>
-					<p class="text-xl font-semibold text-gray-300">
-						{processedRows.toLocaleString()} / {totalRows.toLocaleString()}
-					</p>
-				</div>
-
-				<div class="text-center">
-					<p class="text-sm text-white">Speed</p>
-					<p class="text-xl font-semibold text-gray-300">
-						{matchingSpeed} rows/sec
-					</p>
-				</div>
-
-				<div class="text-center">
-					<p class="text-sm text-white">Estimated time remaining</p>
-					<p class="text-xl font-semibold text-gray-300">{estimatedTimeLeft}</p>
-				</div>
+			<div class="rounded-lg bg-gray-800 p-3 shadow-md shadow-gray-800 sm:p-4">
+				<h2 class="mb-2 text-base font-semibold text-white sm:text-lg">Comparison File</h2>
+				<p class="truncate text-xs text-gray-300 sm:text-sm">{comparisonFileName}</p>
 			</div>
 		</div>
 
-		<!-- Reverse Progress section (if enabled) -->
-		{#if isReverseReconciliationEnabled}
+		<!-- File Insertion Progress Section (shown while files are being inserted) -->
+		{#if isInsertingFiles}
 			<div
-				class="mb-6 rounded-lg border-l-4 border-orange-500 bg-gray-800 p-6 shadow-md shadow-gray-800"
+				class="mb-4 rounded-lg border-l-4 border-yellow-500 bg-gray-800 p-3 shadow-md shadow-gray-800 sm:mb-6 sm:p-6"
 			>
-				<div class="mb-4 flex items-center justify-between">
-					<h2 class="text-xl font-semibold text-white">
-						🔄 Reverse Reconciliation Progress
-						<span class="block text-sm text-orange-400">Comparison → Primary</span>
-					</h2>
-					<span class="text-lg font-bold text-orange-400">{reverseProgressPercentage}%</span>
+				<h2 class="mb-4 text-base font-semibold text-white sm:mb-6 sm:text-xl">
+					File Insertion Progress
+				</h2>
+
+				<!-- Comparison File Progress (Critical) -->
+				<div class="mb-6 sm:mb-8">
+					<div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+						<div class="min-w-0">
+							<h3 class="text-sm font-medium text-gray-200 sm:text-base">Comparison File</h3>
+							<p class="truncate text-xs text-gray-400 sm:text-sm">
+								{comparisonInsertionProgress.insertedRecords.toLocaleString()} / {comparisonInsertionProgress.totalRecords.toLocaleString()}
+								records
+							</p>
+						</div>
+						<div class="text-right">
+							<p class="text-xl font-bold text-yellow-400 sm:text-2xl">
+								{comparisonInsertionProgress.percentage}%
+							</p>
+							{#if comparisonInsertionProgress.recordsPerSecond > 0}
+								<p class="text-xs text-gray-400 sm:text-sm">
+									{comparisonInsertionProgress.recordsPerSecond.toLocaleString()} records/sec
+								</p>
+							{/if}
+							{#if comparisonInsertionProgress.estimatedTimeRemaining > 0 && comparisonInsertionProgress.percentage < 100}
+								<p class="text-xs text-gray-400 sm:text-sm">
+									{(comparisonInsertionProgress.estimatedTimeRemaining / 1000).toFixed(1)}s
+									remaining
+								</p>
+							{/if}
+						</div>
+					</div>
+					<div class="h-2 w-full rounded-full bg-gray-700">
+						<div
+							class="h-full rounded-full bg-yellow-500 transition-all duration-500"
+							style={`width: ${comparisonInsertionProgress.percentage}%`}
+						></div>
+					</div>
 				</div>
 
-				<!-- Reverse Progress bar -->
-				<div class="mb-4 h-5 overflow-hidden rounded-full bg-gray-700">
-					<div
-						class="h-full rounded-full bg-orange-500 transition-all duration-500 ease-out"
-						style="width: {reverseProgressPercentage}%"
-					></div>
+				<!-- Primary File Progress (Concurrent) -->
+				<div class="mb-4 sm:mb-8">
+					<div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+						<div class="min-w-0">
+							<h3 class="text-sm font-medium text-gray-200 sm:text-base">Primary File</h3>
+							<p class="truncate text-xs text-gray-400 sm:text-sm">
+								{primaryInsertionProgress.insertedRecords.toLocaleString()} / {primaryInsertionProgress.totalRecords.toLocaleString()}
+								records
+							</p>
+						</div>
+						<div class="text-right">
+							<p class="text-xl font-bold text-green-400 sm:text-2xl">
+								{primaryInsertionProgress.percentage}%
+							</p>
+							{#if primaryInsertionProgress.recordsPerSecond > 0}
+								<p class="text-xs text-gray-400 sm:text-sm">
+									{primaryInsertionProgress.recordsPerSecond.toLocaleString()} records/sec
+								</p>
+							{/if}
+							{#if primaryInsertionProgress.estimatedTimeRemaining > 0 && primaryInsertionProgress.percentage < 100}
+								<p class="text-xs text-gray-400 sm:text-sm">
+									{(primaryInsertionProgress.estimatedTimeRemaining / 1000).toFixed(1)}s remaining
+								</p>
+							{/if}
+						</div>
+					</div>
+					<div class="h-2 w-full rounded-full bg-gray-700">
+						<div
+							class="h-full rounded-full bg-green-500 transition-all duration-500"
+							style={`width: ${primaryInsertionProgress.percentage}%`}
+						></div>
+					</div>
 				</div>
 
-				<!-- Reverse Progress details -->
-				<div class="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-					<div class="text-center">
-						<p class="text-sm text-white">Processed</p>
-						<p class="text-xl font-semibold text-gray-300">
-							{reverseProcessedRows.toLocaleString()} / {reverseTotalRows.toLocaleString()}
-						</p>
-					</div>
-
-					<div class="text-center">
-						<p class="text-sm text-white">Speed</p>
-						<p class="text-xl font-semibold text-gray-300">
-							{reverseMatchingSpeed} rows/sec
-						</p>
-					</div>
-
-					<div class="text-center">
-						<p class="text-sm text-white">Estimated time remaining</p>
-						<p class="text-xl font-semibold text-gray-300">{reverseEstimatedTimeLeft}</p>
-					</div>
+				<div class="rounded-md border border-yellow-700 bg-yellow-900/20 p-2 sm:p-3">
+					<p class="text-xs text-yellow-200 sm:text-sm">
+						<strong>Note:</strong> Reconciliation will start automatically once the comparison file is
+						fully prepared. The primary file can continue loading while reconciliation proceeds.
+					</p>
 				</div>
 			</div>
 		{/if}
 
+		<!-- Progress section -->
+		{#if !isInsertingFiles}
+			<div
+				class="mb-4 rounded-lg border-l-4 border-blue-500 bg-gray-800 p-3 shadow-md shadow-gray-800 sm:mb-6 sm:p-6"
+			>
+				<div
+					class="mb-3 flex flex-col gap-2 sm:mb-4 sm:flex-row sm:items-center sm:justify-between"
+				>
+					<h2 class="text-base font-semibold text-white sm:text-xl">Reconciliation Progress</h2>
+					<span class="text-lg font-bold text-blue-400 sm:text-lg">{progressPercentage}%</span>
+				</div>
+
+				<!-- Progress bar -->
+				<div class="mb-3 h-5 overflow-hidden rounded-full bg-gray-700 sm:mb-4">
+					<div
+						class="h-full rounded-full bg-blue-500 transition-all duration-500 ease-out"
+						style="width: {progressPercentage}%"
+					></div>
+				</div>
+
+				<!-- Progress details -->
+				<div class="grid grid-cols-1 gap-2 sm:gap-4 md:grid-cols-3">
+					<div class="rounded bg-gray-700 p-2 sm:p-3">
+						<p class="text-xs text-white sm:text-sm">Processed</p>
+						<p class="text-base font-semibold text-gray-300 sm:text-xl">
+							{processedRows.toLocaleString()} / {totalRows.toLocaleString()}
+						</p>
+					</div>
+
+					<div class="rounded bg-gray-700 p-2 sm:p-3">
+						<p class="text-xs text-white sm:text-sm">Speed</p>
+						<p class="text-base font-semibold text-gray-300 sm:text-xl">
+							{matchingSpeed} rows/sec
+						</p>
+					</div>
+
+					<div class="rounded bg-gray-700 p-2 sm:p-3">
+						<p class="text-xs text-white sm:text-sm">Estimated time remaining</p>
+						<p class="text-base font-semibold text-gray-300 sm:text-xl">{estimatedTimeLeft}</p>
+					</div>
+				</div>
+			</div>
+
+			<!-- Reverse Progress section (if enabled) -->
+			{#if isReverseReconciliationEnabled}
+				<div
+					class="mb-4 rounded-lg border-l-4 border-orange-500 bg-gray-800 p-3 shadow-md shadow-gray-800 sm:mb-6 sm:p-6"
+				>
+					<div
+						class="mb-3 flex flex-col gap-2 sm:mb-4 sm:flex-row sm:items-center sm:justify-between"
+					>
+						<h2 class="text-base font-semibold text-white sm:text-xl">
+							🔄 Reverse Reconciliation Progress
+							<span class="block text-xs text-orange-400 sm:text-sm">Comparison → Primary</span>
+						</h2>
+						<span class="text-lg font-bold text-orange-400">{reverseProgressPercentage}%</span>
+					</div>
+
+					<!-- Reverse Progress bar -->
+					<div class="mb-3 h-5 overflow-hidden rounded-full bg-gray-700 sm:mb-4">
+						<div
+							class="h-full rounded-full bg-orange-500 transition-all duration-500 ease-out"
+							style="width: {reverseProgressPercentage}%"
+						></div>
+					</div>
+
+					<!-- Reverse Progress details -->
+					<div class="grid grid-cols-1 gap-2 sm:gap-4 md:grid-cols-3">
+						<div class="rounded bg-gray-700 p-2 sm:p-3">
+							<p class="text-xs text-white sm:text-sm">Processed</p>
+							<p class="text-base font-semibold text-gray-300 sm:text-xl">
+								{reverseProcessedRows.toLocaleString()} / {reverseTotalRows.toLocaleString()}
+							</p>
+						</div>
+
+						<div class="rounded bg-gray-700 p-2 sm:p-3">
+							<p class="text-xs text-white sm:text-sm">Speed</p>
+							<p class="text-base font-semibold text-gray-300 sm:text-xl">
+								{reverseMatchingSpeed} rows/sec
+							</p>
+						</div>
+
+						<div class="rounded bg-gray-700 p-2 sm:p-3">
+							<p class="text-xs text-white sm:text-sm">Estimated time remaining</p>
+							<p class="text-base font-semibold text-gray-300 sm:text-xl">
+								{reverseEstimatedTimeLeft}
+							</p>
+						</div>
+					</div>
+				</div>
+			{/if}
+		{/if}
+
 		<!-- Real-time logs section -->
 		<div
-			class="mb-6 rounded-lg border-l-4 border-blue-500 bg-gray-800 p-6 shadow-md shadow-gray-800"
+			class="mb-4 rounded-lg border-l-4 border-blue-500 bg-gray-800 p-3 shadow-md shadow-gray-800 sm:mb-6 sm:p-6"
 		>
-			<h2 class="mb-4 text-xl font-semibold text-white">Matching Log</h2>
+			<h2 class="mb-3 text-base font-semibold text-white sm:mb-4 sm:text-xl">Matching Log</h2>
 
-			<div class="max-h-96 overflow-y-auto">
+			<div class="max-h-64 overflow-y-auto sm:max-h-96">
 				{#if matchingLogs.length === 0}
-					<p class="py-4 text-center text-gray-400">Reconciliation process starting...</p>
+					<p class="py-4 text-center text-xs text-gray-400 sm:text-sm">
+						Reconciliation process starting...
+					</p>
 				{:else}
-					<table class="min-w-full divide-y divide-gray-700">
-						<thead class="bg-gray-700">
-							<tr>
-								<th
-									class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
-								>
-									Primary ID
-								</th>
-								<th
-									class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
-								>
-									Comparison ID
-								</th>
-								<th
-									class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
-								>
-									Status
-								</th>
-								<th
-									class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
-								>
-									Reason
-								</th>
-							</tr>
-						</thead>
-						<tbody class="divide-y divide-gray-700 bg-gray-800">
-							{#each matchingLogs as log, index (index)}
-								<tr class="hover:bg-gray-700">
-									<td class="whitespace-nowrap px-6 py-4 text-sm text-gray-200">
-										{log.primaryId}
-									</td>
-									<td class="whitespace-nowrap px-6 py-4 text-sm text-gray-200">
-										{log.comparisonId}
-									</td>
-									<td class="whitespace-nowrap px-6 py-4 text-sm">
+					<div class="space-y-2 sm:space-y-0">
+						{#each matchingLogs as log, index (index)}
+							<div class="rounded bg-gray-700 p-2 sm:p-3">
+								<div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+									<div class="flex flex-col gap-0.5 sm:gap-1">
+										<div class="flex flex-wrap gap-2">
+											<span class="rounded bg-blue-900/50 px-2 py-1 text-xs text-blue-200">
+												{log.primaryId}
+											</span>
+											<span class="rounded bg-purple-900/50 px-2 py-1 text-xs text-purple-200">
+												{log.comparisonId}
+											</span>
+										</div>
 										{#if log.matched}
 											<span
-												class="rounded-full bg-green-900 px-2 py-1 text-xs font-semibold text-green-200"
+												class="w-fit rounded bg-green-900/50 px-2 py-0.5 text-xs font-medium text-green-200"
 											>
-												Matched
+												✓ Match
 											</span>
 										{:else}
 											<span
-												class="rounded-full bg-red-900 px-2 py-1 text-xs font-semibold text-red-200"
+												class="w-fit rounded bg-red-900/50 px-2 py-0.5 text-xs font-medium text-red-200"
 											>
-												Differences
+												✗ No Match
 											</span>
 										{/if}
-									</td>
-									<td class="px-6 py-4 text-sm text-gray-200">
-										{#if log.reasons.length > 0}
-											<details>
-												<summary class="cursor-pointer text-blue-400">
-													{log.reasons.length}
-													{log.reasons.length === 1 ? 'reason' : 'reasons'}
-												</summary>
-												<div class="mt-2">
-													{#each log.reasons as reason}
-														<div class="mb-1 rounded bg-gray-700 p-2">
-															<p class="font-semibold">
-																{reason.primaryFileColumn} / {reason.comparisonFileColumn}
-															</p>
-															<div class="mt-1 grid grid-cols-1 gap-2">
-																<div>
-																	<span class="text-xs text-gray-400">Primary Row:</span>
-																	<span class="ml-1 text-sm">{reason.primaryFileRow}</span>
-																</div>
-																<div>
-																	<span class="text-xs text-gray-400">Comparison Row:</span>
-																	<span class="ml-1 text-sm">{reason.comparisonFileRow}</span>
-																</div>
-																<div>
-																	<span class="text-xs text-gray-400">Primary Value:</span>
-																	<span class="ml-1 text-sm">{reason.primaryValue}</span>
-																</div>
-																<div>
-																	<span class="text-xs text-gray-400">Comparison Value:</span>
-																	<span class="ml-1 text-sm">{reason.comparisonValue}</span>
-																</div>
-																{#if reason.tolerance}
-																	<div>
-																		<span class="text-xs text-gray-400">Tolerance Type:</span>
-																		<span class="ml-1 text-sm">{reason.tolerance.type}</span>
-																	</div>
-																	{#if reason.tolerance.type === 'custom' && reason.tolerance.formula}
-																		<div>
-																			<span class="text-xs text-gray-400">Formula:</span>
-																			<span class="ml-1 text-sm">{reason.tolerance.formula}</span>
-																		</div>
-																	{:else if reason.tolerance.type === 'absolute' && reason.tolerance.value}
-																		<div>
-																			<span class="text-xs text-gray-400">Threshold:</span>
-																			<span class="ml-1 text-sm">±{reason.tolerance.value}</span>
-																		</div>
-																	{:else if reason.tolerance.type === 'relative' && reason.tolerance.percentage}
-																		<div>
-																			<span class="text-xs text-gray-400">Tolerance:</span>
-																			<span class="ml-1 text-sm"
-																				>{reason.tolerance.percentage}%</span
-																			>
-																		</div>
-																	{:else if reason.tolerance.type === 'within_percentage_similarity' && reason.tolerance.percentage}
-																		<div>
-																			<span class="text-xs text-gray-400">Similarity:</span>
-																			<span class="ml-1 text-sm"
-																				>{reason.tolerance.percentage}%</span
-																			>
-																		</div>
-																	{/if}
-																{/if}
-																{#if reason.reason}
-																	<div>
-																		<span class="text-xs text-gray-400">Evaluation Result:</span>
-																		<span class="ml-1 text-sm">{reason.reason}</span>
-																	</div>
-																{/if}
-															</div>
-														</div>
-													{/each}
-												</div>
-											</details>
-										{:else}
-											<span class="text-gray-400">-</span>
-										{/if}
-									</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
+									</div>
+									<div class="text-xs text-gray-400">
+										{new Date(log.timestamp).toLocaleTimeString()}
+									</div>
+								</div>
+								{#if log.reasons.length > 0}
+									<div class="mt-2 border-t border-gray-600 pt-2 text-xs text-gray-300 sm:text-xs">
+										<p class="line-clamp-2 sm:line-clamp-3">
+											{log.reasons[0].primaryFileColumn}: {log.reasons[0].primaryValue}
+										</p>
+									</div>
+								{/if}
+							</div>
+						{/each}
+					</div>
 				{/if}
 			</div>
 			{#if isReconciliationComplete}
 				<!-- Summary Title -->
-				<div class="mb-4 mt-6 text-center">
-					<h3 class="mb-2 text-xl font-semibold text-white">Reconciliation Results Summary</h3>
-					<p class="text-gray-300">
+				<div class="mb-3 mt-4 text-center sm:mb-4 sm:mt-6">
+					<h3 class="mb-2 text-base font-semibold text-white sm:text-xl">
+						Reconciliation Results Summary
+					</h3>
+					<p class="text-xs text-gray-300 sm:text-sm">
 						{totalRows.toLocaleString()} total records processed.
 						<span class="{hasFailures ? 'text-yellow-400' : 'text-green-400'} font-medium">
 							{hasFailures
@@ -1625,17 +1880,19 @@
 					</p>
 				</div>
 
-				<div class="mt-4 flex justify-center space-x-4">
+				<div
+					class="mt-3 flex flex-col gap-2 sm:mt-4 sm:flex-row sm:justify-center sm:gap-4 sm:space-x-4"
+				>
 					<button
 						onclick={downloadResults}
-						class="btn transform rounded-lg border-2 border-green-500 bg-green-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 hover:text-white"
+						class="btn transform rounded-lg border-2 border-green-500 bg-green-500 px-4 py-2 text-sm font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 hover:text-white sm:px-6 sm:py-3 sm:text-base"
 					>
 						Download Results
 					</button>
 					{#if hasFailures}
 						<button
 							onclick={analyzeFailures}
-							class="btn transform rounded-lg border-2 border-blue-500 bg-blue-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-blue-600 hover:text-white"
+							class="btn transform rounded-lg border-2 border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-blue-600 hover:text-white sm:px-6 sm:py-3 sm:text-base"
 						>
 							Analyze Failures
 						</button>
@@ -1647,155 +1904,71 @@
 		<!-- Reverse Real-time logs section (if enabled) -->
 		{#if isReverseReconciliationEnabled}
 			<div
-				class="rounded-lg border-l-4 border-orange-500 bg-gray-800 p-6 shadow-md shadow-gray-800"
+				class="mb-4 rounded-lg border-l-4 border-orange-500 bg-gray-800 p-3 shadow-md shadow-gray-800 sm:mb-6 sm:p-6"
 			>
-				<h2 class="mb-4 text-xl font-semibold text-white">
+				<h2 class="mb-3 text-base font-semibold text-white sm:mb-4 sm:text-xl">
 					🔄 Reverse Matching Log
-					<span class="block text-sm text-orange-400">Comparison → Primary</span>
+					<span class="block text-xs text-orange-400 sm:text-sm">Comparison → Primary</span>
 				</h2>
 
-				<div class="max-h-96 overflow-y-auto">
+				<div class="max-h-64 overflow-y-auto sm:max-h-96">
 					{#if reverseMatchingLogs.length === 0}
-						<p class="py-4 text-center text-gray-400">Reverse reconciliation process starting...</p>
+						<p class="py-4 text-center text-xs text-gray-400 sm:text-sm">
+							Reverse reconciliation process starting...
+						</p>
 					{:else}
-						<table class="min-w-full divide-y divide-gray-700">
-							<thead class="bg-gray-700">
-								<tr>
-									<th
-										class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
-									>
-										Primary ID (Reverse)
-									</th>
-									<th
-										class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
-									>
-										Comparison ID (Reverse)
-									</th>
-									<th
-										class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
-									>
-										Status
-									</th>
-									<th
-										class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-300"
-									>
-										Reason
-									</th>
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-gray-700 bg-gray-800">
-								{#each reverseMatchingLogs as log, index (index)}
-									<tr class="hover:bg-gray-700">
-										<td class="whitespace-nowrap px-6 py-4 text-sm text-orange-200">
-											{log.primaryId}
-										</td>
-										<td class="whitespace-nowrap px-6 py-4 text-sm text-orange-200">
-											{log.comparisonId}
-										</td>
-										<td class="whitespace-nowrap px-6 py-4 text-sm">
+						<div class="space-y-2 sm:space-y-0">
+							{#each reverseMatchingLogs as log, index (index)}
+								<div class="rounded bg-gray-700 p-2 sm:p-3">
+									<div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+										<div class="flex flex-col gap-0.5 sm:gap-1">
+											<div class="flex flex-wrap gap-2">
+												<span class="rounded bg-blue-900/50 px-2 py-1 text-xs text-blue-200">
+													{log.primaryId} (R)
+												</span>
+												<span class="rounded bg-purple-900/50 px-2 py-1 text-xs text-purple-200">
+													{log.comparisonId} (R)
+												</span>
+											</div>
 											{#if log.matched}
 												<span
-													class="rounded-full bg-green-900 px-2 py-1 text-xs font-semibold text-green-200"
+													class="w-fit rounded bg-green-900/50 px-2 py-0.5 text-xs font-medium text-green-200"
 												>
-													Matched
+													✓ Match
 												</span>
 											{:else}
 												<span
-													class="rounded-full bg-red-900 px-2 py-1 text-xs font-semibold text-red-200"
+													class="w-fit rounded bg-red-900/50 px-2 py-0.5 text-xs font-medium text-red-200"
 												>
-													Differences
+													✗ No Match
 												</span>
 											{/if}
-										</td>
-										<td class="px-6 py-4 text-sm text-orange-200">
-											{#if log.reasons.length > 0}
-												<details>
-													<summary class="cursor-pointer text-orange-400">
-														{log.reasons.length}
-														{log.reasons.length === 1 ? 'reason' : 'reasons'}
-													</summary>
-													<div class="mt-2">
-														{#each log.reasons as reason}
-															<div class="mb-1 rounded bg-gray-700 p-2">
-																<p class="font-semibold text-orange-300">
-																	{reason.primaryFileColumn} / {reason.comparisonFileColumn}
-																</p>
-																<div class="mt-1 grid grid-cols-1 gap-2">
-																	<div>
-																		<span class="text-xs text-gray-400">Primary Row:</span>
-																		<span class="ml-1 text-sm">{reason.primaryFileRow}</span>
-																	</div>
-																	<div>
-																		<span class="text-xs text-gray-400">Comparison Row:</span>
-																		<span class="ml-1 text-sm">{reason.comparisonFileRow}</span>
-																	</div>
-																	<div>
-																		<span class="text-xs text-gray-400">Primary Value:</span>
-																		<span class="ml-1 text-sm">{reason.primaryValue}</span>
-																	</div>
-																	<div>
-																		<span class="text-xs text-gray-400">Comparison Value:</span>
-																		<span class="ml-1 text-sm">{reason.comparisonValue}</span>
-																	</div>
-																	{#if reason.tolerance}
-																		<div>
-																			<span class="text-xs text-gray-400">Tolerance Type:</span>
-																			<span class="ml-1 text-sm">{reason.tolerance.type}</span>
-																		</div>
-																		{#if reason.tolerance.type === 'custom' && reason.tolerance.formula}
-																			<div>
-																				<span class="text-xs text-gray-400">Formula:</span>
-																				<span class="ml-1 text-sm">{reason.tolerance.formula}</span>
-																			</div>
-																		{:else if reason.tolerance.type === 'absolute' && reason.tolerance.value}
-																			<div>
-																				<span class="text-xs text-gray-400">Threshold:</span>
-																				<span class="ml-1 text-sm">±{reason.tolerance.value}</span>
-																			</div>
-																		{:else if reason.tolerance.type === 'relative' && reason.tolerance.percentage}
-																			<div>
-																				<span class="text-xs text-gray-400">Tolerance:</span>
-																				<span class="ml-1 text-sm"
-																					>{reason.tolerance.percentage}%</span
-																				>
-																			</div>
-																		{:else if reason.tolerance.type === 'within_percentage_similarity' && reason.tolerance.percentage}
-																			<div>
-																				<span class="text-xs text-gray-400">Similarity:</span>
-																				<span class="ml-1 text-sm"
-																					>{reason.tolerance.percentage}%</span
-																				>
-																			</div>
-																		{/if}
-																	{/if}
-																	{#if reason.reason}
-																		<div>
-																			<span class="text-xs text-gray-400">Evaluation Result:</span>
-																			<span class="ml-1 text-sm">{reason.reason}</span>
-																		</div>
-																	{/if}
-																</div>
-															</div>
-														{/each}
-													</div>
-												</details>
-											{:else}
-												<span class="text-gray-400">-</span>
-											{/if}
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
+										</div>
+										<div class="text-xs text-gray-400">
+											{new Date(log.timestamp).toLocaleTimeString()}
+										</div>
+									</div>
+									{#if log.reasons.length > 0}
+										<div
+											class="mt-2 border-t border-gray-600 pt-2 text-xs text-gray-300 sm:text-xs"
+										>
+											<p class="line-clamp-2 sm:line-clamp-3">
+												{log.reasons[0].primaryFileColumn}: {log.reasons[0].primaryValue}
+											</p>
+										</div>
+									{/if}
+								</div>
+							{/each}
+						</div>
 					{/if}
 				</div>
 				{#if isReverseReconciliationComplete}
 					<!-- Reverse Summary Title -->
-					<div class="mb-4 mt-6 text-center">
-						<h3 class="mb-2 text-xl font-semibold text-white">
+					<div class="mb-3 mt-4 text-center sm:mb-4 sm:mt-6">
+						<h3 class="mb-2 text-base font-semibold text-white sm:text-xl">
 							🔄 Reverse Reconciliation Results Summary
 						</h3>
-						<p class="text-gray-300">
+						<p class="text-xs text-gray-300 sm:text-sm">
 							{reverseTotalRows.toLocaleString()} total records processed in reverse direction.
 							<span class="{reverseHasFailures ? 'text-yellow-400' : 'text-green-400'} font-medium">
 								{reverseHasFailures
@@ -1805,17 +1978,17 @@
 						</p>
 					</div>
 
-					<div class="mt-4 flex justify-center space-x-4">
+					<div class="mt-3 flex flex-col gap-2 sm:mt-4 sm:flex-row sm:justify-center sm:gap-4">
 						<button
 							onclick={downloadReverseResults}
-							class="btn transform rounded-lg border-2 border-orange-500 bg-orange-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-orange-600 hover:text-white"
+							class="btn transform rounded-lg border-2 border-orange-500 bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-orange-600 hover:text-white sm:px-6 sm:py-3 sm:text-base"
 						>
 							Download Reverse Results
 						</button>
 						{#if reverseHasFailures}
 							<button
 								onclick={analyzeReverseFailures}
-								class="btn transform rounded-lg border-2 border-blue-500 bg-blue-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-blue-600 hover:text-white"
+								class="btn transform rounded-lg border-2 border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-blue-600 hover:text-white sm:px-6 sm:py-3 sm:text-base"
 							>
 								Analyze Reverse Failures
 							</button>

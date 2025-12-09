@@ -27,6 +27,50 @@ const initialState = {
 	// Contact Information
 	contactInfo: null as ContactInfo | null,
 
+	// IndexedDB store names for file data
+	primaryFileStoreName: null as string | null,
+	comparisonFileStoreName: null as string | null,
+
+	// Insertion progress tracking
+	primaryFileInsertionProgress: {
+		storeName: null as string | null,
+		totalRecords: 0,
+		insertedRecords: 0,
+		percentage: 0,
+		recordsPerSecond: 0,
+		estimatedTimeRemaining: 0
+	},
+	comparisonFileInsertionProgress: {
+		storeName: null as string | null,
+		totalRecords: 0,
+		insertedRecords: 0,
+		percentage: 0,
+		recordsPerSecond: 0,
+		estimatedTimeRemaining: 0
+	},
+
+	// CSV export progress tracking
+	csvExportProgress: {
+		isExporting: false,
+		totalRecords: 0,
+		exportedRecords: 0,
+		currentChunk: 0,
+		estimatedTotalChunks: 0,
+		percentage: 0,
+		currentChunkSize: 0,
+		totalExportedSize: 0
+	},
+
+	// Failure analysis state
+	failureAnalysisState: {
+		isAnalyzing: false,
+		failures: [] as any[],
+		summary: null as any
+	},
+
+	// IndexedDB result store name
+	resultStoreName: null as string | null,
+
 	// Status flags
 	isProcessing: false,
 	error: null as string | null
@@ -93,6 +137,99 @@ export const reconciliationStore = {
 	// Set contact information
 	setContactInfo: (info: ContactInfo) => {
 		update((state) => ({ ...state, contactInfo: info }));
+	},
+
+	// Set IndexedDB store names
+	setIndexedDBStoreNames: (primaryStoreName: string, comparisonStoreName: string) => {
+		update((state) => ({
+			...state,
+			primaryFileStoreName: primaryStoreName,
+			comparisonFileStoreName: comparisonStoreName
+		}));
+	},
+
+	// Update primary file insertion progress
+	updatePrimaryFileInsertionProgress: (progress: {
+		storeName?: string;
+		totalRecords?: number;
+		insertedRecords?: number;
+		percentage?: number;
+		recordsPerSecond?: number;
+		estimatedTimeRemaining?: number;
+	}) => {
+		update((state) => ({
+			...state,
+			primaryFileInsertionProgress: {
+				...state.primaryFileInsertionProgress,
+				...progress
+			}
+		}));
+	},
+
+	// Update comparison file insertion progress
+	updateComparisonFileInsertionProgress: (progress: {
+		storeName?: string;
+		totalRecords?: number;
+		insertedRecords?: number;
+		percentage?: number;
+		recordsPerSecond?: number;
+		estimatedTimeRemaining?: number;
+	}) => {
+		update((state) => ({
+			...state,
+			comparisonFileInsertionProgress: {
+				...state.comparisonFileInsertionProgress,
+				...progress
+			}
+		}));
+	},
+
+	// Update CSV export progress
+	updateCSVExportProgress: (progress: {
+		isExporting?: boolean;
+		totalRecords?: number;
+		exportedRecords?: number;
+		currentChunk?: number;
+		estimatedTotalChunks?: number;
+		percentage?: number;
+		currentChunkSize?: number;
+		totalExportedSize?: number;
+	}) => {
+		update((state) => ({
+			...state,
+			csvExportProgress: {
+				...state.csvExportProgress,
+				...progress
+			}
+		}));
+	},
+
+	// Set result store name
+	setResultStoreName: (storeName: string) => {
+		update((state) => ({ ...state, resultStoreName: storeName }));
+	},
+
+	// Update failure analysis
+	updateFailureAnalysis: (failures: any[], summary: any) => {
+		update((state) => ({
+			...state,
+			failureAnalysisState: {
+				isAnalyzing: false,
+				failures,
+				summary
+			}
+		}));
+	},
+
+	// Set failure analysis analyzing state
+	setFailureAnalysisAnalyzing: (isAnalyzing: boolean) => {
+		update((state) => ({
+			...state,
+			failureAnalysisState: {
+				...state.failureAnalysisState,
+				isAnalyzing
+			}
+		}));
 	},
 
 	// Set reconciliation options

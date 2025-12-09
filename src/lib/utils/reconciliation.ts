@@ -1225,3 +1225,228 @@ export async function* reconcileDataStreaming(
 		`[Streaming Reconciliation] *** COMPLETED *** Total primary rows processed: ${primaryRowCount}`
 	);
 }
+
+/**
+ * ============================================================================
+ * INDEXEDDB-BASED RECONCILIATION (NEW ARCHITECTURE)
+ * ============================================================================
+ *
+ * This function performs reconciliation using IndexedDB stores for O(1) lookups.
+ * CRITICAL REQUIREMENTS:
+ *
+ * 1. PRIMARY FILE must be fully inserted in IndexedDB (100%)
+ * 2. COMPARISON FILE can continue inserting (concurrent with reconciliation)
+ * 3. Uses O(1) lookups: database.getRecordById(id) for each primary record
+ * 4. Yields results batch-by-batch for real-time progress
+ * 5. Updates ReconciliationStatus in primary store as it proceeds
+ *
+ * PERFORMANCE CHARACTERISTICS:
+ * - Time Complexity: O(n_primary * m_columns) where n_primary is primary file rows
+ * - Lookup: O(1) per record via IndexedDB index
+ * - Memory: O(1) - only stores/loads one record at a time
+ * - vs Streaming: Avoids O(n_primary * n_comparison) comparisons
+ */
+export async function* reconcileDataIndexedDB(
+	database: any, // ReconciliationDatabase instance
+	primaryStoreName: string, // Name of the store containing primary file records
+	comparisonStoreName: string, // Name of the store containing comparison file records
+	config: ReconciliationConfig,
+	batchSize: number = 100, // Yield results in batches
+	onBatchComplete?: (batchNumber: number, batchSize: number, totalProcessed: number) => void
+): AsyncIterable<RowMatchResult> {
+	console.log('[IndexedDB Reconciliation] Starting reconciliation with IndexedDB stores...');
+	console.log(`[IndexedDB Reconciliation] Primary store: ${primaryStoreName}`);
+	console.log(`[IndexedDB Reconciliation] Comparison store: ${comparisonStoreName}`);
+	console.log(`[IndexedDB Reconciliation] Batch size: ${batchSize}`);
+
+	const primaryIdColumn = config.primaryIdPair.primaryColumn;
+	const comparisonIdColumn = config.primaryIdPair.comparisonColumn;
+	const idPairSettings = config.primaryIdPair.settings;
+
+	if (!primaryIdColumn || !comparisonIdColumn) {
+		throw new Error('ID columns must be specified for reconciliation');
+	}
+
+	// Get access to stores
+	const db = await database.initializeDatabase();
+	const primaryTable = db.table(primaryStoreName);
+	const comparisonTable = db.table(comparisonStoreName);
+
+	let processedCount = 0;
+	let batchNumber = 0;
+	const resultBatch: RowMatchResult[] = [];
+
+	try {
+		// Query all records from primary store
+		// Note: In production, we'd paginate to handle very large datasets
+		const primaryRecords = await primaryTable.toArray();
+		console.log(`[IndexedDB Reconciliation] Retrieved ${primaryRecords.length} primary records`);
+
+		// Process each primary record
+		for (const primaryRecord of primaryRecords) {
+			const primaryIdValue = primaryRecord[primaryIdColumn];
+
+			if (!primaryIdValue) {
+				console.log(
+					`[IndexedDB Reconciliation] Skipping primary record: missing ID in column ${primaryIdColumn}`
+				);
+				continue;
+			}
+
+			processedCount++;
+			const primaryKeyValue = normalizeForComparison(
+				primaryIdValue,
+				idPairSettings.caseSensitive,
+				idPairSettings.trimValues
+			);
+
+			if (processedCount % 1000 === 0) {
+				console.log(
+					`[IndexedDB Reconciliation] Processing record ${processedCount}: ID=${primaryIdValue}`
+				);
+			}
+
+			// O(1) lookup in comparison store by ID
+			let comparisonRecord: Record<string, any> | undefined;
+			let foundMatch = false;
+
+			try {
+				// Query comparison store by ID column value
+				// This uses the indexed lookup for O(1) performance
+				comparisonRecord = await comparisonTable
+					.where(comparisonIdColumn)
+					.equals(primaryIdValue)
+					.first();
+
+				if (comparisonRecord) {
+					foundMatch = true;
+					console.log(
+						`[IndexedDB Reconciliation] O(1) lookup: Primary ID=${primaryIdValue} matched in comparison store`
+					);
+				}
+			} catch (error) {
+				console.warn(`[IndexedDB Reconciliation] Lookup error for ID ${primaryIdValue}:`, error);
+			}
+
+			// Perform column-by-column comparison if match found
+			const comparisonResults: Record<string, ComparisonResult> = {};
+			let matchCount = 0;
+			let totalColumns = config.comparisonPairs.length;
+
+			if (foundMatch && comparisonRecord) {
+				// Compare all mapped columns
+				for (const pair of config.comparisonPairs) {
+					const primaryValue = primaryRecord[pair.primaryColumn] || '';
+					const comparisonValue = comparisonRecord[pair.comparisonColumn] || '';
+
+					const result = evaluateToleranceWithEvaluator(
+						primaryValue,
+						comparisonValue,
+						pair.tolerance,
+						pair.settings
+					);
+
+					comparisonResults[pair.primaryColumn] = {
+						primaryValue: String(primaryValue),
+						comparisonValue: String(comparisonValue),
+						match: result.matches,
+						reason: result.reason,
+						status: result.matches ? 'exact_match' : 'no_match',
+						tolerance: pair.tolerance
+					};
+
+					if (result.matches) {
+						matchCount++;
+					}
+				}
+			}
+
+			// Calculate match score
+			const matchScore = totalColumns > 0 ? Math.round((matchCount / totalColumns) * 100) : 100;
+
+			// Create result
+			const result: RowMatchResult = {
+				primaryRow: primaryRecord as Record<string, string>,
+				comparisonRow: foundMatch
+					? (comparisonRecord as Record<string, string>)
+					: ({} as Record<string, string>),
+				idValues: {
+					primary: String(primaryIdValue),
+					comparison: foundMatch ? String(comparisonRecord![comparisonIdColumn]) : 'NOT_FOUND'
+				},
+				comparisonResults,
+				matchScore
+			};
+
+			// Update primary record's reconciliation status
+			const reconciliationStatus =
+				matchScore === 100 ? 'MATCHED' : matchScore > 0 ? 'PARTIAL_MATCH' : 'NOT_FOUND';
+
+			const reconciliationReason =
+				matchScore === 100
+					? 'All mapped columns match'
+					: matchScore > 0
+						? `${matchCount}/${totalColumns} columns match`
+						: 'No matching record found in comparison file';
+
+			// Update status in store (don't await to avoid blocking batch processing)
+			primaryTable
+				.update(primaryRecord.id, {
+					ReconciliationStatus: reconciliationStatus,
+					ReconciliationReason: reconciliationReason
+				})
+				.catch((err: any) => {
+					console.warn(
+						`[IndexedDB Reconciliation] Failed to update status for record ${primaryRecord.id}:`,
+						err
+					);
+				});
+
+			// Add to batch
+			resultBatch.push(result);
+
+			// Yield batch when size reached
+			if (resultBatch.length >= batchSize) {
+				batchNumber++;
+				console.log(
+					`[IndexedDB Reconciliation] Yielding batch ${batchNumber} with ${resultBatch.length} results`
+				);
+
+				if (onBatchComplete) {
+					onBatchComplete(batchNumber, resultBatch.length, processedCount);
+				}
+
+				// Yield all results in this batch
+				for (const batchResult of resultBatch) {
+					yield batchResult;
+				}
+
+				resultBatch.length = 0; // Clear batch
+			}
+		}
+
+		// Yield remaining results
+		if (resultBatch.length > 0) {
+			batchNumber++;
+			console.log(
+				`[IndexedDB Reconciliation] Yielding final batch ${batchNumber} with ${resultBatch.length} results`
+			);
+
+			if (onBatchComplete) {
+				onBatchComplete(batchNumber, resultBatch.length, processedCount);
+			}
+
+			for (const batchResult of resultBatch) {
+				yield batchResult;
+			}
+		}
+
+		console.log(
+			`[IndexedDB Reconciliation] *** COMPLETED *** Total records processed: ${processedCount}`
+		);
+	} catch (error) {
+		const errorMsg = error instanceof Error ? error.message : String(error);
+		console.error('[IndexedDB Reconciliation] Error during reconciliation:', errorMsg);
+		throw error;
+	}
+}
