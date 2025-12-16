@@ -3,7 +3,6 @@
 	import { goto } from '$app/navigation';
 	import { reconciliationStore } from '$lib/stores/reconciliationStore';
 	import type { ColumnPair } from '$lib/utils/reconciliation';
-	import type { IndexedDBConfig } from '$lib/utils/indexedDB';
 
 	// User contact information
 	let email = $state('');
@@ -25,29 +24,6 @@
 
 	// Reconciliation configuration options
 	let reverseReconciliation = $state(false);
-
-	// File dumping state
-	let isDumpingFiles = $state(false);
-	let dumpError = $state<string | null>(null);
-
-	// Subscribe to file insertion progress
-	let primaryInsertionProgress = $state({
-		storeName: null as string | null,
-		totalRecords: 0,
-		insertedRecords: 0,
-		percentage: 0,
-		recordsPerSecond: 0,
-		estimatedTimeRemaining: 0
-	});
-
-	let comparisonInsertionProgress = $state({
-		storeName: null as string | null,
-		totalRecords: 0,
-		insertedRecords: 0,
-		percentage: 0,
-		recordsPerSecond: 0,
-		estimatedTimeRemaining: 0
-	});
 
 	onMount(() => {
 		const unsubscribe = reconciliationStore.subscribe((state) => {
@@ -89,10 +65,6 @@
 
 			// Set configuration options
 			reverseReconciliation = config.reverseReconciliation ?? false;
-
-			// Update insertion progress
-			primaryInsertionProgress = state.primaryFileInsertionProgress;
-			comparisonInsertionProgress = state.comparisonFileInsertionProgress;
 		});
 
 		return unsubscribe;
@@ -152,134 +124,10 @@
 			email
 		});
 
-		// Begin file dumping to IndexedDB
-		beginFileDumps();
-	}
-
-	async function beginFileDumps() {
-		isDumpingFiles = true;
-		dumpError = null;
-
-		try {
-			const state = reconciliationStore.getSnapshot();
-
-			if (!state.primaryFile || !state.comparisonFile || !state.reconciliationConfig) {
-				throw new Error('Missing required files or configuration');
-			}
-
-			const config = state.reconciliationConfig;
-
-			// Get columns to include for each file (from comparison pairs)
-			const comparisonColumnsToInclude = [
-				config.primaryIdPair.comparisonColumn,
-				...config.comparisonPairs.map((pair) => pair.comparisonColumn)
-			];
-
-			const primaryColumnsToInclude = [
-				config.primaryIdPair.primaryColumn,
-				...config.comparisonPairs.map((pair) => pair.primaryColumn)
-			];
-
-			// Remove duplicates
-			const uniqueComparisonColumns = [...new Set(comparisonColumnsToInclude)];
-			const uniquePrimaryColumns = [...new Set(primaryColumnsToInclude)];
-
-			console.log('[Summary] Starting file dumps...');
-			console.log('[Summary] Primary columns to include:', uniquePrimaryColumns);
-			console.log('[Summary] Comparison columns to include:', uniqueComparisonColumns);
-
-			// Create IndexedDB configs
-			const primaryConfig: IndexedDBConfig = {
-				primaryKey: config.primaryIdPair.primaryColumn,
-				columnsToInclude: uniquePrimaryColumns,
-				fileType: 'primary',
-				fileName: state.primaryFile.name,
-				bulkInsertSize: 10000
-			};
-
-			const comparisonConfig: IndexedDBConfig = {
-				primaryKey: config.primaryIdPair.comparisonColumn,
-				columnsToInclude: uniqueComparisonColumns,
-				fileType: 'comparison',
-				fileName: state.comparisonFile.name,
-				bulkInsertSize: 10000
-			};
-
-			try {
-				// Dump files SEQUENTIALLY in the main thread - COMPARISON FIRST, then PRIMARY
-				console.log('[Summary] Starting sequential file dumps...');
-
-				// Comparison file dump - AWAIT for completion FIRST
-				console.log('[Summary] Initiating comparison file dump...');
-				const comparisonResult = await state.comparisonFileParser?.beginFileDumpToIndexedDB(
-					comparisonConfig,
-					(progress) => {
-						console.log(
-							`[Summary] Comparison file progress: ${progress.percentage}% (${progress.insertedRecords}/${progress.totalRecords})`
-						);
-						reconciliationStore.updateComparisonFileInsertionProgress({
-							storeName: progress.storeName,
-							totalRecords: progress.totalRecords,
-							insertedRecords: progress.insertedRecords,
-							percentage: progress.percentage,
-							recordsPerSecond: progress.recordsPerSecond,
-							estimatedTimeRemaining: progress.estimatedTimeRemaining
-						});
-					}
-				);
-				console.log('[Summary] Comparison file dump completed:', comparisonResult);
-				reconciliationStore.updateComparisonFileInsertionProgress({
-					storeName: comparisonResult.storeName,
-					totalRecords: comparisonResult.totalRecords,
-					insertedRecords: comparisonResult.totalRecords,
-					percentage: 100,
-					recordsPerSecond: 0,
-					estimatedTimeRemaining: 0
-				});
-
-				// Primary file dump - AWAIT for completion SECOND
-				console.log('[Summary] Initiating primary file dump...');
-				const primaryResult = await state.primaryFileParser?.beginFileDumpToIndexedDB(
-					primaryConfig,
-					(progress) => {
-						console.log(
-							`[Summary] Primary file progress: ${progress.percentage}% (${progress.insertedRecords}/${progress.totalRecords})`
-						);
-						reconciliationStore.updatePrimaryFileInsertionProgress({
-							storeName: progress.storeName,
-							totalRecords: progress.totalRecords,
-							insertedRecords: progress.insertedRecords,
-							percentage: progress.percentage,
-							recordsPerSecond: progress.recordsPerSecond,
-							estimatedTimeRemaining: progress.estimatedTimeRemaining
-						});
-					}
-				);
-				console.log('[Summary] Primary file dump completed:', primaryResult);
-				reconciliationStore.updatePrimaryFileInsertionProgress({
-					storeName: primaryResult.storeName,
-					totalRecords: primaryResult.totalRecords,
-					insertedRecords: primaryResult.totalRecords,
-					percentage: 100,
-					recordsPerSecond: 0,
-					estimatedTimeRemaining: 0
-				}); // Both files dumped successfully - navigate
-				console.log(
-					'[Summary] Both files dumped successfully. Navigating to reconciliation-progress page...'
-				);
-				goto('/reconciliation-progress');
-			} catch (error) {
-				const errorMsg = error instanceof Error ? error.message : String(error);
-				console.error('[Summary] Error during file dumping:', errorMsg);
-				dumpError = errorMsg;
-				isDumpingFiles = false;
-			}
-		} catch (error) {
-			const errorMsg = error instanceof Error ? error.message : String(error);
-			console.error('[Summary] Error during file dumping:', errorMsg);
-			dumpError = errorMsg;
-			isDumpingFiles = false;
-		}
+		// Navigate directly to reconciliation-progress page
+		// File dumping will be handled there
+		console.log('[Summary] Navigating to reconciliation-progress page...');
+		goto('/reconciliation-progress');
 	}
 </script>
 
@@ -519,95 +367,6 @@
 				</div>
 			</div>
 
-			{#if isDumpingFiles}
-				<!-- File Insertion Progress Card -->
-				<div
-					class="mb-8 rounded-lg border border-blue-200 bg-blue-50 p-6 dark:border-blue-800 dark:bg-blue-900"
-				>
-					<h2 class="mb-6 text-xl font-semibold text-blue-900 dark:text-blue-100">
-						Preparing Files for Reconciliation
-					</h2>
-
-					<!-- Comparison File Progress (Most Critical) -->
-					<div class="mb-8">
-						<div class="mb-2 flex items-center justify-between">
-							<div>
-								<h3 class="font-medium text-blue-900 dark:text-blue-100">Comparison File</h3>
-								<p class="text-sm text-blue-700 dark:text-blue-300">
-									{comparisonInsertionProgress.insertedRecords.toLocaleString()} /{' '}
-									{comparisonInsertionProgress.totalRecords.toLocaleString()} records
-								</p>
-							</div>
-							<div class="text-right">
-								<p class="text-lg font-bold text-blue-900 dark:text-blue-100">
-									{comparisonInsertionProgress.percentage}%
-								</p>
-								{#if comparisonInsertionProgress.recordsPerSecond > 0}
-									<p class="text-sm text-blue-700 dark:text-blue-300">
-										{comparisonInsertionProgress.recordsPerSecond} records/sec
-									</p>
-								{/if}
-								{#if comparisonInsertionProgress.estimatedTimeRemaining > 0 && comparisonInsertionProgress.percentage < 100}
-									<p class="text-sm text-blue-700 dark:text-blue-300">
-										{(comparisonInsertionProgress.estimatedTimeRemaining / 1000).toFixed(1)}s
-										remaining
-									</p>
-								{/if}
-							</div>
-						</div>
-						<div class="h-2 w-full rounded-full bg-blue-200 dark:bg-blue-700">
-							<div
-								class="h-full rounded-full bg-blue-500 transition-all duration-500"
-								style={`width: ${comparisonInsertionProgress.percentage}%`}
-							></div>
-						</div>
-					</div>
-
-					<!-- Primary File Progress -->
-					<div>
-						<div class="mb-2 flex items-center justify-between">
-							<div>
-								<h3 class="font-medium text-blue-900 dark:text-blue-100">Primary File</h3>
-								<p class="text-sm text-blue-700 dark:text-blue-300">
-									{primaryInsertionProgress.insertedRecords.toLocaleString()} /{' '}
-									{primaryInsertionProgress.totalRecords.toLocaleString()} records
-								</p>
-							</div>
-							<div class="text-right">
-								<p class="text-lg font-bold text-blue-900 dark:text-blue-100">
-									{primaryInsertionProgress.percentage}%
-								</p>
-								{#if primaryInsertionProgress.recordsPerSecond > 0}
-									<p class="text-sm text-blue-700 dark:text-blue-300">
-										{primaryInsertionProgress.recordsPerSecond} records/sec
-									</p>
-								{/if}
-								{#if primaryInsertionProgress.estimatedTimeRemaining > 0 && primaryInsertionProgress.percentage < 100}
-									<p class="text-sm text-blue-700 dark:text-blue-300">
-										{(primaryInsertionProgress.estimatedTimeRemaining / 1000).toFixed(1)}s remaining
-									</p>
-								{/if}
-							</div>
-						</div>
-						<div class="h-2 w-full rounded-full bg-blue-200 dark:bg-blue-700">
-							<div
-								class="h-full rounded-full bg-green-500 transition-all duration-500"
-								style={`width: ${primaryInsertionProgress.percentage}%`}
-							></div>
-						</div>
-					</div>
-
-					<div
-						class="mt-6 rounded-md border border-blue-300 bg-blue-100 p-3 dark:border-blue-600 dark:bg-blue-800"
-					>
-						<p class="text-sm text-blue-800 dark:text-blue-200">
-							<strong>Note:</strong> The comparison file must complete before reconciliation begins.
-							The primary file can continue inserting while reconciliation proceeds.
-						</p>
-					</div>
-				</div>
-			{/if}
-
 			<!-- Contact Information Card -->
 			<div
 				class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800"
@@ -616,17 +375,6 @@
 					<h2 class="mb-4 text-xl font-semibold text-gray-900 dark:text-white">
 						Contact Information
 					</h2>
-
-					{#if dumpError}
-						<div
-							class="mb-6 rounded-md border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900"
-						>
-							<h3 class="mb-2 text-lg font-semibold text-red-800 dark:text-red-200">
-								Error Preparing Files
-							</h3>
-							<p class="text-sm text-red-700 dark:text-red-300">{dumpError}</p>
-						</div>
-					{/if}
 
 					<div
 						class="mb-6 rounded-md border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900"
@@ -687,8 +435,7 @@
 			<button
 				type="button"
 				onclick={() => goto('/column-selection')}
-				disabled={isDumpingFiles}
-				class="transform rounded-md border border-gray-300 bg-white px-6 py-3 text-sm font-medium text-gray-700 transition-colors duration-200 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+				class="transform rounded-md border border-gray-300 bg-white px-6 py-3 text-sm font-medium text-gray-700 transition-colors duration-200 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-20 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
 			>
 				← Back to Column Selection
 			</button>
@@ -697,29 +444,10 @@
 			<button
 				type="button"
 				onclick={() => handleSubmit()}
-				disabled={!isFormValid || isDumpingFiles}
+				disabled={!isFormValid}
 				class="btn transform rounded-lg border-2 border-green-500 bg-green-500 px-6 py-3 font-semibold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-50 disabled:cursor-not-allowed disabled:opacity-50"
 			>
-				{#if isDumpingFiles}
-					<span class="inline-block">
-						<svg
-							class="mr-2 inline-block h-4 w-4 animate-spin"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-							></path>
-						</svg>
-						Preparing Files...
-					</span>
-				{:else}
-					Start Reconciliation
-				{/if}
+				Start Reconciliation →
 			</button>
 		</div>
 	</div>

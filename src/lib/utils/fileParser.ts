@@ -93,6 +93,7 @@ export abstract class StreamingFileParser {
 	 */
 	abstract beginFileDumpToIndexedDB(
 		config: IndexedDBConfig,
+		fileHash?: string,
 		onProgress?: FileDumpProgressCallback
 	): Promise<FileDumpResult>;
 
@@ -398,9 +399,10 @@ export class StreamingCSVParser extends StreamingFileParser {
 	 */
 	async beginFileDumpToIndexedDB(
 		config: IndexedDBConfig,
+		fileHash?: string,
 		onProgress?: FileDumpProgressCallback
 	): Promise<FileDumpResult> {
-		return dumpCSVToIndexedDB(this.file, config, onProgress);
+		return dumpCSVToIndexedDB(this.file, config, fileHash, onProgress);
 	}
 }
 
@@ -687,6 +689,7 @@ export class StreamingExcelParser extends StreamingFileParser {
 	 */
 	async beginFileDumpToIndexedDB(
 		config: IndexedDBConfig,
+		fileHash?: string,
 		onProgress?: FileDumpProgressCallback
 	): Promise<FileDumpResult> {
 		// For Excel, we convert to CSV format and use the CSV dumper
@@ -784,6 +787,7 @@ export class StreamingPDFParser extends StreamingFileParser {
 	 */
 	async beginFileDumpToIndexedDB(
 		config: IndexedDBConfig,
+		fileHash?: string,
 		onProgress?: FileDumpProgressCallback
 	): Promise<FileDumpResult> {
 		// For PDF, we would need to implement a similar dumper

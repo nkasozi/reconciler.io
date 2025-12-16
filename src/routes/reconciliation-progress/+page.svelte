@@ -11,7 +11,13 @@
 		getReconciliationLogs
 	} from '$lib/utils/reconciliation';
 	import { BatchReconciler, type BatchReconciliationProgress } from '$lib/utils/batchReconciler';
-	import { ReconciliationDatabase } from '$lib/utils/indexedDB/database';
+	import { getReconciliationDB, ReconciliationDatabase } from '$lib/utils/indexedDB/database';
+	import type { IndexedDBConfig } from '$lib/utils/indexedDB/types';
+	import {
+		generateFileHash,
+		getOrCreateFileProgress,
+		updateReconciliationProgress
+	} from '$lib/utils/indexedDB/fileProgressTracker';
 
 	// Reconciliation state
 	let primaryFileName = $state('');
@@ -59,7 +65,9 @@
 		insertedRecords: 0,
 		percentage: 0,
 		recordsPerSecond: 0,
-		estimatedTimeRemaining: 0
+		estimatedTimeRemaining: 0,
+		isFileReadingComplete: false,
+		isBulkInsertionComplete: false
 	});
 
 	let comparisonInsertionProgress = $state({
@@ -68,12 +76,21 @@
 		insertedRecords: 0,
 		percentage: 0,
 		recordsPerSecond: 0,
-		estimatedTimeRemaining: 0
+		estimatedTimeRemaining: 0,
+		isFileReadingComplete: false,
+		isBulkInsertionComplete: false
 	});
 
-	// Derived state to determine if files are still being inserted
+	// Failed upload records tracking
+	let failedUploads = $state<any[]>([]);
+	let primaryFileDumpFailedCount = $state(0);
+	let comparisonFileDumpFailedCount = $state(0);
+
+	// Derived state to determine if files are still being processed
+	// Only show complete when BOTH file reading AND all bulk insertions are done
 	let isInsertingFiles = $derived(
-		primaryInsertionProgress.percentage < 100 || comparisonInsertionProgress.percentage < 100
+		!primaryInsertionProgress.isBulkInsertionComplete ||
+			!comparisonInsertionProgress.isBulkInsertionComplete
 	);
 
 	// Batch reconciliation state
@@ -90,6 +107,7 @@
 	});
 	let batchReconciler: BatchReconciler | null = null;
 	let reconciliationDatabase: ReconciliationDatabase | null = null;
+	let fileHash: string | null = null;
 
 	// Primary ID and comparison columns
 	let primaryIdPair = $state<ColumnPair>({
@@ -150,6 +168,171 @@
 
 	onMount(() => {
 		console.log('[Reconciliation Progress] Component mounted - initializing');
+
+		// Immediately start file dumping when component mounts
+		const startFileDumping = async () => {
+			const state = reconciliationStore.getSnapshot();
+
+			if (!state.primaryFile || !state.primaryFileParser) {
+				console.error('[Reconciliation Progress] Missing primary file or parser');
+				goto('/upload');
+				return;
+			}
+
+			if (!state.comparisonFile || !state.comparisonFileParser) {
+				console.error('[Reconciliation Progress] Missing comparison file or parser');
+				goto('/upload');
+				return;
+			}
+
+			if (!state.reconciliationConfig) {
+				console.error('[Reconciliation Progress] Missing reconciliation config');
+				goto('/upload');
+				return;
+			}
+
+			try {
+				console.log('[Reconciliation Progress] Starting file dumps to IndexedDB');
+
+				const db = await getReconciliationDB();
+
+				const comparisonColumns = new Set<string>();
+				comparisonColumns.add(state.reconciliationConfig.primaryIdPair.comparisonColumn);
+				for (const pair of state.reconciliationConfig.comparisonPairs) {
+					comparisonColumns.add(pair.comparisonColumn);
+				}
+
+				const primaryColumns = new Set<string>();
+				primaryColumns.add(state.reconciliationConfig.primaryIdPair.primaryColumn);
+				for (const pair of state.reconciliationConfig.comparisonPairs) {
+					primaryColumns.add(pair.primaryColumn);
+				}
+
+				fileHash = generateFileHash(
+					state.primaryFile.name,
+					state.primaryFile.size,
+					state.comparisonFile.name,
+					state.comparisonFile.size,
+					state.reconciliationConfig.comparisonPairs,
+					state.reconciliationConfig
+				);
+				console.log('[Reconciliation Progress] Generated file hash:', fileHash);
+
+				const fileProgress = await getOrCreateFileProgress(
+					state.primaryFile.name,
+					state.primaryFile.size,
+					state.comparisonFile.name,
+					state.comparisonFile.size,
+					state.reconciliationConfig.comparisonPairs,
+					state.reconciliationConfig
+				);
+				console.log('[Reconciliation Progress] File progress:', fileProgress);
+
+				// Create IndexedDB configs for both files
+				const comparisonConfig: IndexedDBConfig = {
+					fileType: 'comparison',
+					fileName: state.comparisonFile.name,
+					primaryKey: state.reconciliationConfig.primaryIdPair.comparisonColumn,
+					columnsToInclude: Array.from(comparisonColumns),
+					bulkInsertSize: 10000
+				};
+
+				const primaryConfig: IndexedDBConfig = {
+					fileType: 'primary',
+					fileName: state.primaryFile.name,
+					primaryKey: state.reconciliationConfig.primaryIdPair.primaryColumn,
+					columnsToInclude: Array.from(primaryColumns),
+					bulkInsertSize: 10000
+				};
+
+				// Dump comparison file first (CRITICAL for reconciliation to work)
+				console.log('[Reconciliation Progress] Dumping comparison file to IndexedDB');
+				const comparisonResult = await state.comparisonFileParser.beginFileDumpToIndexedDB(
+					comparisonConfig,
+					fileHash,
+					(progress) => {
+						console.log(
+							`[Reconciliation Progress] Comparison file insertion: ${progress.percentage}% (file_reading=${progress.isFileReadingComplete}, insertion_complete=${progress.isBulkInsertionComplete})`
+						);
+						comparisonInsertionProgress = {
+							storeName: progress.storeName,
+							totalRecords: progress.totalRecords,
+							insertedRecords: progress.insertedRecords,
+							percentage: progress.percentage,
+							recordsPerSecond: progress.recordsPerSecond || 0,
+							estimatedTimeRemaining: progress.estimatedTimeRemaining || 0,
+							isFileReadingComplete: progress.isFileReadingComplete || false,
+							isBulkInsertionComplete: progress.isBulkInsertionComplete || false
+						};
+						reconciliationStore.updateComparisonFileInsertionProgress({
+							storeName: progress.storeName,
+							totalRecords: progress.totalRecords,
+							insertedRecords: progress.insertedRecords,
+							percentage: progress.percentage,
+							recordsPerSecond: progress.recordsPerSecond,
+							estimatedTimeRemaining: progress.estimatedTimeRemaining
+						});
+					}
+				);
+
+				console.log(
+					`[Reconciliation Progress] Comparison file dump complete: ${comparisonResult.insertedRecords} records inserted, ${comparisonResult.failedRecords} failed`
+				);
+				comparisonFileDumpFailedCount = comparisonResult.failedRecords;
+
+				// Dump primary file second
+				console.log('[Reconciliation Progress] Dumping primary file to IndexedDB');
+				const primaryResult = await state.primaryFileParser.beginFileDumpToIndexedDB(
+					primaryConfig,
+					fileHash,
+					(progress) => {
+						console.log(
+							`[Reconciliation Progress] Primary file insertion: ${progress.percentage}% (file_reading=${progress.isFileReadingComplete}, insertion_complete=${progress.isBulkInsertionComplete})`
+						);
+						primaryInsertionProgress = {
+							storeName: progress.storeName,
+							totalRecords: progress.totalRecords,
+							insertedRecords: progress.insertedRecords,
+							percentage: progress.percentage,
+							recordsPerSecond: progress.recordsPerSecond || 0,
+							estimatedTimeRemaining: progress.estimatedTimeRemaining || 0,
+							isFileReadingComplete: progress.isFileReadingComplete || false,
+							isBulkInsertionComplete: progress.isBulkInsertionComplete || false
+						};
+						reconciliationStore.updatePrimaryFileInsertionProgress({
+							storeName: progress.storeName,
+							totalRecords: progress.totalRecords,
+							insertedRecords: progress.insertedRecords,
+							percentage: progress.percentage,
+							recordsPerSecond: progress.recordsPerSecond,
+							estimatedTimeRemaining: progress.estimatedTimeRemaining
+						});
+					}
+				);
+				console.log(
+					`[Reconciliation Progress] Primary file dump complete: ${primaryResult.insertedRecords} records inserted, ${primaryResult.failedRecords} failed`
+				);
+				primaryFileDumpFailedCount = primaryResult.failedRecords;
+
+				// Store the file store names for later use
+				reconciliationStore.setIndexedDBStoreNames(
+					primaryResult.storeName,
+					comparisonResult.storeName
+				);
+
+				// Load failed uploads from database
+				const failedUploadsData = await db.getFailedUploads();
+				failedUploads = failedUploadsData;
+			} catch (error) {
+				console.error('[Reconciliation Progress] Error dumping files:', error);
+				reconciliationStore.setError(
+					error instanceof Error ? error.message : 'Failed to dump files to IndexedDB'
+				);
+			}
+		};
+
+		// Start file dumping immediately
+		startFileDumping();
 
 		const unsubscribe = reconciliationStore.subscribe((state) => {
 			console.log('[Reconciliation Progress] Store subscription triggered');
@@ -212,7 +395,9 @@
 					insertedRecords: state.primaryFileInsertionProgress.insertedRecords,
 					percentage: state.primaryFileInsertionProgress.percentage,
 					recordsPerSecond: state.primaryFileInsertionProgress.recordsPerSecond,
-					estimatedTimeRemaining: state.primaryFileInsertionProgress.estimatedTimeRemaining
+					estimatedTimeRemaining: state.primaryFileInsertionProgress.estimatedTimeRemaining,
+					isFileReadingComplete: false,
+					isBulkInsertionComplete: false
 				};
 			}
 
@@ -223,15 +408,17 @@
 					insertedRecords: state.comparisonFileInsertionProgress.insertedRecords,
 					percentage: state.comparisonFileInsertionProgress.percentage,
 					recordsPerSecond: state.comparisonFileInsertionProgress.recordsPerSecond,
-					estimatedTimeRemaining: state.comparisonFileInsertionProgress.estimatedTimeRemaining
+					estimatedTimeRemaining: state.comparisonFileInsertionProgress.estimatedTimeRemaining,
+					isFileReadingComplete: false,
+					isBulkInsertionComplete: false
 				};
 			}
 
-			// Only start reconciliation once files are fully inserted (comparison file must be at 100%)
-			// Primary file can continue inserting while reconciliation proceeds
-			if (comparisonInsertionProgress.percentage === 100 && !isReconciliationComplete) {
+			// Only start reconciliation once files are truly done (both reading and insertion complete)
+			// Check if comparison file bulk insertion is complete before starting reconciliation
+			if (comparisonInsertionProgress.isBulkInsertionComplete && !isReconciliationComplete) {
 				console.log(
-					'[Reconciliation Progress] Comparison file fully inserted. Starting reconciliation...'
+					'[Reconciliation Progress] Comparison file fully inserted (file reading complete and all bulk insertions done). Starting reconciliation...'
 				);
 				// Start the reconciliation process now that comparison file is loaded
 				startReconciliation();
@@ -454,28 +641,29 @@
 				console.log(`[Reconciliation] Comparison store: ${storeState.comparisonFileStoreName}`);
 				useBatchReconciliation = true;
 
-				// Initialize database and batch reconciler
-				reconciliationDatabase = new ReconciliationDatabase();
-				batchReconciler = new BatchReconciler({
-					batchSize: 100,
-					mode: 'sequential',
-					concurrencyLimit: 2,
-					onProgress: (progress: BatchReconciliationProgress) => {
-						batchProgress = progress;
-						processedRows = progress.processedRecords;
-						matchingSpeed = progress.recordsPerSecond;
-						estimatedTimeLeft = formatTimeEstimate(progress.estimatedTimeRemaining);
-
-						if (processedRows % 500 === 0) {
-							console.log(
-								`[Batch Reconciliation] Progress: ${progress.percentage}% (${progress.processedRecords}/${progress.totalRecords})`
-							);
-						}
-					}
-				});
-
 				// Use an async IIFE to properly await the async reconciliation
 				(async () => {
+					console.log('[Batch IIFE] Initializing batch reconciliation...');
+					// Initialize database and batch reconciler
+					reconciliationDatabase = await getReconciliationDB();
+					batchReconciler = new BatchReconciler({
+						batchSize: 100,
+						mode: 'sequential',
+						concurrencyLimit: 2,
+						onProgress: (progress: BatchReconciliationProgress) => {
+							batchProgress = progress;
+							processedRows = progress.processedRecords;
+							matchingSpeed = progress.recordsPerSecond;
+							estimatedTimeLeft = formatTimeEstimate(progress.estimatedTimeRemaining);
+
+							if (processedRows % 500 === 0) {
+								console.log(
+									`[Batch Reconciliation] Progress: ${progress.percentage}% (${progress.processedRecords}/${progress.totalRecords})`
+								);
+							}
+						}
+					});
+
 					console.log('[Batch IIFE] Starting batch reconciliation...');
 					try {
 						console.log('[Batch IIFE] Calling performBatchReconciliation...');
@@ -577,6 +765,10 @@
 				throw new Error('Batch reconciler or database not initialized');
 			}
 
+			if (fileHash) {
+				await updateReconciliationProgress(fileHash, 'ongoing');
+			}
+
 			const generator = batchReconciler.reconcileBatches(
 				reconciliationDatabase,
 				storeState.primaryFileStoreName,
@@ -668,6 +860,10 @@
 						};
 					})
 				});
+			}
+
+			if (fileHash) {
+				await updateReconciliationProgress(fileHash, 'completed');
 			}
 
 			console.log(`[performBatchReconciliation] Completed. Total results: ${matchIndex}`);
@@ -1321,8 +1517,30 @@
 		const results = prepareResultsFile();
 		console.log('Prepared results:', results.length, 'rows');
 
-		// Convert to CSV
-		const csvContent = convertToCSV(results);
+		// Add failed uploads section
+		let csvContent = convertToCSV(results);
+
+		if (failedUploads.length > 0) {
+			csvContent += '\n\n=== FAILED RECORD UPLOADS ===\n';
+			csvContent += 'Record ID,File Name,File Type,Failure Reason\n';
+			failedUploads.forEach((failure) => {
+				const recordId = failure.recordId || '';
+				const fileName = failure.fileName || '';
+				const fileType = failure.fileType || '';
+				const reason = failure.failureReason || 'Unknown error';
+
+				// Properly escape CSV values
+				const fields = [recordId, fileName, fileType, reason].map((field) => {
+					const fieldStr = field.toString();
+					if (fieldStr.includes(',') || fieldStr.includes('"') || fieldStr.includes('\n')) {
+						return `"${fieldStr.replace(/"/g, '""')}"`;
+					}
+					return fieldStr;
+				});
+				csvContent += fields.join(',') + '\n';
+			});
+		}
+
 		console.log('CSV content length:', csvContent.length);
 
 		// Create a download link
@@ -1632,74 +1850,74 @@
 		<!-- File Insertion Progress Section (shown while files are being inserted) -->
 		{#if isInsertingFiles}
 			<div
-				class="mb-4 rounded-lg border-l-4 border-yellow-500 bg-gray-800 p-3 shadow-md shadow-gray-800 sm:mb-6 sm:p-6"
+				class="mb-8 rounded-lg border border-blue-200 bg-blue-50 p-6 dark:border-blue-800 dark:bg-blue-900"
 			>
-				<h2 class="mb-4 text-base font-semibold text-white sm:mb-6 sm:text-xl">
-					File Insertion Progress
+				<h2 class="mb-6 text-xl font-semibold text-blue-900 dark:text-blue-100">
+					Preparing Files for Reconciliation
 				</h2>
 
-				<!-- Comparison File Progress (Critical) -->
-				<div class="mb-6 sm:mb-8">
-					<div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-						<div class="min-w-0">
-							<h3 class="text-sm font-medium text-gray-200 sm:text-base">Comparison File</h3>
-							<p class="truncate text-xs text-gray-400 sm:text-sm">
-								{comparisonInsertionProgress.insertedRecords.toLocaleString()} / {comparisonInsertionProgress.totalRecords.toLocaleString()}
-								records
+				<!-- Comparison File Progress (Most Critical) -->
+				<div class="mb-8">
+					<div class="mb-2 flex items-center justify-between">
+						<div>
+							<h3 class="font-medium text-blue-900 dark:text-blue-100">Comparison File</h3>
+							<p class="text-sm text-blue-700 dark:text-blue-300">
+								{comparisonInsertionProgress.insertedRecords.toLocaleString()} /{' '}
+								{comparisonInsertionProgress.totalRecords.toLocaleString()} records
 							</p>
 						</div>
 						<div class="text-right">
-							<p class="text-xl font-bold text-yellow-400 sm:text-2xl">
+							<p class="text-lg font-bold text-blue-900 dark:text-blue-100">
 								{comparisonInsertionProgress.percentage}%
 							</p>
 							{#if comparisonInsertionProgress.recordsPerSecond > 0}
-								<p class="text-xs text-gray-400 sm:text-sm">
-									{comparisonInsertionProgress.recordsPerSecond.toLocaleString()} records/sec
+								<p class="text-sm text-blue-700 dark:text-blue-300">
+									{comparisonInsertionProgress.recordsPerSecond} records/sec
 								</p>
 							{/if}
 							{#if comparisonInsertionProgress.estimatedTimeRemaining > 0 && comparisonInsertionProgress.percentage < 100}
-								<p class="text-xs text-gray-400 sm:text-sm">
+								<p class="text-sm text-blue-700 dark:text-blue-300">
 									{(comparisonInsertionProgress.estimatedTimeRemaining / 1000).toFixed(1)}s
 									remaining
 								</p>
 							{/if}
 						</div>
 					</div>
-					<div class="h-2 w-full rounded-full bg-gray-700">
+					<div class="h-2 w-full rounded-full bg-blue-200 dark:bg-blue-700">
 						<div
-							class="h-full rounded-full bg-yellow-500 transition-all duration-500"
+							class="h-full rounded-full bg-blue-500 transition-all duration-500"
 							style={`width: ${comparisonInsertionProgress.percentage}%`}
 						></div>
 					</div>
 				</div>
 
-				<!-- Primary File Progress (Concurrent) -->
-				<div class="mb-4 sm:mb-8">
-					<div class="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-						<div class="min-w-0">
-							<h3 class="text-sm font-medium text-gray-200 sm:text-base">Primary File</h3>
-							<p class="truncate text-xs text-gray-400 sm:text-sm">
-								{primaryInsertionProgress.insertedRecords.toLocaleString()} / {primaryInsertionProgress.totalRecords.toLocaleString()}
-								records
+				<!-- Primary File Progress -->
+				<div>
+					<div class="mb-2 flex items-center justify-between">
+						<div>
+							<h3 class="font-medium text-blue-900 dark:text-blue-100">Primary File</h3>
+							<p class="text-sm text-blue-700 dark:text-blue-300">
+								{primaryInsertionProgress.insertedRecords.toLocaleString()} /{' '}
+								{primaryInsertionProgress.totalRecords.toLocaleString()} records
 							</p>
 						</div>
 						<div class="text-right">
-							<p class="text-xl font-bold text-green-400 sm:text-2xl">
+							<p class="text-lg font-bold text-blue-900 dark:text-blue-100">
 								{primaryInsertionProgress.percentage}%
 							</p>
 							{#if primaryInsertionProgress.recordsPerSecond > 0}
-								<p class="text-xs text-gray-400 sm:text-sm">
-									{primaryInsertionProgress.recordsPerSecond.toLocaleString()} records/sec
+								<p class="text-sm text-blue-700 dark:text-blue-300">
+									{primaryInsertionProgress.recordsPerSecond} records/sec
 								</p>
 							{/if}
 							{#if primaryInsertionProgress.estimatedTimeRemaining > 0 && primaryInsertionProgress.percentage < 100}
-								<p class="text-xs text-gray-400 sm:text-sm">
+								<p class="text-sm text-blue-700 dark:text-blue-300">
 									{(primaryInsertionProgress.estimatedTimeRemaining / 1000).toFixed(1)}s remaining
 								</p>
 							{/if}
 						</div>
 					</div>
-					<div class="h-2 w-full rounded-full bg-gray-700">
+					<div class="h-2 w-full rounded-full bg-blue-200 dark:bg-blue-700">
 						<div
 							class="h-full rounded-full bg-green-500 transition-all duration-500"
 							style={`width: ${primaryInsertionProgress.percentage}%`}
@@ -1707,12 +1925,107 @@
 					</div>
 				</div>
 
-				<div class="rounded-md border border-yellow-700 bg-yellow-900/20 p-2 sm:p-3">
-					<p class="text-xs text-yellow-200 sm:text-sm">
-						<strong>Note:</strong> Reconciliation will start automatically once the comparison file is
-						fully prepared. The primary file can continue loading while reconciliation proceeds.
+				<!-- Status Indicators -->
+				<div class="mt-4 space-y-2">
+					<div class="flex items-center gap-2">
+						<div
+							class="h-3 w-3 rounded-full {comparisonInsertionProgress.isFileReadingComplete
+								? 'bg-green-500'
+								: 'bg-yellow-500'}"
+						></div>
+						<p class="text-sm text-gray-700 dark:text-gray-300">
+							Comparison file reading: {comparisonInsertionProgress.isFileReadingComplete
+								? '✓ Complete'
+								: '⏳ In Progress'}
+						</p>
+					</div>
+					<div class="flex items-center gap-2">
+						<div
+							class="h-3 w-3 rounded-full {comparisonInsertionProgress.isBulkInsertionComplete
+								? 'bg-green-500'
+								: 'bg-yellow-500'}"
+						></div>
+						<p class="text-sm text-gray-700 dark:text-gray-300">
+							Comparison file insertion: {comparisonInsertionProgress.isBulkInsertionComplete
+								? '✓ Complete'
+								: '⏳ In Progress'}
+						</p>
+					</div>
+					<div class="flex items-center gap-2">
+						<div
+							class="h-3 w-3 rounded-full {primaryInsertionProgress.isFileReadingComplete
+								? 'bg-green-500'
+								: 'bg-yellow-500'}"
+						></div>
+						<p class="text-sm text-gray-700 dark:text-gray-300">
+							Primary file reading: {primaryInsertionProgress.isFileReadingComplete
+								? '✓ Complete'
+								: '⏳ In Progress'}
+						</p>
+					</div>
+					<div class="flex items-center gap-2">
+						<div
+							class="h-3 w-3 rounded-full {primaryInsertionProgress.isBulkInsertionComplete
+								? 'bg-green-500'
+								: 'bg-yellow-500'}"
+						></div>
+						<p class="text-sm text-gray-700 dark:text-gray-300">
+							Primary file insertion: {primaryInsertionProgress.isBulkInsertionComplete
+								? '✓ Complete'
+								: '⏳ In Progress'}
+						</p>
+					</div>
+				</div>
+
+				<div
+					class="mt-6 rounded-md border border-blue-300 bg-blue-100 p-3 dark:border-blue-600 dark:bg-blue-800"
+				>
+					<p class="text-sm text-blue-800 dark:text-blue-200">
+						<strong>Note:</strong> Reconciliation starts only when the comparison file reading AND all
+						bulk insertions are complete. The primary file can continue inserting while reconciliation
+						proceeds. The progress bar may reach 100% while file reading is still ongoing—reconciliation
+						will not start until both are complete.
 					</p>
 				</div>
+
+				{#if failedUploads.length > 0}
+					<div
+						class="mt-6 rounded-md border border-red-300 bg-red-50 p-4 dark:border-red-600 dark:bg-red-900"
+					>
+						<h3
+							class="mb-3 flex items-center gap-2 text-lg font-semibold text-red-800 dark:text-red-200"
+						>
+							⚠️ Failed Record Uploads
+						</h3>
+						<p class="mb-3 text-sm text-red-700 dark:text-red-300">
+							{failedUploads.length} records failed to insert due to duplicate keys:
+						</p>
+						<div class="max-h-48 space-y-2 overflow-y-auto">
+							{#each failedUploads.slice(0, 10) as failure}
+								<div class="rounded bg-red-100 p-2 dark:bg-red-800">
+									<div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+										<div class="text-sm">
+											<p class="font-mono font-semibold text-red-800 dark:text-red-200">
+												ID: {failure.recordId}
+											</p>
+											<p class="text-xs text-red-700 dark:text-red-300">
+												{failure.fileType} | {failure.fileName}
+											</p>
+										</div>
+										<p class="text-xs text-red-600 dark:text-red-400">
+											{failure.failureReason}
+										</p>
+									</div>
+								</div>
+							{/each}
+							{#if failedUploads.length > 10}
+								<p class="text-center text-xs text-red-600 dark:text-red-400">
+									... and {failedUploads.length - 10} more
+								</p>
+							{/if}
+						</div>
+					</div>
+				{/if}
 			</div>
 		{/if}
 
