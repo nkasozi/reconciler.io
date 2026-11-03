@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
-import { readAnyFile } from './fileReaders/readAnyFile';
+import { readAnyFile } from '$lib/adapters/fileReaders/readAnyFile';
+import { writeXlsxWorkbook } from '$lib/adapters/spreadsheet/xlsxWorkbookWriter';
 import { runReconciliation } from './matchEngine';
 import { suggestMatchPlan } from './planSuggester';
-import { buildExcelReport } from './resultExporter';
+import { buildReportSheets } from './resultExporter';
 import { buildResultPage } from './resultViews';
 import { buildSampleFiles } from './sampleFiles';
 
@@ -27,7 +28,7 @@ describe('sample reconciliation and Excel report', () => {
 
 	it('writes a workbook with summary and detail sheets', async () => {
 		const viewContext = await loadSampleContext();
-		const workbookBytes = buildExcelReport(viewContext, { leftLabel: 'QuickBooks', rightLabel: 'Bank statement' });
+		const workbookBytes = writeXlsxWorkbook(buildReportSheets(viewContext, { leftLabel: 'QuickBooks', rightLabel: 'Bank statement' }));
 		const workbook = XLSX.read(workbookBytes, { type: 'array' });
 		expect(workbook.SheetNames).toEqual(['Summary', 'Needs review', 'Only in QuickBooks', 'Only in Bank statement', 'Matched']);
 		const needsReviewRows = XLSX.utils.sheet_to_json<string[]>(workbook.Sheets['Needs review'], { header: 1 });

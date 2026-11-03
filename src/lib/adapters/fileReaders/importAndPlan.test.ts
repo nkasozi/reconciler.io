@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
-import { readAnyFile } from './fileReaders/readAnyFile';
-import { runReconciliation } from './matchEngine';
-import { suggestMatchPlan } from './planSuggester';
+import { readAnyFile } from './readAnyFile';
+import { runReconciliation } from '$lib/engine/matchEngine';
+import { suggestMatchPlan } from '$lib/engine/planSuggester';
 
 function textFile(fileName: string, fileText: string) {
 	return { fileName, fileBytes: new TextEncoder().encode(fileText).buffer as ArrayBuffer };

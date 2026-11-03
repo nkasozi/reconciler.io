@@ -1,6 +1,6 @@
 import { buildRule } from './planSuggester';
 import type { ColumnSource, FieldKind, FieldRule, MatchPlan } from './types';
-import type { TableOverview } from './workerProtocol';
+import type { TableOverview } from '$lib/ports/matchingEngine';
 
 export type ColumnOption = { optionValue: string; optionLabel: string };
 

@@ -19,11 +19,13 @@
 	import ScreenBackButton from '$lib/components/reconcile/navigation/ScreenBackButton.svelte';
 	import { applyLocationToWorkflow, chooseLandingLocation, readSessionLocation } from '$lib/components/reconcile/navigation/workflowLocations';
 	import { buildSampleFiles, buildThreeWaySampleFiles } from '$lib/engine/sampleFiles';
-	import { createReconcileWorkerClient, type ReconcileWorkerClient } from '$lib/engine/workerClient';
+	import { createBrowserAdapters } from '$lib/adapters/browserAdapters';
+	import type { MatchingEngineGateway } from '$lib/ports/matchingEngine';
 
 	const PAUSE_TO_SHOW_FILES_LINKING_IN_MILLISECONDS = 650;
-	let workerClient: ReconcileWorkerClient | null = null;
-	const workflow = createWorkflowSession(() => workerClient);
+	const browserAdapters = createBrowserAdapters();
+	let matchingEngine: MatchingEngineGateway | null = null;
+	const workflow = createWorkflowSession({ getMatchingEngine: () => matchingEngine, documentPreparer: browserAdapters.documentPreparer });
 	const session = workflow.session;
 
 	let hasStartedLoadingFiles = false;
@@ -32,7 +34,7 @@
 	let lastStartRequest = $state<{ filesToLoad: File[]; startMode: StartMode } | null>(null);
 	let startMode = $state<StartMode>('two_files');
 	let isSidebarOpenOnPhone = $state(false);
-	const library = createReconciliationLibrary(workflow, () => workerClient);
+	const library = createReconciliationLibrary({ workflow, repository: browserAdapters.reconciliationRepository, getMatchingEngine: () => matchingEngine });
 	library.watchAndAutosave();
 	const historySync = createHistorySync({
 		readSessionLocation: () => readSessionLocation(session, startMode),
@@ -45,10 +47,10 @@
 	let activeLabels = $derived(activeStage ? labelsForStage(activeStage, session.files, session.stages) : { leftLabel: 'File 1', rightLabel: 'File 2' });
 
 	onMount(() => {
-		workerClient = createReconcileWorkerClient();
+		matchingEngine = browserAdapters.startMatchingEngine();
 	});
 	onDestroy(() => {
-		workerClient?.terminate();
+		matchingEngine?.terminate();
 	});
 
 	function goToLocation(requestedLocation: AppLocation): AppLocation {
@@ -131,8 +133,8 @@
 	}
 
 	async function requestGridPage(stageId: string, view: GridView, pageNumber: number, pageSize: number, searchText: string): Promise<ResultGridPage> {
-		if (!workerClient) throw new Error('The matching engine is still starting. Please try again in a moment.');
-		const response = await workerClient.sendRequest<'result_grid'>({ requestType: 'get_result_grid', stageId, view, pageNumber, pageSize, searchText });
+		if (!matchingEngine) throw new Error('The matching engine is still starting. Please try again in a moment.');
+		const response = await matchingEngine.sendRequest<'result_grid'>({ requestType: 'get_result_grid', stageId, view, pageNumber, pageSize, searchText });
 		return response.gridPage;
 	}
 

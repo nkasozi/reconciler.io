@@ -2,7 +2,7 @@
 	import { onMount, type Snippet } from 'svelte';
 	import { buildColumnOptions } from '$lib/engine/planEditing';
 	import type { MatchPlan } from '$lib/engine/types';
-	import type { TableOverview } from '$lib/engine/workerProtocol';
+	import type { TableOverview } from '$lib/ports/matchingEngine';
 	import { riseIn, staggerDelay } from '../motion';
 	import SideCard from '../SideCard.svelte';
 	import { createChipAnchorTracker } from './chipAnchorTracker.svelte';

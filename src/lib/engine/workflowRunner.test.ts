@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readAnyFile } from './fileReaders/readAnyFile';
+import { readAnyFile } from '$lib/adapters/fileReaders/readAnyFile';
 import { countRowsMatchedInEveryStep } from './stageTables';
 import type { DataTable } from './types';
 import { buildChainStageInputs, runWorkflowStage, suggestPlanForStageInputs } from './workflowRunner';

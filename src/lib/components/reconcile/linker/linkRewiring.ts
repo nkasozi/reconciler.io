@@ -1,7 +1,7 @@
 import { buildRule } from '$lib/engine/planSuggester';
 import { decodeColumnSource, guessFieldKindForColumn } from '$lib/engine/planEditing';
 import type { FieldKind, FieldRule, MatchPlan } from '$lib/engine/types';
-import type { TableOverview } from '$lib/engine/workerProtocol';
+import type { TableOverview } from '$lib/ports/matchingEngine';
 import { listLinks, reconnectFallback, removeLink, replaceLinkRule, type LinkRole, type LinkView } from './linkerModel';
 
 export type LinkSide = 'left' | 'right';

@@ -2,7 +2,7 @@ import { buildRule } from '$lib/engine/planSuggester';
 import { buildColumnOptions, decodeColumnSource, encodeColumnSource, guessFieldKindForColumn } from '$lib/engine/planEditing';
 import type { ColumnRole } from '$lib/engine/columnRoles';
 import type { FieldKind, FieldRule, MatchPlan } from '$lib/engine/types';
-import type { TableOverview } from '$lib/engine/workerProtocol';
+import type { TableOverview } from '$lib/ports/matchingEngine';
 
 export type LinkRole = 'pair' | 'check';
 export type LinkView = { ruleId: string; role: LinkRole; leftValue: string; rightValue: string; rule: FieldRule };

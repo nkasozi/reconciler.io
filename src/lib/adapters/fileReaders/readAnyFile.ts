@@ -1,17 +1,17 @@
-import { detectAccountingSystem } from '../accountingSystems';
-import { profileColumns } from '../columnRoles';
-import { detectDateOrderFromSamples, type DateOrder } from '../dateParser';
-import { convertGridToTable } from '../headerDetection';
-import type { DataTable } from '../types';
+import { detectAccountingSystem } from '$lib/engine/accountingSystems';
+import { profileColumns } from '$lib/engine/columnRoles';
+import { detectDateOrderFromSamples, type DateOrder } from '$lib/engine/dateParser';
+import { convertGridToTable } from '$lib/engine/headerDetection';
+import type { DataTable } from '$lib/engine/types';
+import type { FileInput, TableFileReader } from '$lib/ports/tableFileReader';
 import { decodeTextBytes, readDelimitedTextGrid, readSpreadsheetGrid } from './gridReaders';
 import { looksLikeOfxText, looksLikeQifText, readOfxStatement, readQifStatement, type HeaderAndRows } from './statementFormatReaders';
 
-export type FileInput = { fileName: string; fileBytes: ArrayBuffer };
 export type FileFormat = 'spreadsheet' | 'delimited_text' | 'ofx' | 'qif';
 
-export { SUPPORTED_FILE_EXTENSIONS } from './supportedExtensions';
+export { SUPPORTED_FILE_EXTENSIONS } from '$lib/ports/tableFileReader';
 
-export function readAnyFile(fileInput: FileInput, fallbackDateOrder: DateOrder): DataTable {
+export const readAnyFile: TableFileReader = (fileInput: FileInput, fallbackDateOrder: DateOrder): DataTable => {
 	const fileFormat = detectFileFormat(fileInput);
 	console.log(`[readAnyFile] Reading "${fileInput.fileName}" as ${fileFormat}`);
 	const { headerAndRows, sheetName, skippedRowCount } = readHeaderAndRows(fileInput, fileFormat);

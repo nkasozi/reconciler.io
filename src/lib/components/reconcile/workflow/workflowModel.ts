@@ -1,5 +1,5 @@
 import type { MatchPlan } from '$lib/engine/types';
-import type { StageRunSummary, TableOverview } from '$lib/engine/workerProtocol';
+import type { StageRunSummary, TableOverview } from '$lib/ports/matchingEngine';
 import { buildStageOutputTableId, isStageOutputTableId, listInputTableIds, type RowFilter, type StageInput, type TableId, type TableLabels, type WorkflowStage } from '$lib/engine/workflowTypes';
 
 export type WorkflowFile = { tableId: TableId; fileLetter: string; overview: TableOverview };

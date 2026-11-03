@@ -1,22 +1,8 @@
-import type { WorkflowStage } from '$lib/engine/workflowTypes';
+import type { SavedHeadline, SavedReconciliation, SavedStage } from '$lib/ports/reconciliationRepository';
 import type { StageState, WorkflowFile } from '../workflow/workflowModel';
 import { shortFileName } from '../workflow/workflowModel';
 
-export type SavedFile = { tableId: string; fileLetter: string; fileName: string; displayName: string; rowCount: number; fileContentKey: string };
-export type SavedStage = WorkflowStage & { hadRun: boolean; suggestedRuleIds: string[]; confidenceLevel: StageState['confidenceLevel'] };
-export type SavedHeadline = { matchedCount: number; attentionCount: number; ranStepCount: number };
-
-export type SavedReconciliation = {
-	reconciliationId: string;
-	title: string;
-	isTitleChosenByPerson: boolean;
-	createdAt: number;
-	updatedAt: number;
-	files: SavedFile[];
-	stages: SavedStage[];
-	reviewedItemKeysByStageId: Record<string, string[]>;
-	headline: SavedHeadline | null;
-};
+export type { SavedFile, SavedHeadline, SavedReconciliation, SavedStage } from '$lib/ports/reconciliationRepository';
 
 export type WorkflowSnapshot = { files: WorkflowFile[]; stages: StageState[]; reviewedItemKeysByStageId: Record<string, string[]> };
 

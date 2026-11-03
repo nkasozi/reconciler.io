@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { SUPPORTED_FILE_EXTENSIONS } from '$lib/engine/fileReaders/supportedExtensions';
+	import { SUPPORTED_FILE_EXTENSIONS } from '$lib/ports/tableFileReader';
 	import DrawnCheckmark from './DrawnCheckmark.svelte';
 	import { popIn } from './motion';
 

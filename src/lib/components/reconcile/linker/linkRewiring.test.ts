@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildRule } from '$lib/engine/planSuggester';
 import type { MatchPlan } from '$lib/engine/types';
-import type { TableOverview } from '$lib/engine/workerProtocol';
+import type { TableOverview } from '$lib/ports/matchingEngine';
 import { listLinks } from './linkerModel';
 import { moveLinkEndpoint } from './linkRewiring';
 

@@ -1,10 +1,8 @@
-import { deleteStoredValue, FILE_CONTENTS_STORE, getAllStoredValues, getStoredValue, isBrowserStorageAvailable, putStoredValue, RECONCILIATIONS_STORE } from '$lib/storage/browserDatabase';
-import type { ReconcileWorkerClient } from '$lib/engine/workerClient';
+import type { ReconciliationRepository } from '$lib/ports/reconciliationRepository';
+import type { MatchingEngineGateway } from '$lib/ports/matchingEngine';
 import { guessDateOrderFromBrowserLanguage } from '../reconcileSession';
 import type { WorkflowSession } from '../workflow/workflowSession.svelte';
 import { buildSavedReconciliation, createReconciliationId, restoreStageState, type SavedReconciliation } from './savedReconciliation';
-
-type StoredFileContent = { fileName: string; fileBlob: Blob };
 
 const AUTOSAVE_DELAY_IN_MILLISECONDS = 700;
 
@@ -13,7 +11,9 @@ function buildContentSignature(record: SavedReconciliation): string {
 	return JSON.stringify(comparableFields);
 }
 
-export function createReconciliationLibrary(workflow: WorkflowSession, getWorkerClient: () => ReconcileWorkerClient | null) {
+export type ReconciliationLibraryDependencies = { workflow: WorkflowSession; repository: ReconciliationRepository; getMatchingEngine: () => MatchingEngineGateway | null };
+
+export function createReconciliationLibrary({ workflow, repository, getMatchingEngine }: ReconciliationLibraryDependencies) {
 	const { session } = workflow;
 	let savedReconciliations = $state<SavedReconciliation[]>([]);
 	let isRestoring = $state(false);
@@ -21,9 +21,8 @@ export function createReconciliationLibrary(workflow: WorkflowSession, getWorker
 	const savedFileContentKeys = new Set<string>();
 
 	async function refreshSavedList(): Promise<boolean> {
-		if (!isBrowserStorageAvailable()) return false;
-		const allRecords = await getAllStoredValues<SavedReconciliation>(RECONCILIATIONS_STORE);
-		savedReconciliations = allRecords.sort((first, second) => second.updatedAt - first.updatedAt);
+		if (!repository.isAvailable()) return false;
+		savedReconciliations = await repository.listReconciliationsNewestFirst();
 		return true;
 	}
 
@@ -32,14 +31,14 @@ export function createReconciliationLibrary(workflow: WorkflowSession, getWorker
 			if (savedFileContentKeys.has(savedFile.fileContentKey)) continue;
 			const readableFile = workflow.readableFilesByTableId.get(savedFile.tableId);
 			if (!readableFile) continue;
-			await putStoredValue<StoredFileContent>(FILE_CONTENTS_STORE, savedFile.fileContentKey, { fileName: readableFile.name, fileBlob: readableFile });
+			await repository.saveFileContent({ fileContentKey: savedFile.fileContentKey, fileName: readableFile.name, fileBlob: readableFile });
 			savedFileContentKeys.add(savedFile.fileContentKey);
 		}
 		return true;
 	}
 
 	async function saveCurrentReconciliation(): Promise<boolean> {
-		if (!isBrowserStorageAvailable() || isRestoring || session.files.length < 2 || session.screenState === 'working') return false;
+		if (!repository.isAvailable() || isRestoring || session.files.length < 2 || session.screenState === 'working') return false;
 		const reconciliationId = session.reconciliationId ?? createReconciliationId();
 		const previousRecord = savedReconciliations.find((record) => record.reconciliationId === reconciliationId) ?? null;
 		const snapshot = $state.snapshot({ files: session.files, stages: session.stages, reviewedItemKeysByStageId: session.reviewedItemKeysByStageId });
@@ -48,7 +47,7 @@ export function createReconciliationLibrary(workflow: WorkflowSession, getWorker
 		if (contentSignature === lastSavedSignature) return false;
 		try {
 			await saveFileContents(record);
-			await putStoredValue(RECONCILIATIONS_STORE, reconciliationId, record);
+			await repository.saveReconciliation(record);
 			lastSavedSignature = contentSignature;
 			session.reconciliationId = reconciliationId;
 			console.log(`[reconciliationLibrary] Saved “${record.title}” (${record.files.length} files, ${record.stages.length} steps)`);
@@ -69,12 +68,12 @@ export function createReconciliationLibrary(workflow: WorkflowSession, getWorker
 		return true;
 	}
 
-	async function loadSavedFiles(record: SavedReconciliation, workerClient: ReconcileWorkerClient): Promise<boolean> {
+	async function loadSavedFiles(record: SavedReconciliation, matchingEngine: MatchingEngineGateway): Promise<boolean> {
 		for (const savedFile of record.files) {
-			const storedContent = await getStoredValue<StoredFileContent>(FILE_CONTENTS_STORE, savedFile.fileContentKey);
+			const storedContent = await repository.findFileContent(savedFile.fileContentKey);
 			if (!storedContent) throw new Error(`The file “${savedFile.fileName}” is no longer saved in this browser.`);
 			const restoredFile = new File([storedContent.fileBlob], storedContent.fileName);
-			const response = await workerClient.sendRequest<'file_added'>({ requestType: 'add_file', tableId: savedFile.tableId, file: restoredFile, fallbackDateOrder: guessDateOrderFromBrowserLanguage(navigator.language) });
+			const response = await matchingEngine.sendRequest<'file_added'>({ requestType: 'add_file', tableId: savedFile.tableId, file: restoredFile, fallbackDateOrder: guessDateOrderFromBrowserLanguage(navigator.language) });
 			workflow.readableFilesByTableId.set(savedFile.tableId, restoredFile);
 			savedFileContentKeys.add(savedFile.fileContentKey);
 			session.files = [...session.files, { tableId: savedFile.tableId, fileLetter: savedFile.fileLetter, overview: response.overview }];
@@ -82,13 +81,13 @@ export function createReconciliationLibrary(workflow: WorkflowSession, getWorker
 		return true;
 	}
 
-	async function rerunSavedStages(record: SavedReconciliation, workerClient: ReconcileWorkerClient): Promise<boolean> {
+	async function rerunSavedStages(record: SavedReconciliation, matchingEngine: MatchingEngineGateway): Promise<boolean> {
 		session.stages = [...record.stages].sort((first, second) => first.stageNumber - second.stageNumber).map(restoreStageState);
 		for (const savedStage of record.stages) {
 			const stage = workflow.findStage(savedStage.stageId);
 			if (!stage) continue;
 			try {
-				const response = await workerClient.sendRequest<'stage_plan_suggested'>({ requestType: 'suggest_stage_plan', leftInput: $state.snapshot(stage.leftInput), rightInput: $state.snapshot(stage.rightInput) });
+				const response = await matchingEngine.sendRequest<'stage_plan_suggested'>({ requestType: 'suggest_stage_plan', leftInput: $state.snapshot(stage.leftInput), rightInput: $state.snapshot(stage.rightInput) });
 				stage.leftOverview = response.leftOverview;
 				stage.rightOverview = response.rightOverview;
 				if (savedStage.hadRun) await workflow.runStageQuietly(savedStage.stageId);
@@ -100,18 +99,18 @@ export function createReconciliationLibrary(workflow: WorkflowSession, getWorker
 	}
 
 	async function openSavedReconciliation(reconciliationId: string): Promise<boolean> {
-		const workerClient = getWorkerClient();
-		const record = isBrowserStorageAvailable() ? await getStoredValue<SavedReconciliation>(RECONCILIATIONS_STORE, reconciliationId) : undefined;
-		if (!workerClient || !record) throw new Error('This reconciliation is no longer saved in this browser.');
+		const matchingEngine = getMatchingEngine();
+		const record = repository.isAvailable() ? await repository.findReconciliation(reconciliationId) : null;
+		if (!matchingEngine || !record) throw new Error('This reconciliation is no longer saved in this browser.');
 		console.log(`[reconciliationLibrary] Opening “${record.title}”`);
 		isRestoring = true;
 		try {
 			session.screenState = 'working';
 			await workflow.startOver('working');
 			Object.assign(session, { reconciliationId, workingPhaseLabels: ['Opening your saved files', 'Re-running your steps', 'Getting your results ready'], workingPhaseIndex: 0, workingDetailMessage: '' });
-			await loadSavedFiles(record, workerClient);
+			await loadSavedFiles(record, matchingEngine);
 			session.workingPhaseIndex = 1;
-			await rerunSavedStages(record, workerClient);
+			await rerunSavedStages(record, matchingEngine);
 			session.reviewedItemKeysByStageId = record.reviewedItemKeysByStageId;
 			session.workingPhaseIndex = 2;
 			lastSavedSignature = buildContentSignature(record);
@@ -125,15 +124,15 @@ export function createReconciliationLibrary(workflow: WorkflowSession, getWorker
 		const record = savedReconciliations.find((savedRecord) => savedRecord.reconciliationId === reconciliationId);
 		const trimmedTitle = newTitle.trim();
 		if (!record || trimmedTitle === '') return false;
-		await putStoredValue(RECONCILIATIONS_STORE, reconciliationId, { ...$state.snapshot(record), title: trimmedTitle, isTitleChosenByPerson: true });
+		await repository.saveReconciliation({ ...$state.snapshot(record), title: trimmedTitle, isTitleChosenByPerson: true });
 		return await refreshSavedList();
 	}
 
 	async function deleteSavedReconciliation(reconciliationId: string): Promise<boolean> {
 		const record = savedReconciliations.find((savedRecord) => savedRecord.reconciliationId === reconciliationId);
 		if (!record) return false;
-		for (const savedFile of record.files) await deleteStoredValue(FILE_CONTENTS_STORE, savedFile.fileContentKey);
-		await deleteStoredValue(RECONCILIATIONS_STORE, reconciliationId);
+		await repository.deleteReconciliationWithFiles(reconciliationId);
+		for (const savedFile of record.files) savedFileContentKeys.delete(savedFile.fileContentKey);
 		console.log(`[reconciliationLibrary] Deleted “${record.title}”`);
 		return await refreshSavedList();
 	}

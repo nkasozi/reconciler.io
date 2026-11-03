@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { convertGridToTable } from '../headerDetection';
+import { convertGridToTable } from '$lib/engine/headerDetection';
 import { buildGridFromPositionedWords, fixCommonOcrDigitMistakes, type PositionedWord } from './positionedTextTable';
 
 const CHARACTER_WIDTH = 5;

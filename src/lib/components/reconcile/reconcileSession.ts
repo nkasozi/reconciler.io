@@ -1,6 +1,6 @@
 import type { DateOrder } from '$lib/engine/dateParser';
 import type { ResultCategory } from '$lib/engine/resultViews';
-import type { CategoryCounts, TableOverview } from '$lib/engine/workerProtocol';
+import type { CategoryCounts, TableOverview } from '$lib/ports/matchingEngine';
 
 const MAXIMUM_LABEL_LENGTH = 22;
 

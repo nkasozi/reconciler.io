@@ -1,7 +1,8 @@
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
+import type { ProgressReporter } from '$lib/ports/tableFileReader';
 import type { PositionedWord } from './positionedTextTable';
 
-export type ExtractionProgressReporter = (progressMessage: string) => boolean;
+export type ExtractionProgressReporter = ProgressReporter;
 
 const MINIMUM_CHARACTERS_FOR_A_REAL_TEXT_LAYER = 20;
 const OCR_RENDER_SCALE = 2.5;

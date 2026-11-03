@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { flip } from 'svelte/animate';
-	import { SUPPORTED_FILE_EXTENSIONS } from '$lib/engine/fileReaders/supportedExtensions';
+	import { SUPPORTED_FILE_EXTENSIONS } from '$lib/ports/tableFileReader';
 	import { CATEGORY_DISPLAY_ORDER, CATEGORY_STYLES } from '../categoryStyles';
 	import { popIn } from '../motion';
 	import { fileLetterColor, labelsForStage, shortFileName, type StageState, type WorkflowFile } from './workflowModel';

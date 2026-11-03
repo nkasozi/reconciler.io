@@ -1,3 +1,4 @@
+import type { DocumentPreparer } from '$lib/ports/tableFileReader';
 import type { ExtractionProgressReporter } from './pdfTextExtractor';
 import type { PositionedWord } from './positionedTextTable';
 
@@ -51,3 +52,5 @@ async function extractWordsFromPhoto(file: File, reportProgress: ExtractionProgr
 export async function prepareFileForReading(file: File, reportProgress: ExtractionProgressReporter = () => true): Promise<File> {
 	return isScannedDocumentFile(file) ? convertScannedDocumentToCsvFile(file, reportProgress) : file;
 }
+
+export const browserDocumentPreparer: DocumentPreparer = { isScannedDocumentFile, prepareFileForReading };

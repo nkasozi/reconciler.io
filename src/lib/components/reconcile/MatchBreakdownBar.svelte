@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { ResultCategory } from '$lib/engine/resultViews';
-	import type { CategoryCounts } from '$lib/engine/workerProtocol';
+	import type { CategoryCounts } from '$lib/ports/matchingEngine';
 	import { CATEGORY_DISPLAY_ORDER, CATEGORY_STYLES } from './categoryStyles';
 	import { isMotionReduced } from './motion';
 

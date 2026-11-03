@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { ResultCategory } from '$lib/engine/resultViews';
 	import type { ReconciliationSummary } from '$lib/engine/types';
-	import type { CategoryCounts } from '$lib/engine/workerProtocol';
+	import type { CategoryCounts } from '$lib/ports/matchingEngine';
 	import AnimatedNumber from './AnimatedNumber.svelte';
 	import { CATEGORY_DISPLAY_ORDER, CATEGORY_STYLES } from './categoryStyles';
 	import ConfettiBurst from './ConfettiBurst.svelte';

@@ -33,3 +33,13 @@
 - Make sure all code has debug logs where necessary with the idea that it helps a dev know what went wrong and from where just by looking at the logs. Debug logs should be for both the normal and abnormal flow of the code because not all bugs are when there is an obvious error.
 - I want my code to flow like a story...it should tell an interesting story...show a little at first but then more the more one digs. An overview, then helper functions that are like steps or chapters in a story, and then a climax where all the results are displayed, etc. I use my code to tell a story..not just to solve a problem
 - I have a strong prefrence for switch and match statements over long vertical if statements whereever possible. if the language supports them, all code should be biased towards those statements
+
+## Architecture: ports and adapters
+
+- `src/lib/engine/` — the core: pure reconciliation logic (parsing, planning, matching, explanations, report sheets). No browser APIs, no SvelteKit, no infrastructure libraries.
+- `src/lib/ports/` — the contracts the core and application need: `matchingEngine.ts` (requests/responses + `MatchingEngineGateway`), `reconciliationRepository.ts`, `tableFileReader.ts`, `workbookWriter.ts`.
+- `src/lib/application/` — use-case services built only on core + ports (e.g. `matchingEngineService.ts`).
+- `src/lib/adapters/` — implementations of ports: `storage/` (Dexie — all IndexedDB access must go through Dexie), `webWorker/`, `fileReaders/` (Papa, xlsx, pdfjs, tesseract), `spreadsheet/` (xlsx writer). `browserAdapters.ts` builds them.
+- `src/lib/components/` — UI; receives adapters by injection and never imports `$lib/adapters`. Route files (`src/routes/**`) are the composition root.
+- Hard limit: no source file may exceed 400 lines.
+- `src/lib/architecture.test.ts` enforces the layer rules and the 400-line limit — keep it green.

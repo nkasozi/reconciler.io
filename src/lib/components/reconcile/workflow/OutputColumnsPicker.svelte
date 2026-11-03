@@ -3,7 +3,7 @@
 	import { buildDefaultOutputColumns } from '$lib/engine/stageTables';
 	import type { DataTable } from '$lib/engine/types';
 	import type { OutputColumn, TableLabels } from '$lib/engine/workflowTypes';
-	import type { TableOverview } from '$lib/engine/workerProtocol';
+	import type { TableOverview } from '$lib/ports/matchingEngine';
 	import { isMotionReduced, riseIn } from '../motion';
 
 	type OutputColumnsPickerProps = {

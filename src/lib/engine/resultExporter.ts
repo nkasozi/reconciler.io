@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import type { WorkbookCellValue, WorkbookSheet } from '$lib/ports/workbookWriter';
 import { describePlanInPlainEnglish, describeRuleLabel } from './planDescriber';
 import { selectRowsForCategory, type ResultCategory, type ResultViewContext } from './resultViews';
 import type { DataTable, PairedRow, UnpairedRow } from './types';
@@ -7,27 +7,25 @@ export type ExportLabels = { leftLabel: string; rightLabel: string };
 
 export type StageExportInput = { context: ResultViewContext; labels: ExportLabels; outputTable: DataTable | null; stageNumber: number };
 
-export function buildExcelReport(context: ResultViewContext, labels: ExportLabels): ArrayBuffer {
-	return buildWorkflowExcelReport([{ context, labels, outputTable: null, stageNumber: 1 }]);
+export function buildReportSheets(context: ResultViewContext, labels: ExportLabels): WorkbookSheet[] {
+	return buildWorkflowReportSheets([{ context, labels, outputTable: null, stageNumber: 1 }]);
 }
 
-export function buildWorkflowExcelReport(stageExports: StageExportInput[]): ArrayBuffer {
-	const workbook = XLSX.utils.book_new();
+export function buildWorkflowReportSheets(stageExports: StageExportInput[]): WorkbookSheet[] {
+	const sheets: WorkbookSheet[] = [];
 	const isMultiStep = stageExports.length > 1;
-	for (const stageExport of stageExports) {
-		const sheetPrefix = isMultiStep ? `S${stageExport.stageNumber} ` : '';
-		appendStageSheets(workbook, stageExport, sheetPrefix);
-	}
-	console.log(`[resultExporter] Excel report built with ${workbook.SheetNames.length} sheets`);
-	return XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+	for (const stageExport of stageExports) appendStageSheets(sheets, stageExport, isMultiStep ? `S${stageExport.stageNumber} ` : '');
+	console.log(`[resultExporter] Report has ${sheets.length} sheets`);
+	return sheets;
 }
 
-function appendStageSheets(workbook: XLSX.WorkBook, stageExport: StageExportInput, sheetPrefix: string): boolean {
+function appendStageSheets(sheets: WorkbookSheet[], stageExport: StageExportInput, sheetPrefix: string): boolean {
 	const { context, labels, outputTable } = stageExport;
-	const appendSheet = (grid: (string | number)[][], sheetName: string, fallbackSheetName: string): boolean => {
+	const takenSheetNames = (): string[] => sheets.map((sheet) => sheet.sheetName);
+	const appendSheet = (rows: WorkbookCellValue[][], sheetName: string, fallbackSheetName: string): boolean => {
 		const candidateName = safeSheetName(`${sheetPrefix}${sheetName}`, `${sheetPrefix}${fallbackSheetName}`);
-		const uniqueName = workbook.SheetNames.includes(candidateName) ? safeSheetName(`${sheetPrefix}${fallbackSheetName}`, fallbackSheetName) : candidateName;
-		XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(grid), uniqueName);
+		const uniqueName = takenSheetNames().includes(candidateName) ? safeSheetName(`${sheetPrefix}${fallbackSheetName}`, fallbackSheetName) : candidateName;
+		sheets.push({ sheetName: uniqueName, rows });
 		return true;
 	};
 	appendSheet(buildSummaryGrid(context, labels), 'Summary', 'Summary');
@@ -44,9 +42,9 @@ function safeSheetName(sheetName: string, fallbackSheetName: string): string {
 	return cleanedName.length > 0 ? cleanedName : fallbackSheetName;
 }
 
-function buildSummaryGrid(context: ResultViewContext, labels: ExportLabels): (string | number)[][] {
+function buildSummaryGrid(context: ResultViewContext, labels: ExportLabels): WorkbookCellValue[][] {
 	const { summary } = context.outcome;
-	const summaryGrid: (string | number)[][] = [
+	const summaryGrid: WorkbookCellValue[][] = [
 		['Reconciliation report', new Date().toLocaleString()],
 		[],
 		['', labels.leftLabel, labels.rightLabel],

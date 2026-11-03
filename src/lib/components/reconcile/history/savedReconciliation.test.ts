@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { TableOverview } from '$lib/engine/workerProtocol';
+import type { TableOverview } from '$lib/ports/matchingEngine';
 import type { StageState, WorkflowFile } from '../workflow/workflowModel';
 import { buildEmptyPlan } from '../workflow/workflowModel';
 import { buildReconciliationTitle, buildSavedReconciliation, describeTimeAgo, restoreStageState } from './savedReconciliation';

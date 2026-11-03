@@ -1,10 +1,10 @@
-import type { GridView, ResultGridPage } from './resultGrid';
-import type { ColumnRole } from './columnRoles';
-import type { DateOrder } from './dateParser';
-import type { SuggestedPlan } from './planSuggester';
-import type { ResultCategory, ResultPage } from './resultViews';
-import type { ReconciliationSummary } from './types';
-import type { StageInput, TableId, TableLabels, WorkflowStage } from './workflowTypes';
+import type { GridView, ResultGridPage } from '$lib/engine/resultGrid';
+import type { ColumnRole } from '$lib/engine/columnRoles';
+import type { DateOrder } from '$lib/engine/dateParser';
+import type { SuggestedPlan } from '$lib/engine/planSuggester';
+import type { ResultCategory, ResultPage } from '$lib/engine/resultViews';
+import type { ReconciliationSummary } from '$lib/engine/types';
+import type { StageInput, TableId, TableLabels, WorkflowStage } from '$lib/engine/workflowTypes';
 
 export type TableOverview = {
 	fileName: string;
@@ -27,7 +27,7 @@ export type StageRunSummary = {
 	matchedInEveryStep: { stepCount: number; matchedEverywhereCount: number };
 };
 
-export type WorkerRequestBody =
+export type EngineRequest =
 	| { requestType: 'add_file'; tableId: TableId; file: File; fallbackDateOrder: DateOrder }
 	| { requestType: 'remove_table'; tableId: TableId }
 	| { requestType: 'suggest_stage_plan'; leftInput: StageInput; rightInput: StageInput }
@@ -36,7 +36,7 @@ export type WorkerRequestBody =
 	| { requestType: 'export_excel'; stageExports: { stageId: string; labels: TableLabels }[] }
 	| { requestType: 'get_result_grid'; stageId: string; view: GridView; pageNumber: number; pageSize: number; searchText: string };
 
-export type WorkerResponseBody =
+export type EngineResponse =
 	| { responseType: 'file_added'; overview: TableOverview }
 	| { responseType: 'table_removed' }
 	| { responseType: 'stage_plan_suggested'; suggestedPlan: SuggestedPlan; leftOverview: TableOverview; rightOverview: TableOverview }
@@ -45,5 +45,9 @@ export type WorkerResponseBody =
 	| { responseType: 'excel_ready'; workbookBytes: ArrayBuffer }
 	| { responseType: 'result_grid'; gridPage: ResultGridPage };
 
-export type WorkerRequest = { requestId: number; body: WorkerRequestBody };
-export type WorkerResponse = { requestId: number; isSuccess: true; body: WorkerResponseBody } | { requestId: number; isSuccess: false; errorMessage: string };
+export type EngineResponseOfType<ResponseType extends EngineResponse['responseType']> = Extract<EngineResponse, { responseType: ResponseType }>;
+
+export type MatchingEngineGateway = {
+	sendRequest: <ResponseType extends EngineResponse['responseType']>(request: EngineRequest) => Promise<EngineResponseOfType<ResponseType>>;
+	terminate: () => boolean;
+};

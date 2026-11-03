@@ -1,5 +1,5 @@
-import { isAccountingAmount } from '../amountParser';
-import { parseFlexibleDate } from '../dateParser';
+import { isAccountingAmount } from '$lib/engine/amountParser';
+import { parseFlexibleDate } from '$lib/engine/dateParser';
 
 export type PositionedWord = { text: string; left: number; right: number; top: number; bottom: number; pageNumber: number };
 

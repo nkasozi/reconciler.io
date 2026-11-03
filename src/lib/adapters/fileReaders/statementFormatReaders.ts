@@ -1,4 +1,4 @@
-import { parseFlexibleDate } from '../dateParser';
+import { parseFlexibleDate } from '$lib/engine/dateParser';
 
 export type HeaderAndRows = { columnNames: string[]; rows: string[][] };
 

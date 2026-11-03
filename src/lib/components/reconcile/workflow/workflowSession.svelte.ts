@@ -1,8 +1,8 @@
-import { isScannedDocumentFile, prepareFileForReading } from '$lib/engine/fileReaders/scannedDocumentConverter';
+import type { DocumentPreparer } from '$lib/ports/tableFileReader';
 import type { StartMode } from '../start/startModes';
 import type { ResultCategory, ResultPage } from '$lib/engine/resultViews';
 import type { MatchPlan } from '$lib/engine/types';
-import type { ReconcileWorkerClient } from '$lib/engine/workerClient';
+import type { MatchingEngineGateway } from '$lib/ports/matchingEngine';
 import { buildChainStageInputs } from '$lib/engine/workflowRunner';
 import type { OutputColumn, StageInput } from '$lib/engine/workflowTypes';
 import { chooseFirstInterestingCategory, guessDateOrderFromBrowserLanguage, waitAtLeast } from '../reconcileSession';
@@ -28,7 +28,9 @@ export function describeErrorForPeople(error: unknown): string {
 	}
 }
 
-export function createWorkflowSession(getWorkerClient: () => ReconcileWorkerClient | null) {
+export type WorkflowSessionDependencies = { getMatchingEngine: () => MatchingEngineGateway | null; documentPreparer: DocumentPreparer };
+
+export function createWorkflowSession({ getMatchingEngine, documentPreparer }: WorkflowSessionDependencies) {
 	const session = $state({
 		screenState: 'choosing_files' as ScreenState,
 		files: [] as WorkflowFile[],
@@ -53,10 +55,10 @@ export function createWorkflowSession(getWorkerClient: () => ReconcileWorkerClie
 		session.stages = session.stages.map((stage) => (stage.stageId === stageId ? { ...stage, ...stageChanges } : stage));
 		return true;
 	};
-	const requireWorker = (): ReconcileWorkerClient => {
-		const workerClient = getWorkerClient();
-		if (!workerClient) throw new Error('The matching engine is still starting. Please try again in a moment.');
-		return workerClient;
+	const requireMatchingEngine = (): MatchingEngineGateway => {
+		const matchingEngine = getMatchingEngine();
+		if (!matchingEngine) throw new Error('The matching engine is still starting. Please try again in a moment.');
+		return matchingEngine;
 	};
 	const showFriendlyError = (error: unknown, nextScreenState: ScreenState): boolean => {
 		console.error('[workflowSession] Error', error);
@@ -83,7 +85,7 @@ export function createWorkflowSession(getWorkerClient: () => ReconcileWorkerClie
 		session.friendlyErrorMessage = '';
 		const wasChoosingFiles = session.screenState === 'choosing_files';
 		const screenToReturnTo = session.screenState;
-		const hasScannedDocument = addedFiles.some(isScannedDocumentFile);
+		const hasScannedDocument = addedFiles.some(documentPreparer.isScannedDocumentFile);
 		if (wasChoosingFiles || hasScannedDocument) {
 			session.screenState = 'working';
 			session.workingPhaseLabels = hasScannedDocument ? ['Reading tables from your PDFs or photos', 'Reading your files', 'Finding how they connect'] : ['Reading your files', 'Finding how they connect'];
@@ -95,14 +97,14 @@ export function createWorkflowSession(getWorkerClient: () => ReconcileWorkerClie
 		};
 		try {
 			const readableFiles: File[] = [];
-			for (const addedFile of addedFiles) readableFiles.push(await prepareFileForReading(addedFile, reportProgress));
+			for (const addedFile of addedFiles) readableFiles.push(await documentPreparer.prepareFileForReading(addedFile, reportProgress));
 			session.workingDetailMessage = '';
 			if (hasScannedDocument) session.workingPhaseIndex = 1;
 			for (const readableFile of readableFiles) {
 				const fileLetter = nextFileLetter(session.files);
 				const tableId = `file-${fileLetter}`;
 				readableFilesByTableId.set(tableId, readableFile);
-				const response = await waitAtLeast(requireWorker().sendRequest<'file_added'>({ requestType: 'add_file', tableId, file: readableFile, fallbackDateOrder: guessDateOrderFromBrowserLanguage(navigator.language) }), wasChoosingFiles ? MINIMUM_PHASE_DISPLAY_IN_MILLISECONDS : 0);
+				const response = await waitAtLeast(requireMatchingEngine().sendRequest<'file_added'>({ requestType: 'add_file', tableId, file: readableFile, fallbackDateOrder: guessDateOrderFromBrowserLanguage(navigator.language) }), wasChoosingFiles ? MINIMUM_PHASE_DISPLAY_IN_MILLISECONDS : 0);
 				session.files = [...session.files, { tableId, fileLetter, overview: response.overview }];
 			}
 			if (session.stages.length === 0 && session.files.length >= 2) return await startFirstWorkflow(startMode);
@@ -148,7 +150,7 @@ export function createWorkflowSession(getWorkerClient: () => ReconcileWorkerClie
 		try {
 			if (shouldPrepareUpstream) await ensureUpstreamStagesHaveRun(stageId);
 			const preparedStage = findStage(stageId)!;
-			const response = await requireWorker().sendRequest<'stage_plan_suggested'>({ requestType: 'suggest_stage_plan', leftInput: $state.snapshot(preparedStage.leftInput), rightInput: $state.snapshot(preparedStage.rightInput) });
+			const response = await requireMatchingEngine().sendRequest<'stage_plan_suggested'>({ requestType: 'suggest_stage_plan', leftInput: $state.snapshot(preparedStage.leftInput), rightInput: $state.snapshot(preparedStage.rightInput) });
 			if (!isLatestSuggestion()) {
 				console.log(`[workflowSession] Ignoring an out-of-date suggestion for step ${preparedStage.stageNumber}`);
 				return false;
@@ -181,7 +183,7 @@ export function createWorkflowSession(getWorkerClient: () => ReconcileWorkerClie
 	async function runStageQuietly(stageId: string): Promise<boolean> {
 		const stage = findStage(stageId);
 		if (!stage) return false;
-		const response = await requireWorker().sendRequest<'stage_completed'>({ requestType: 'run_stage', stage: $state.snapshot(stage) as StageState, labels: labelsForStage(stage, session.files, session.stages) });
+		const response = await requireMatchingEngine().sendRequest<'stage_completed'>({ requestType: 'run_stage', stage: $state.snapshot(stage) as StageState, labels: labelsForStage(stage, session.files, session.stages) });
 		const { responseType: _ignored, ...runSummary } = response;
 		updateStage(stageId, { runSummary, suggestedRuleIds: [] });
 		session.reviewedItemKeysByStageId = { ...session.reviewedItemKeysByStageId, [stageId]: [] };
@@ -273,7 +275,7 @@ export function createWorkflowSession(getWorkerClient: () => ReconcileWorkerClie
 		const removedStageIds = new Set(stagesToRemove.map((stage) => stage.stageId));
 		console.log(`[workflowSession] Deleting steps ${stagesToRemove.map((stage) => stage.stageNumber).join(', ')}`);
 		session.stages = session.stages.filter((stage) => !removedStageIds.has(stage.stageId));
-		for (const removedStage of stagesToRemove) await getWorkerClient()?.sendRequest<'table_removed'>({ requestType: 'remove_table', tableId: buildStageOutputTableId(removedStage.stageId) });
+		for (const removedStage of stagesToRemove) await getMatchingEngine()?.sendRequest<'table_removed'>({ requestType: 'remove_table', tableId: buildStageOutputTableId(removedStage.stageId) });
 		if (session.activeStageId && removedStageIds.has(session.activeStageId)) session.activeStageId = session.stages[session.stages.length - 1]?.stageId ?? null;
 		session.screenState = 'workflow_map';
 		return true;
@@ -314,7 +316,7 @@ export function createWorkflowSession(getWorkerClient: () => ReconcileWorkerClie
 		session.activeSearchText = searchText;
 		session.isLoadingPage = true;
 		try {
-			const response = await requireWorker().sendRequest<'result_page'>({ requestType: 'get_result_page', stageId, category, pageNumber, pageSize: RESULT_PAGE_SIZE, searchText });
+			const response = await requireMatchingEngine().sendRequest<'result_page'>({ requestType: 'get_result_page', stageId, category, pageNumber, pageSize: RESULT_PAGE_SIZE, searchText });
 			session.resultPage = response.page;
 			session.activeCategory = category;
 			return true;
@@ -337,7 +339,7 @@ export function createWorkflowSession(getWorkerClient: () => ReconcileWorkerClie
 
 	async function exportAllSteps(): Promise<ArrayBuffer> {
 		const stageExports = session.stages.filter((stage) => stage.runSummary).sort((first, second) => first.stageNumber - second.stageNumber).map((stage) => ({ stageId: stage.stageId, labels: labelsForStage(stage, session.files, session.stages) }));
-		const response = await requireWorker().sendRequest<'excel_ready'>({ requestType: 'export_excel', stageExports });
+		const response = await requireMatchingEngine().sendRequest<'excel_ready'>({ requestType: 'export_excel', stageExports });
 		return response.workbookBytes;
 	}
 
@@ -349,7 +351,7 @@ export function createWorkflowSession(getWorkerClient: () => ReconcileWorkerClie
 	}
 
 	async function startOver(nextScreenState: ScreenState = 'choosing_files'): Promise<boolean> {
-		for (const workflowFile of session.files) await getWorkerClient()?.sendRequest<'table_removed'>({ requestType: 'remove_table', tableId: workflowFile.tableId });
+		for (const workflowFile of session.files) await getMatchingEngine()?.sendRequest<'table_removed'>({ requestType: 'remove_table', tableId: workflowFile.tableId });
 		readableFilesByTableId.clear();
 		Object.assign(session, { screenState: nextScreenState, files: [], stages: [], activeStageId: null, resultPage: null, friendlyErrorMessage: '', reviewedItemKeysByStageId: {}, reconciliationId: null });
 		return true;
