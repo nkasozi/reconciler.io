@@ -581,7 +581,7 @@
 			</p>
 			<div class="flex flex-col justify-center gap-4 sm:flex-row">
 				<button
-					on:click={() => goto('/upload')}
+					on:click={() => goto('/reconcile')}
 					class="rounded-lg bg-white px-8 py-3 font-semibold text-blue-600 transition duration-300 hover:bg-gray-100"
 				>
 					Start Free Trial

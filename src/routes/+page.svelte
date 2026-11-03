@@ -90,7 +90,7 @@
 
 			<div class="flex flex-col space-y-4 sm:flex-row sm:space-x-6 sm:space-y-0">
 				<a
-					href="/upload"
+					href="/reconcile"
 					title="Try It Now"
 					class="btn transform rounded-lg border-2 border-green-500 bg-green-500 px-8 py-5 text-lg font-bold text-white transition-all duration-300 hover:scale-105 hover:bg-green-600 hover:text-white lg:px-10 lg:py-4 xl:px-12 xl:py-5"
 				>

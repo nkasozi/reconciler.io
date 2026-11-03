@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BrandLogo from '$lib/components/BrandLogo.svelte';
 	import '../app.css';
 	import { onMount } from 'svelte';
 	import { injectAnalytics } from '@vercel/analytics/sveltekit';
@@ -65,7 +66,7 @@
 </script>
 
 <!-- Main layout with navigation -->
-<div class="min-h-screen overflow-x-hidden bg-gray-900 text-white">
+<div class="relative min-h-screen overflow-x-clip bg-gray-900 text-white">
 	<!-- Navigation -->
 	<nav class="mx-auto w-full max-w-xl pt-8 md:max-w-2xl lg:max-w-4xl xl:max-w-5xl">
 		<div class="container px-8 py-2 lg:px-0">
@@ -74,8 +75,7 @@
 				<div class="flex flex-1 items-center lg:absolute lg:inset-y-0 lg:left-0">
 					<div class="flex w-full items-center justify-between lg:w-auto">
 						<a href="/" title="Finance Reconciliation tool">
-							<span class="text-2xl font-extrabold tracking-tight text-blue-500">Reconciler</span>
-							<span class="text-2xl tracking-tight text-green-500">.io</span>
+							<BrandLogo size="large" />
 						</a>
 					</div>
 				</div>
@@ -126,8 +126,7 @@
 			<nav class="relative hidden items-center justify-between sm:h-10 md:flex lg:hidden">
 				<div class="flex items-center">
 					<a href="/" title="Finance Reconciliation tool" class="mr-8">
-						<span class="text-xl font-extrabold tracking-tight text-blue-500">Reconciler</span>
-						<span class="text-xl tracking-tight text-green-500">.io</span>
+						<BrandLogo size="small" />
 					</a>
 				</div>
 				<div class="flex items-center space-x-4">
@@ -177,8 +176,7 @@
 				<div class="flex flex-1 items-center">
 					<div class="flex w-full items-center justify-between">
 						<a href="/" title="Finance Reconciliation tool">
-							<span class="text-2xl font-extrabold tracking-tight text-blue-500">Reconciler</span>
-							<span class="text-2xl tracking-tight text-green-500">.io</span>
+							<BrandLogo size="large" />
 						</a>
 						<div class="-mr-2 flex items-center">
 							<!-- Mobile menu button -->
@@ -214,10 +212,7 @@
 						<div class="flex items-center justify-between px-5 pt-4">
 							<div>
 								<a href="/" title="Transactions Reconciliation tool">
-									<span class="text-2xl font-extrabold tracking-tight text-blue-500"
-										>Reconciler</span
-									>
-									<span class="text-2xl tracking-tight text-green-500">.io</span>
+									<BrandLogo size="large" />
 								</a>
 							</div>
 							<div class="-mr-2">

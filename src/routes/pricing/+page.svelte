@@ -66,11 +66,11 @@
 		<!-- Upgrade notice -->
 		{#if upgradeNotice}
 			<div class="mx-auto mb-8 max-w-3xl">
-				<div class="rounded border-l-4 border-yellow-500 bg-yellow-100 p-4 dark:bg-yellow-900/30">
+				<div class="rounded border-l-4 border-orange-500 bg-orange-100 p-4 dark:bg-orange-900/30">
 					<div class="flex">
 						<div class="flex-shrink-0">
 							<svg
-								class="h-5 w-5 text-yellow-500"
+								class="h-5 w-5 text-orange-500"
 								viewBox="0 0 20 20"
 								fill="currentColor"
 								aria-hidden="true"
@@ -83,7 +83,7 @@
 							</svg>
 						</div>
 						<div class="ml-3">
-							<p class="text-sm text-yellow-800 dark:text-yellow-200">{upgradeNotice}</p>
+							<p class="text-sm text-orange-800 dark:text-orange-200">{upgradeNotice}</p>
 						</div>
 					</div>
 				</div>
@@ -220,7 +220,7 @@
 						</li>
 					</ul>
 					<button
-						on:click={() => goto('/upload')}
+						on:click={() => goto('/reconcile')}
 						class="mt-8 w-full rounded-lg bg-gray-100 px-4 py-3 font-medium text-gray-800 transition duration-300 hover:bg-gray-200 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600"
 					>
 						Get Started
@@ -1321,7 +1321,7 @@
 			</h2>
 			<div class="flex flex-col justify-center gap-4 sm:flex-row">
 				<button
-					on:click={() => goto('/upload')}
+					on:click={() => goto('/reconcile')}
 					class="rounded-lg bg-blue-600 px-8 py-3 font-semibold text-white transition duration-300 hover:bg-blue-700"
 				>
 					Start Free Trial

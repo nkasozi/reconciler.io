@@ -7,14 +7,17 @@
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",
-		"prepare": "svelte-kit sync || echo ''",
+		"prepare": "svelte-kit sync && node scripts/copyPdfjsAssets.mjs || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
 		"lint": "prettier --check .",
 		"test:e2e": "playwright test",
 		"test": "npm run test:e2e && npm run test:unit -- --run",
-		"test:unit": "vitest"
+		"test:unit": "vitest",
+		"copy-pdfjs-assets": "node scripts/copyPdfjsAssets.mjs",
+		"predev": "node scripts/copyPdfjsAssets.mjs",
+		"prebuild": "node scripts/copyPdfjsAssets.mjs"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.49.1",
@@ -43,7 +46,6 @@
 		"@types/node": "^24.10.1",
 		"@vercel/analytics": "^1.5.0",
 		"canvas": "^3.2.0",
-		"dexie": "^4.2.1",
 		"html2canvas": "^1.4.1",
 		"papaparse": "^5.5.3",
 		"pdf-parse": "^2.4.5",

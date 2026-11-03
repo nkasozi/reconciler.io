@@ -5,6 +5,9 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
+	optimizeDeps: {
+		include: ['tesseract.js', 'pdfjs-dist', 'papaparse', 'xlsx']
+	},
 
 	test: {
 		workspace: [

@@ -710,7 +710,7 @@
 			</h2>
 			<div class="flex flex-col justify-center gap-4 sm:flex-row">
 				<button
-					on:click={() => goto('/upload')}
+					on:click={() => goto('/reconcile')}
 					class="rounded-lg bg-blue-600 px-8 py-3 font-semibold text-white transition duration-300 hover:bg-blue-700"
 				>
 					Start Reconciling Now
